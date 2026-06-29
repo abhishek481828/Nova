@@ -1,0 +1,503 @@
+import re
+import json
+import difflib
+from typing import Set, Dict, Any
+from nova.config import APPS_JSON_PATH
+from nova.utils import print_info
+
+# Reference set of valid/canonical words within the Nova domain.
+VALID_WORDS: Set[str] = {
+    # Action verbs and nouns
+    "open", "close", "install", "remove", "search", "update", "run", "git", "file", "browser", "system", "adb", "diagnose", "check",
+    "package", "app", "application", "project", "problem", "mirroring", "device", "phonenotify", "notify",
+    # Verb variations to prevent incorrect spell-corrections
+    "devices", "connected", "connecting", "connection", "connections", "installed", "installing", "removed", "removing", "searching",
+    "updated", "updating", "running", "checking", "mirrored", "opening", "opened", "closing", "closed",
+    # Operations & Targets
+    "devices", "connect", "disconnect", "setup", "mirror", "reboot", "shutdown", "suspend", "push", "pull", "commit", "status", "create", "delete", "list", "read",
+    # Common applications & system components
+    "chrome", "chromium", "firefox", "vscode", "code", "terminal", "phone", "scrcpy", "tailscale", "vlc", "python", "explorer", "nautilus",
+    # Linux system, commands, and service manager terms
+    "systemctl", "journalctl", "systemd", "service", "services", "daemon",
+    "stop", "start", "enable", "disable", "restart", "reload", "active", "inactive",
+    # Network & VPN terms
+    "warp", "cloudflare", "warp-cli", "vpn",
+    # Nix & OS environment terms
+    "nix", "nixos", "profile", "channel", "nix-env", "nixpkgs",
+    # Common shell commands and keywords
+    "sudo", "config", "shell", "bash", "zsh",
+    # Common conversational greetings & help terms
+    "hello", "hi", "hey", "greetings", "help", "please", "yes", "no", "fine", "everything", "things", "working", "extension",
+    # System resources, CPU, and memory keywords
+    "load", "resources", "cpu", "temp", "temperatures", "ram", "memory", "storage", "capacity", "loadavg", "df", "free", "system_resources", "processor",
+    # NixOS configuration & option keywords
+    "networking", "firewall", "allowedtcpports", "nixos-option", "inspect", "option", "boot", "loader", "grub",
+    # Nix-shell and package-related keywords
+    "nix-shell", "pandas", "numpy", "allowed", "ports", "tcp", "udp", "packages", "python3", "python3packages",
+    # Volume control keywords
+    "volume", "mute", "unmute", "audio", "sound",
+    # Brightness control keywords
+    "brightness", "dim", "brighter", "screen", "light",
+    # Desktop and Wifi control keywords
+    "wifi", "lock", "media", "song", "play", "pause", "playpause", "next", "prev", "previous", "stop", "skip", "neofetch", "specs", "dashboard", "ssid", "hotspot", "nightlight", "night-light",
+    # Browser automation and YouTube keywords
+    "chrome", "chromium", "browser", "tab", "url", "website", "webpage", "youtube", "wikipedia", "search", "navigate", "open", "click", "type", "fill", "form", "input", "button", "submit", "select", "chatgpt", "meaning",
+    # Music genre and mood terms (prevent hip->hi, lofi->log etc.)
+    "hip", "hop", "lofi", "jazz", "rock", "pop", "classical", "beats", "chill", "remix", "live", "music", "playlist", "album", "track", "video",
+    # External APIs and domains
+    "openai", "weather", "crypto", "news", "coingecko", "tavily", "bitcoin", "ethereum", "solana", "ocr", "ipinfo", "ip_info", "tmdb", "fmp",
+    # Currency / rates terms
+    "rate", "rates", "currency", "exchange", "convert", "conversion", "value", "dollar", "dollars", "euro", "euros", "finance", "stock", "stocks", "aapl", "tsla", "msft",
+    # Name
+    "nova"
+}
+
+def load_app_names() -> Set[str]:
+    """Loads application names/aliases dynamically from apps.json."""
+    names = set()
+    if APPS_JSON_PATH.exists():
+        try:
+            with open(APPS_JSON_PATH, "r", encoding="utf-8") as f:
+                apps_map = json.load(f)
+                for key in apps_map.keys():
+                    names.add(key.lower())
+                    # Split multi-word apps (e.g. "android studio") into individual tokens
+                    for part in key.lower().split():
+                        names.add(part)
+        except Exception:
+            pass
+    return names
+
+# Module-level variables for tracking corrections
+last_correction_applied = False
+correction_prompt = ""
+
+PHRASE_CORRECTIONS = {
+    "elite jonesing": ("Ellie Goulding", "Did you mean 'Love Me Like You Do' by Ellie Goulding?"),
+    "elite jonesing's": ("Ellie Goulding", "Did you mean 'Love Me Like You Do' by Ellie Goulding?"),
+    "just in the weather": ("Sweater Weather", "Did you mean 'Sweater Weather'?"),
+    "call youtube": ("open youtube", "Did you mean 'Open YouTube'?"),
+    "chat gpd": ("ChatGPT", "Did you mean 'ChatGPT'?"),
+    "chat gpt": ("ChatGPT", "Did you mean 'ChatGPT'?"),
+    "gpd": ("ChatGPT", "Did you mean 'ChatGPT'?"),
+    "chagpt": ("ChatGPT", "Did you mean 'ChatGPT'?"),
+    "chagtpt": ("ChatGPT", "Did you mean 'ChatGPT'?"),
+    "chatgt": ("ChatGPT", "Did you mean 'ChatGPT'?"),
+    "elizabeth jonesing": ("Ellie Goulding", "Did you mean 'Love Me Like You Do' by Ellie Goulding?"),
+    "file exploran": ("file explorer", "Did you mean 'File Explorer'?"),
+    "exploran": ("file explorer", "Did you mean 'File Explorer'?"),
+    "explor": ("file explorer", "Did you mean 'File Explorer'?"),
+    "glc": ("vlc", "Did you mean 'VLC'?"),
+}
+
+
+def correct_query_spelling(query: str) -> str:
+    """
+    Scans the user query and corrects spelling mistakes of known Nova keywords/apps.
+    Maintains user's casing (Title/UPPER/lower) for corrected words.
+    Also maps general status query shortcuts to connection diagnostics.
+    """
+    global last_correction_applied, correction_prompt
+    last_correction_applied = False
+    correction_prompt = ""
+
+    if not query:
+        return query
+
+    # Clean leading "nova ❯", "nova:", "nova", and prompt symbols "❯", ">"
+    cleaned = query
+    while True:
+        prev = cleaned
+        cleaned = re.sub(r'^(nova\b|❯|>|:|\s)+', '', cleaned, flags=re.IGNORECASE).strip()
+        if cleaned == prev:
+            break
+    if cleaned:
+        query = cleaned
+
+    query_lower = query.lower()
+    
+    # Intercept misheard phrases
+    for misheard, (replacement, prompt) in PHRASE_CORRECTIONS.items():
+        if misheard in query_lower:
+            pattern = re.compile(rf'\b{re.escape(misheard)}\b', re.IGNORECASE)
+            query, count = pattern.subn(replacement, query)
+            if count > 0:
+                last_correction_applied = True
+                correction_prompt = prompt
+
+    query_clean = query.strip().lower()
+    
+    # Map "opened <app>" or "opne <app>" to "open <app>"
+    if query_clean.startswith("opened "):
+        query = "open " + query[7:]
+        query_clean = "open " + query_clean[7:]
+    elif query_clean.startswith("opne "):
+        query = "open " + query[5:]
+        query_clean = "open " + query_clean[5:]
+    # Map general status commands to the consolidated system status report
+    if query_clean in ("status", "system status", "check status", "device status", "how is everything", "how is my system looking", "full system update", "give me update about my full system software"):
+        print_info("Mapping query to consolidated system status report...")
+        return "give me update about my full system software"
+    
+    # Map connectivity-specific commands to connection diagnostics
+    if query_clean in ("connection status", "check my connection", "check connections"):
+        print_info("Mapping query to system status connection diagnostics...")
+        return "diagnose my connections"
+
+    # Map neofetch / system specs dashboard commands
+    if query_clean in ("neofetch", "specs", "system specs", "system dashboard", "system info dashboard", "show specs", "show dashboard"):
+        print_info("Mapping query to rich system info dashboard...")
+        return "show system specs dashboard"
+
+    # Map system sleep / suspend commands
+    if query_clean in ("sleep", "sleeping", "go to sleep", "put system to sleep", "suspend", "suspend system"):
+        print_info("Mapping query to system suspend action...")
+        return "suspend system"
+
+    # Combine static keywords with dynamic app names from apps.json
+    all_valid_words = VALID_WORDS.union(load_app_names())
+
+    # We match alphanumeric words of length >= 3
+    words_iter = list(re.finditer(r'\b[a-zA-Z]{3,}\b', query))
+    
+    corrected_query = query
+    # Iterate in reverse to keep index offsets accurate during replacement
+    for match in reversed(words_iter):
+        word = match.group(0)
+        word_lower = word.lower()
+        
+        # Skip if already a correct word
+        if word_lower in all_valid_words:
+            continue
+            
+        # Check if the word matches close terms in the dictionary
+        matches = difflib.get_close_matches(word_lower, all_valid_words, n=1, cutoff=0.8)
+        if matches:
+            closest_match = matches[0]
+            
+            # Match original case
+            replacement = closest_match
+            if word.istitle():
+                replacement = closest_match.capitalize()
+            elif word.isupper():
+                replacement = closest_match.upper()
+                
+            print_info(f"Correcting typo '{word}' to '{replacement}'...")
+            
+            start, end = match.span()
+            corrected_query = corrected_query[:start] + replacement + corrected_query[end:]
+            
+    return corrected_query
+
+def correct_action_data(action_data: Dict[str, Any], query: str = "") -> Dict[str, Any]:
+    """
+    Validates and corrects minor typos in action names or specific operation parameters
+    inside the parsed action object generated by the LLM.
+    Also does smart intent-based operation routing for unsupported operation names.
+    """
+    if not action_data or not isinstance(action_data, dict):
+        return action_data
+
+    action = action_data.get("action")
+    if not action:
+        return action_data
+
+    # 1. Correct action name typos
+    from nova.parser import VALID_ACTIONS
+    if action not in VALID_ACTIONS:
+        matches = difflib.get_close_matches(action, VALID_ACTIONS, n=1, cutoff=0.75)
+        if matches:
+            print_info(f"Correcting action typo '{action}' to '{matches[0]}'")
+            action_data["action"] = matches[0]
+            action = matches[0]
+
+    query_lower = query.lower() if query else ""
+
+    # Redirect system_resources with operation 'sleep' to system_action 'suspend'
+    if action == "system_resources" and action_data.get("operation") == "sleep":
+        print_info("Correcting system_resources 'sleep' action to system_action 'suspend'")
+        action_data["action"] = "system_action"
+        action_data["operation"] = "suspend"
+        action = "system_action"
+
+    # Map legacy chrome_action directly to chromium_action for backward compatibility
+    if action == "chrome_action":
+        action_data["action"] = "chromium_action"
+        action = "chromium_action"
+
+    # Route browser_action to chromium_action unless user explicitly requests default browser
+    if action == "browser_action":
+        if not ("default browser" in query_lower or "system browser" in query_lower or "default" in query_lower):
+            print_info("Routing browser_action to automated chromium_action...")
+            action_data["action"] = "chromium_action"
+            action_data["operation"] = "open"
+            action = "chromium_action"
+
+    # Route open_app to chromium_action if the app itself is a website,
+    # or if the app is chromium/chrome and it includes website arguments/queries
+    if action == "open_app":
+        app = action_data.get("app", "").strip().lower()
+        args = action_data.get("args", [])
+        is_website = False
+        website_target = ""
+        if app in ("youtube", "chatgpt", "gmail", "github", "google", "wikipedia", "reddit", "netflix"):
+            is_website = True
+            website_target = app
+        elif "." in app or app.startswith(("http://", "https://")):
+            is_website = True
+            website_target = app
+        elif app in ("chromium", "chrome", "google-chrome-stable", "google-chrome"):
+            if args and isinstance(args, list):
+                arg_str = str(args[0]).strip().lower()
+                if any(w in arg_str for w in ("youtube", "chatgpt", "gmail", "github", "google", "wikipedia", "reddit", "netflix")) or "." in arg_str:
+                    is_website = True
+                    website_target = arg_str
+            elif query_lower:
+                for w in ("youtube", "chatgpt", "gmail", "github", "google", "wikipedia", "reddit", "netflix"):
+                    if w in query_lower:
+                        is_website = True
+                        website_target = w
+                        break
+        if is_website:
+            print_info(f"Routing open_app for website '{website_target}' to automated chromium_action...")
+            action_data["action"] = "chromium_action"
+            action_data["operation"] = "open"
+            action_data["url"] = website_target
+            action = "chromium_action"
+
+    # 2. Correct parameter operations and resolve aliases
+    if action == "adb_action":
+        operation = action_data.get("operation", "").strip().lower()
+        target = action_data.get("target", "").strip().lower()
+        
+        # Intercept Warp VPN connection redirection
+        if operation in ("connect", "disconnect") and ("warp" in target or "warp" in query_lower):
+            import subprocess
+            print_info(f"Proactive Decision: Redirecting {operation} request to Cloudflare Warp VPN...")
+            res = subprocess.run(["warp-cli", operation], capture_output=True, text=True)
+            output = res.stdout.strip() + "\n" + res.stderr.strip()
+            if res.returncode == 0 or "success" in output.lower():
+                msg = f"✅ Successfully sent {operation} request to Cloudflare Warp VPN!"
+            else:
+                msg = f"❌ Failed to {operation} Warp VPN: {output.strip()}"
+            action_data = {
+                "action": "chat_response",
+                "message": msg
+            }
+            return action_data
+            
+        # Smart mappings for tcpip/tcp/ip or screen/mirroring
+        if operation in ("tcpip", "tcp/ip", "tcp_ip", "ip"):
+            # Check context from user query
+            if any(k in query_lower for k in ("check", "status", "list", "show", "devices", "active")):
+                operation = "devices"
+            else:
+                operation = "setup"
+        elif operation in ("mirroring", "scrcpy", "screen"):
+            operation = "mirror"
+        elif operation in ("device", "list", "status"):
+            operation = "devices"
+
+        valid_ops = {"devices", "connect", "disconnect", "setup", "mirror"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting ADB operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+        
+        action_data["operation"] = operation
+                
+    elif action == "system_action":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation == "restart":
+            operation = "reboot"
+        elif operation in ("poweroff", "halt"):
+            operation = "shutdown"
+        elif operation == "sleep":
+            operation = "suspend"
+
+        valid_ops = {"reboot", "shutdown", "suspend", "storage"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting system operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+        
+        action_data["operation"] = operation
+
+    elif action == "git_action":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation == "pushing":
+            operation = "push"
+        elif operation == "pulling":
+            operation = "pull"
+        elif operation in ("commiting", "committing"):
+            operation = "commit"
+        elif operation == "stat":
+            operation = "status"
+
+        valid_ops = {"push", "pull", "commit", "status"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Git operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+    elif action == "file_action":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation in ("view", "show", "open", "display"):
+            operation = "read"
+        elif operation in ("write", "add", "make", "new"):
+            operation = "create"
+        elif operation in ("remove", "rm", "unlink"):
+            operation = "delete"
+
+        valid_ops = {"create", "delete", "list", "read"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting file operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+    elif action == "volume_control":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation == "muting":
+            operation = "mute"
+        elif operation == "unmuting":
+            operation = "unmute"
+        elif operation in ("louder", "up", "raise", "increase"):
+            operation = "increase"
+        elif operation in ("quieter", "down", "lower", "decrease"):
+            operation = "decrease"
+        elif operation in ("status", "level", "show"):
+            operation = "get"
+            
+        valid_ops = {"set", "increase", "decrease", "mute", "unmute", "get"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Volume operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+    elif action == "brightness_control":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation in ("brighter", "up", "raise", "increase", "brighten"):
+            operation = "increase"
+        elif operation in ("dim", "down", "lower", "decrease", "darker"):
+            operation = "decrease"
+        elif operation in ("status", "level", "show"):
+            operation = "get"
+            
+        valid_ops = {"set", "increase", "decrease", "get"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Brightness operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+    elif action == "desktop_control":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation in ("lockscreen", "screenlock"):
+            operation = "lock"
+        elif operation in ("nightlight", "night-light", "color"):
+            operation = "night_light"
+        elif operation in ("player", "music", "video"):
+            operation = "media"
+            
+        valid_ops = {"lock", "night_light", "media"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Desktop operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+        # Map media commands
+        media_cmd = action_data.get("media_command", "").strip().lower()
+        if media_cmd:
+            if media_cmd in ("play", "start", "resume"):
+                media_cmd = "play"
+            elif media_cmd in ("pause", "hold"):
+                media_cmd = "pause"
+            elif media_cmd in ("playpause", "toggle", "play/pause"):
+                media_cmd = "playpause"
+            elif media_cmd in ("next", "forward", "skip"):
+                media_cmd = "next"
+            elif media_cmd in ("prev", "previous", "backward", "back"):
+                media_cmd = "prev"
+            elif media_cmd in ("stop", "halt"):
+                media_cmd = "stop"
+            action_data["media_command"] = media_cmd
+
+    elif action == "wifi_control":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation in ("stat", "info", "show", "active", "connection"):
+            operation = "status"
+        elif operation in ("on", "off", "radio", "enable", "disable"):
+            operation = "toggle"
+        elif operation in ("list", "find", "nearby", "search"):
+            operation = "scan"
+        elif operation in ("join", "add"):
+            operation = "connect"
+
+        valid_ops = {"status", "toggle", "scan", "connect"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Wi-Fi operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+    elif action == "chromium_action":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation in ("visit", "goto", "navigate", "load"):
+            operation = "open"
+        elif operation in (
+            "youtube", "play_youtube", "play_song", "play", 
+            "play_music", "music", "song", "search_artist", 
+            "play_artist", "artist", "search_youtube"
+        ):
+            operation = "search_youtube"
+        elif operation in ("fill", "type", "input", "form"):
+            operation = "fill_form"
+        elif operation in ("press", "tap"):
+            operation = "click"
+        elif operation in ("content", "text", "body", "read"):
+            operation = "get_content"
+
+        valid_ops = {"open", "search_youtube", "fill_form", "click", "get_content"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Chromium operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
+    # 3. Correct package or app names in action parameters
+    all_valid_words = VALID_WORDS.union(load_app_names())
+    for param in ("package", "app", "project"):
+        if param in action_data:
+            val = action_data[param]
+            if isinstance(val, str) and val.strip():
+                val_lower = val.strip().lower()
+                if val_lower not in all_valid_words:
+                    matches = difflib.get_close_matches(val_lower, all_valid_words, n=1, cutoff=0.75)
+                    if matches:
+                        print_info(f"Correcting AI parameter typo '{val}' to '{matches[0]}'")
+                        action_data[param] = matches[0]
+
+    if query:
+        action_data["_user_query"] = query
+
+    return action_data

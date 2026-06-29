@@ -1,0 +1,48 @@
+# Python cache and bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+
+# OS / Editor files
+.DS_Store
+.vscode/
+.idea/
+
+# Browser profiles, locks, cache, and state (including local or literal ~ directories)
+~
+**/~
+*profile*/
+*profile
+SingletonLock
+*cache*/
+*Cache*/
+Cookies
+Cookies-journal
+History
+History-journal
+Login Data
+Login Data-journal
+Session Storage/
+Sessions/
+Local Storage/
+
+# Local environment variables and secrets
+.env
+*.env.*
+.env.local
+
+# Python virtual environments
+.venv/
+venv/
+env/
+
+# Node dependencies and build artifacts
+node_modules/
+dist/
+
+# Local temporary/scratch files
+temp/
+scratch/
+record.txt
+
+

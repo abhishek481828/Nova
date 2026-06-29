@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Nova Mission Control</title>
+    <!-- Google Fonts: Orbitron for tech accents, Inter for clean UI reading -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Orbitron:wght@400;600;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+    <div class="grid-container">
+        <!-- Header -->
+        <header class="app-header">
+            <div class="logo-area">
+                <span class="logo-icon">▲</span>
+                <div class="title-wrap">
+                    <h1>NOVA</h1>
+                    <span class="subtitle">MISSION CONTROL</span>
+                </div>
+            </div>
+            <div class="connection-status" id="ws-status">
+                <span class="pulse-dot status-offline"></span>
+                <span class="status-text">OFFLINE</span>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Grid -->
+        <main class="dashboard-grid">
+            <!-- Left Panel: State and System Component Health -->
+            <section class="grid-panel panel-left">
+                <!-- State Card -->
+                <div class="glass-card card-voice-state">
+                    <h2 class="section-title">Voice Core</h2>
+                    <div class="state-indicator-container">
+                        <div class="state-ring" id="state-ring">
+                            <div class="state-circle" id="state-circle">
+                                <span class="state-icon">🎙</span>
+                            </div>
+                        </div>
+                        <div class="state-details">
+                            <span class="state-label">CORE STATE</span>
+                            <span class="state-value" id="current-state">INACTIVE</span>
+                        </div>
+                    </div>
+                    <div class="transcription-box">
+                        <span class="box-label">LATEST TRANSCRIPTION</span>
+                        <p class="transcription-text" id="transcription-text">Awaiting trigger...</p>
+                    </div>
+                </div>
+
+                <!-- Health Subsystems Card -->
+                <div class="glass-card card-health">
+                    <h2 class="section-title">Subsystem Status</h2>
+                    <ul class="health-list" id="health-list">
+                        <li>
+                            <span class="subsystem-name">Microphone</span>
+                            <span class="status-badge badge-unknown" id="health-microphone">UNKNOWN</span>
+                        </li>
+                        <li>
+                            <span class="subsystem-name">Wake-Word Engine</span>
+                            <span class="status-badge badge-unknown" id="health-wake_word">UNKNOWN</span>
+                        </li>
+                        <li>
+                            <span class="subsystem-name">Whisper (STT)</span>
+                            <span class="status-badge badge-unknown" id="health-whisper">UNKNOWN</span>
+                        </li>
+                        <li>
+                            <span class="subsystem-name">ElevenLabs (TTS)</span>
+                            <span class="status-badge badge-unknown" id="health-elevenlabs">UNKNOWN</span>
+                        </li>
+                        <li>
+                            <span class="subsystem-name">Browser Controller</span>
+                            <span class="status-badge badge-unknown" id="health-browser">UNKNOWN</span>
+                        </li>
+                    </ul>
+                </div>
+            </section>
+
+            <!-- Middle Panel: Active Execution Log -->
+            <section class="grid-panel panel-center">
+                <div class="glass-card card-history">
+                    <div class="card-header">
+                        <h2 class="section-title">Action Execution Stream</h2>
+                        <button class="btn-clear" id="clear-history">Clear</button>
+                    </div>
+                    <div class="history-stream" id="history-stream">
+                        <div class="empty-state">
+                            <span class="empty-icon">📂</span>
+                            <p>No actions run in this session.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Right Panel: Diagnostics and Live Terminal Log -->
+            <section class="grid-panel panel-right">
+                <!-- Hardware Metrics Card -->
+                <div class="glass-card card-metrics">
+                    <h2 class="section-title">Hardware Telemetry</h2>
+                    <div class="metrics-grid">
+                        <div class="metric-circle-container">
+                            <svg class="progress-ring" width="80" height="80">
+                                <circle class="progress-ring-bg" stroke="#1f2937" stroke-width="6" fill="transparent" r="34" cx="40" cy="40"/>
+                                <circle class="progress-ring-bar" id="cpu-ring" stroke="url(#cpuGrad)" stroke-width="6" fill="transparent" r="34" cx="40" cy="40" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                                <defs>
+                                    <linearGradient id="cpuGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#3b82f6" />
+                                        <stop offset="100%" stop-color="#06b6d4" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <span class="metric-percent" id="cpu-text">0%</span>
+                            <span class="metric-label">CPU</span>
+                        </div>
+                        <div class="metric-circle-container">
+                            <svg class="progress-ring" width="80" height="80">
+                                <circle class="progress-ring-bg" stroke="#1f2937" stroke-width="6" fill="transparent" r="34" cx="40" cy="40"/>
+                                <circle class="progress-ring-bar" id="mem-ring" stroke="url(#memGrad)" stroke-width="6" fill="transparent" r="34" cx="40" cy="40" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                                <defs>
+                                    <linearGradient id="memGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#a855f7" />
+                                        <stop offset="100%" stop-color="#ec4899" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <span class="metric-percent" id="mem-text">0%</span>
+                            <span class="metric-label">Memory</span>
+                        </div>
+                        <div class="metric-circle-container">
+                            <svg class="progress-ring" width="80" height="80">
+                                <circle class="progress-ring-bg" stroke="#1f2937" stroke-width="6" fill="transparent" r="34" cx="40" cy="40"/>
+                                <circle class="progress-ring-bar" id="disk-ring" stroke="url(#diskGrad)" stroke-width="6" fill="transparent" r="34" cx="40" cy="40" stroke-dasharray="213.6" stroke-dashoffset="213.6"/>
+                                <defs>
+                                    <linearGradient id="diskGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+                                        <stop offset="0%" stop-color="#10b981" />
+                                        <stop offset="100%" stop-color="#3b82f6" />
+                                    </linearGradient>
+                                </defs>
+                            </svg>
+                            <span class="metric-percent" id="disk-text">0%</span>
+                            <span class="metric-label">Disk</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Live Logs Card -->
+                <div class="glass-card card-logs">
+                    <div class="card-header">
+                        <h2 class="section-title font-orbitron">Daemon Outputs</h2>
+                        <button class="btn-clear" id="clear-logs">Clear</button>
+                    </div>
+                    <div class="terminal-container">
+                        <div class="terminal-body" id="terminal-body">
+                            <div class="terminal-line system-line">[SYSTEM] Terminal initialized. Awaiting feed...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Main JavaScript Logic -->
+    <script src="/static/js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,15 @@
+{
+    "chromium": "chromium",
+    "chrome": "chromium",
+    "firefox": "firefox",
+    "vscode": "code",
+    "android studio": "android-studio",
+    "terminal": "gnome-terminal",
+    "phone": "connect",
+    "mirror": "connect",
+    "connect": "connect",
+    "file explorer": "nautilus",
+    "file manager": "nautilus",
+    "explorer": "nautilus",
+    "vlc": "vlc"
+}

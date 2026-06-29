@@ -1,0 +1,71 @@
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  background-color: #000000;
+  color: #e2e8f0;
+  overflow: hidden;
+  font-family: 'Outfit', 'Inter', sans-serif;
+}
+
+/* Glassmorphism custom styling utilities */
+.glass-panel {
+  background: rgba(10, 15, 30, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(56, 189, 248, 0.12);
+  box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+}
+
+.glass-panel-glow {
+  border-color: rgba(0, 242, 254, 0.35);
+  box-shadow: 0 0 25px rgba(0, 242, 254, 0.12), inset 0 0 15px rgba(0, 242, 254, 0.05);
+}
+
+.glow-text-cyan {
+  text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
+}
+
+.glow-text-blue {
+  text-shadow: 0 0 10px rgba(79, 172, 254, 0.5);
+}
+
+/* Cybernetic scanline overlay */
+.scanlines {
+  position: relative;
+  overflow: hidden;
+}
+
+.scanlines::before {
+  content: " ";
+  display: block;
+  position: absolute;
+  top: 0; left: 0; bottom: 0; right: 0;
+  background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+  z-index: 10;
+  background-size: 100% 4px, 6px 100%;
+  pointer-events: none;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(4, 6, 10, 0.3);
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(56, 189, 248, 0.25);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 242, 254, 0.45);
+}
