@@ -29,6 +29,7 @@ Local Storage/
 # Local environment variables and secrets
 .env
 *.env.*
+!.env.example
 .env.local
 
 # Python virtual environments
