@@ -2,13 +2,26 @@ import subprocess
 import os
 import asyncio
 import tempfile
+import threading
+import numpy as np
 from nova.voice.config import ENABLE_TTS, VOICE_NAME, TEMP_AUDIO_DIR, enable_debug
 from nova.logger import logger
 from nova.utils import print_info
 
+# Thread-safe global interrupt accumulator & lock (High priority check)
+_interrupt_accum = np.zeros(0, dtype=np.int16)
+_interrupt_lock = threading.Lock()
+
+def reset_interrupt_accumulator() -> None:
+    """Safely reset the interrupt detection accumulator."""
+    global _interrupt_accum
+    with _interrupt_lock:
+        _interrupt_accum = np.zeros(0, dtype=np.int16)
+
+
 def check_for_wake_interrupt() -> bool:
+    global _interrupt_accum
     import nova.voice.config as voice_config
-    import numpy as np
 
     stream = voice_config.active_stream
     detector = voice_config.active_wake_detector
@@ -16,25 +29,35 @@ def check_for_wake_interrupt() -> bool:
         return False
 
     try:
-        available = stream.read_available
-        if available >= 480:
-            chunks_to_read = available // 480
-            for _ in range(chunks_to_read):
-                recording, _ = stream.read(480)
-                flat = recording.flatten()
+        with voice_config.stream_lock:
+            available = stream.read_available
+            if available >= 480:
+                chunks_to_read = available // 480
+                for _ in range(chunks_to_read):
+                    recording, _ = stream.read(480)
+                    flat = recording.flatten()
 
-                # Apply gain and convert to PCM int16 for OpenWakeWord
-                amplified = flat * 2.0
-                pcm_chunk = (np.clip(amplified, -1.0, 1.0) * 32767).astype(np.int16)
+                    # Apply Acoustic Echo Cancellation if enabled
+                    aec = getattr(voice_config, "active_aec", None)
+                    if aec is not None:
+                        flat = aec.process(flat)
 
-                if not hasattr(check_for_wake_interrupt, "accum"):
-                    check_for_wake_interrupt.accum = np.zeros(0, dtype=np.int16)
-                check_for_wake_interrupt.accum = np.concatenate((check_for_wake_interrupt.accum, pcm_chunk))
+                    # Apply gain and convert to PCM int16 for OpenWakeWord
+                    amplified = flat * 2.0
+                    pcm_chunk = (np.clip(amplified, -1.0, 1.0) * 32767).astype(np.int16)
 
-            if len(check_for_wake_interrupt.accum) >= 1280:
-                frame = check_for_wake_interrupt.accum[:1280]
-                check_for_wake_interrupt.accum = check_for_wake_interrupt.accum[1280:]
+                    with _interrupt_lock:
+                        _interrupt_accum = np.concatenate((_interrupt_accum, pcm_chunk))
 
+            # Thread-safe check of the accumulator and run OWW predict
+            frame = None
+            with _interrupt_lock:
+                if len(_interrupt_accum) >= 1280:
+                    frame = _interrupt_accum[:1280]
+                    _interrupt_accum = _interrupt_accum[1280:]
+
+            if frame is not None:
+                # OWW model is locked internally in WrappedPredict
                 predictions = detector.model.predict(frame)
                 score = predictions.get(detector.model_name, 0.0)
 
@@ -97,61 +120,90 @@ class EdgeTTSProvider(TextToSpeechProvider):
         import numpy as np
         import time
 
-        # Reset wake-word detector accumulator for this playback turn
-        if hasattr(check_for_wake_interrupt, "accum"):
-            check_for_wake_interrupt.accum = np.zeros(0, dtype=np.int16)
-
-        # 1. sounddevice + soundfile (no external binary, best latency)
+        # Load playback reference audio for AEC
         try:
             import soundfile as sf
-            import sounddevice as sd
-            data, rate = sf.read(mp3_path, dtype='float32')
-            sd.play(data, rate)
-            
-            # Periodically poll for interrupt signal or wake word
-            while sd.get_stream().active:
-                if voice_config.interrupt_speaking or check_for_wake_interrupt():
-                    sd.stop()
-                    voice_config.interrupt_speaking = True
-                    break
-                time.sleep(0.05)
-            return
-        except Exception as e:
-            logger.debug(f"sounddevice playback failed: {e}")
+            ref_data, ref_rate = sf.read(mp3_path, dtype='float32')
+            if len(ref_data.shape) > 1 and ref_data.shape[1] > 1:
+                ref_data = np.mean(ref_data, axis=1)
+            # Resample to 16000 Hz if needed
+            if ref_rate != 16000:
+                try:
+                    from scipy.signal import resample_poly
+                except ImportError:
+                    resample_poly = None
 
-        # 2. mpg123 with explicit ALSA output (works under PipeWire)
-        try:
-            proc = subprocess.Popen(
-                ["mpg123", "-o", "alsa", "-q", mp3_path],
-                stderr=subprocess.DEVNULL,
-            )
-            while proc.poll() is None:
-                if voice_config.interrupt_speaking or check_for_wake_interrupt():
-                    proc.terminate()
-                    proc.wait()
-                    voice_config.interrupt_speaking = True
-                    break
-                time.sleep(0.05)
-            return
-        except Exception as e:
-            logger.debug(f"mpg123 -o alsa playback failed: {e}")
+                if resample_poly is not None:
+                    ref_data = resample_poly(ref_data, up=16000, down=ref_rate)
+                else:
+                    xp = np.arange(len(ref_data))
+                    x = np.linspace(0, len(ref_data) - 1, int(len(ref_data) * 16000 / ref_rate))
+                    ref_data = np.interp(x, xp, ref_data).astype(np.float32)
+            voice_config.aec_reference_audio = ref_data
+            voice_config.aec_playback_start_time = time.time()
+        except Exception as ref_err:
+            logger.debug(f"AEC reference audio load failed: {ref_err}")
+            voice_config.aec_reference_audio = None
+            voice_config.aec_playback_start_time = None
 
-        # 3. ffplay (ffmpeg suite, no window, quiet)
+        # Reset wake-word detector accumulator for this playback turn
+        reset_interrupt_accumulator()
+
         try:
-            proc = subprocess.Popen(
-                ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", mp3_path],
-                stderr=subprocess.DEVNULL,
-            )
-            while proc.poll() is None:
-                if voice_config.interrupt_speaking or check_for_wake_interrupt():
-                    proc.terminate()
-                    proc.wait()
-                    voice_config.interrupt_speaking = True
-                    break
-                time.sleep(0.05)
-            return
-        except Exception as e:
-            logger.debug(f"ffplay playback failed: {e}")
+            # 1. sounddevice + soundfile (no external binary, best latency)
+            try:
+                import soundfile as sf
+                import sounddevice as sd
+                data, rate = sf.read(mp3_path, dtype='float32')
+                sd.play(data, rate)
+                
+                # Periodically poll for interrupt signal or wake word
+                while sd.get_stream().active:
+                    if voice_config.interrupt_speaking or check_for_wake_interrupt():
+                        sd.stop()
+                        voice_config.interrupt_speaking = True
+                        break
+                    time.sleep(0.05)
+                return
+            except Exception as e:
+                logger.debug(f"sounddevice playback failed: {e}")
+
+            # 2. mpg123 with explicit ALSA output (works under PipeWire)
+            try:
+                proc = subprocess.Popen(
+                    ["mpg123", "-o", "alsa", "-q", mp3_path],
+                    stderr=subprocess.DEVNULL,
+                )
+                while proc.poll() is None:
+                    if voice_config.interrupt_speaking or check_for_wake_interrupt():
+                        proc.terminate()
+                        proc.wait()
+                        voice_config.interrupt_speaking = True
+                        break
+                    time.sleep(0.05)
+                return
+            except Exception as e:
+                logger.debug(f"mpg123 -o alsa playback failed: {e}")
+
+            # 3. ffplay (ffmpeg suite, no window, quiet)
+            try:
+                proc = subprocess.Popen(
+                    ["ffplay", "-nodisp", "-autoexit", "-loglevel", "quiet", mp3_path],
+                    stderr=subprocess.DEVNULL,
+                )
+                while proc.poll() is None:
+                    if voice_config.interrupt_speaking or check_for_wake_interrupt():
+                        proc.terminate()
+                        proc.wait()
+                        voice_config.interrupt_speaking = True
+                        break
+                    time.sleep(0.05)
+                return
+            except Exception as e:
+                logger.debug(f"ffplay playback failed: {e}")
+        finally:
+            # Let reference audio remain available for AEC in the subsequent record loop (High priority fix)
+            pass
 
         logger.debug("All TTS playback backends failed — audio not played.")
 
@@ -159,28 +211,125 @@ class EdgeTTSProvider(TextToSpeechProvider):
         if not ENABLE_TTS or not text.strip():
             return
 
-        from nova.voice.config import enable_debug
+        import edge_tts
+        import time
+        import numpy as np
+        import io
+        import soundfile as sf
+        import nova.voice.config as voice_config
+
         if enable_debug:
-            print_info("🔊 Speaking...")
-        mp3_path = None
-        try:
-            import edge_tts  # noqa: F401 — just check it's installed
-        except ImportError:
-            logger.debug("edge-tts not installed; TTS skipped.")
-            return
+            print_info("🔊 Speaking (streaming)...")
+
+        async def _stream_and_play():
+            communicate = edge_tts.Communicate(text, self.voice, rate="-3%")
+            
+            # Spawn mpg123 reading from stdin
+            proc = None
+            try:
+                proc = subprocess.Popen(
+                    ["mpg123", "-q", "-"],
+                    stdin=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL
+                )
+            except Exception as e:
+                logger.debug(f"Failed to start mpg123 stdin player: {e}")
+                
+            # Accumulate MP3 bytes in memory for AEC decoding
+            mp3_io = io.BytesIO()
+            
+            # Reset wake-word detector accumulator for this playback turn
+            reset_interrupt_accumulator()
+                
+            # Set AEC start time
+            voice_config.aec_playback_start_time = time.time()
+            
+            try:
+                async for chunk in communicate.stream():
+                    if chunk["type"] == "audio":
+                        audio_bytes = chunk["data"]
+                        # Pipe to mpg123
+                        if proc and proc.poll() is None:
+                            try:
+                                proc.stdin.write(audio_bytes)
+                                proc.stdin.flush()
+                            except Exception:
+                                pass
+                        # Accumulate for AEC
+                        mp3_io.write(audio_bytes)
+                        
+                    # Check for interrupt
+                    if voice_config.interrupt_speaking or check_for_wake_interrupt():
+                        voice_config.interrupt_speaking = True
+                        break
+                        
+                # Close stdin to let mpg123 finish playing
+                if proc and proc.stdin:
+                    proc.stdin.close()
+                    
+                # Wait for mpg123 to finish (unless interrupted)
+                if proc:
+                    while proc.poll() is None:
+                        if voice_config.interrupt_speaking or check_for_wake_interrupt():
+                            proc.terminate()
+                            proc.wait()
+                            voice_config.interrupt_speaking = True
+                            break
+                        await asyncio.sleep(0.05)
+                        
+            finally:
+                if proc and proc.poll() is None:
+                    proc.terminate()
+                    proc.wait()
+                    
+            # Decode the accumulated MP3 bytes in memory for AEC reference
+            try:
+                mp3_io.seek(0)
+                if mp3_io.getbuffer().nbytes > 0:
+                    ref_data, ref_rate = sf.read(mp3_io, dtype='float32')
+                    if len(ref_data.shape) > 1 and ref_data.shape[1] > 1:
+                        ref_data = np.mean(ref_data, axis=1)
+                    if ref_rate != 16000:
+                        try:
+                            from scipy.signal import resample_poly
+                        except ImportError:
+                            resample_poly = None
+                        if resample_poly is not None:
+                            ref_data = resample_poly(ref_data, up=16000, down=ref_rate)
+                        else:
+                            xp = np.arange(len(ref_data))
+                            x = np.linspace(0, len(ref_data) - 1, int(len(ref_data) * 16000 / ref_rate))
+                            ref_data = np.interp(x, xp, ref_data).astype(np.float32)
+                    voice_config.aec_reference_audio = ref_data
+            except Exception as aec_err:
+                logger.debug(f"Streaming AEC reference decode failed: {aec_err}")
 
         try:
-            mp3_path = self._synthesize(text)
-            if mp3_path:
-                self._play(mp3_path)
+            # Check if there is an active event loop
+            try:
+                loop = asyncio.get_running_loop()
+                loop_is_running = True
+            except RuntimeError:
+                loop_is_running = False
+
+            if loop_is_running:
+                import threading
+                def _run():
+                    new_loop = asyncio.new_event_loop()
+                    try:
+                        new_loop.run_until_complete(_stream_and_play())
+                    finally:
+                        new_loop.close()
+                t = threading.Thread(target=_run, daemon=True)
+                t.start()
+                t.join(timeout=30)
+            else:
+                asyncio.run(_stream_and_play())
         except Exception as e:
-            logger.debug(f"TTS failed: {e}")
+            logger.debug(f"Streaming speak failed: {e}")
         finally:
-            if mp3_path and os.path.exists(mp3_path):
-                try:
-                    os.remove(mp3_path)
-                except Exception:
-                    pass
+            # Let reference audio remain available for AEC in the subsequent record loop (High priority fix)
+            pass
 
 
 class ElevenLabsProvider(TextToSpeechProvider):
@@ -282,6 +431,7 @@ class OpenAITTSProvider(TextToSpeechProvider):
         self.api_key = api_key
         self.voice = os.environ.get("OPENAI_TTS_VOICE", "nova")
         self.fallback = EdgeTTSProvider()
+        self.client = None
 
     def speak(self, text: str) -> None:
         if not ENABLE_TTS or not text.strip():
@@ -304,12 +454,14 @@ class OpenAITTSProvider(TextToSpeechProvider):
             "voice": self.voice
         }
 
+        if self.client is None:
+            self.client = httpx.Client(timeout=15.0)
+
         mp3_path = None
         try:
-            with httpx.Client(timeout=15.0) as client:
-                response = client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                audio_bytes = response.content
+            response = self.client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            audio_bytes = response.content
 
             temp_fd, mp3_path = tempfile.mkstemp(suffix=".mp3", dir=TEMP_AUDIO_DIR)
             os.close(temp_fd)
@@ -337,6 +489,7 @@ class DeepgramTTSProvider(TextToSpeechProvider):
         self.api_key = api_key
         self.voice = os.environ.get("DEEPGRAM_TTS_VOICE", "aura-asteria-en")
         self.fallback = EdgeTTSProvider()
+        self.client = None
 
     def speak(self, text: str) -> None:
         if not ENABLE_TTS or not text.strip():
@@ -355,12 +508,14 @@ class DeepgramTTSProvider(TextToSpeechProvider):
         url = f"https://api.deepgram.com/v1/speak?model={self.voice}"
         payload = {"text": text}
 
+        if self.client is None:
+            self.client = httpx.Client(timeout=15.0)
+
         mp3_path = None
         try:
-            with httpx.Client(timeout=15.0) as client:
-                response = client.post(url, headers=headers, json=payload)
-                response.raise_for_status()
-                audio_bytes = response.content
+            response = self.client.post(url, headers=headers, json=payload)
+            response.raise_for_status()
+            audio_bytes = response.content
 
             temp_fd, mp3_path = tempfile.mkstemp(suffix=".mp3", dir=TEMP_AUDIO_DIR)
             os.close(temp_fd)

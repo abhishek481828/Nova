@@ -1,5 +1,6 @@
 import os
 import time
+import threading
 from nova.voice.config import (
     NEBIUS_STT_URL, NEBIUS_MODEL_NAME, API_TIMEOUT, RETRY_COUNT,
     WHISPER_MODEL_SIZE, WHISPER_CPU_THREADS, WHISPER_NUM_WORKERS, WHISPER_BEAM_SIZE,
@@ -16,6 +17,7 @@ class SpeechToTextProvider:
 
 class WhisperSTTProvider(SpeechToTextProvider):
     _cached_model = None
+    _model_lock = threading.Lock()
     """
     Fully offline local STT using faster-whisper.
     Model sizes: tiny (~75MB fastest), base (~145MB), small (~470MB), medium (~1.5GB)
@@ -28,61 +30,68 @@ class WhisperSTTProvider(SpeechToTextProvider):
     def _load(self):
         if WhisperSTTProvider._cached_model is not None:
             return
-        try:
-            from faster_whisper import WhisperModel
-            if enable_debug:
-                print_info(f"🔄 Loading local Whisper '{self.model_size}' model (first run only)...")
-            WhisperSTTProvider._cached_model = WhisperModel(
-                self.model_size,
-                device="cpu",
-                compute_type="int8",
-                cpu_threads=WHISPER_CPU_THREADS,
-                num_workers=WHISPER_NUM_WORKERS,
-            )
-            if enable_debug:
-                print_info("✅ Local Whisper model ready.")
-        except Exception as e:
-            raise RuntimeError(f"Failed to load Whisper model '{self.model_size}': {e}")
+        with WhisperSTTProvider._model_lock:
+            if WhisperSTTProvider._cached_model is not None:
+                return
+            try:
+                from faster_whisper import WhisperModel
+                if enable_debug:
+                    print_info(f"🔄 Loading local Whisper '{self.model_size}' model (first run only)...")
+                WhisperSTTProvider._cached_model = WhisperModel(
+                    self.model_size,
+                    device="cpu",
+                    compute_type="int8",
+                    cpu_threads=WHISPER_CPU_THREADS,
+                    num_workers=WHISPER_NUM_WORKERS,
+                )
+                if enable_debug:
+                    print_info("✅ Local Whisper model ready.")
+            except Exception as e:
+                raise RuntimeError(f"Failed to load Whisper model '{self.model_size}': {e}")
+
 
     def transcribe(self, audio: "str | bytes", silent: bool = False) -> str:
         self._load()
-        import tempfile, wave, struct, numpy as np
+        import io, wave, numpy as np
 
         if not silent or enable_debug:
             if enable_debug:
                 print_info("🧠 Transcribing locally with Whisper...")
 
-        # faster-whisper needs a file path, not bytes
+        # Decode WAV bytes directly in memory to numpy array to prevent disk I/O latency
         if isinstance(audio, str):
-            audio_path = audio
-            cleanup = False
+            try:
+                with wave.open(audio, 'rb') as wf:
+                    raw = wf.readframes(wf.getnframes())
+                    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+            except Exception as e:
+                # If reading as WAV fails (e.g. not a WAV file), pass path directly
+                samples = audio
         else:
-            tmp = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
-            tmp.write(audio)
-            tmp.close()
-            audio_path = tmp.name
-            cleanup = True
+            try:
+                with wave.open(io.BytesIO(audio), 'rb') as wf:
+                    raw = wf.readframes(wf.getnframes())
+                    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+            except Exception as e:
+                # Fallback to passing BytesIO object directly if decoding fails
+                samples = io.BytesIO(audio)
 
         try:
             # Energy gate: if the audio is essentially silence, Whisper will
             # hallucinate random text. Abort early if RMS < threshold.
-            try:
-                with wave.open(audio_path, 'rb') as wf:
-                    raw = wf.readframes(wf.getnframes())
-                    samples = np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-                    rms = float(np.sqrt(np.mean(samples ** 2))) if len(samples) > 0 else 0.0
+            if isinstance(samples, np.ndarray):
+                rms = float(np.sqrt(np.mean(samples ** 2))) if len(samples) > 0 else 0.0
                 if rms < 0.01:
                     logger.debug(f"Audio energy too low ({rms:.4f}) — skipping transcription.")
                     return ""
-            except Exception:
-                pass  # if we can't check energy, proceed anyway
 
             segments, _ = WhisperSTTProvider._cached_model.transcribe(
-                audio_path,
+                samples,
                 language="en",
-                beam_size=WHISPER_BEAM_SIZE,
-                vad_filter=True,           # strips silence so Whisper doesn't hallucinate
-                vad_parameters={"min_silence_duration_ms": 300},
+                beam_size=1,
+                best_of=1,
+                temperature=0.0,
+                vad_filter=False,
                 # Bias Whisper toward Nova command vocabulary and patterns.
                 # This dramatically reduces hallucinations on short utterances.
                 initial_prompt=(
@@ -107,12 +116,6 @@ class WhisperSTTProvider(SpeechToTextProvider):
             return " ".join(seg.text for seg in segments_list).strip()
         except Exception as e:
             raise Exception(f"Whisper transcription error: {e}")
-        finally:
-            if cleanup:
-                try:
-                    os.unlink(audio_path)
-                except Exception:
-                    pass
 
 
 class NebiusSTTProvider(SpeechToTextProvider):
@@ -135,6 +138,7 @@ class NebiusSTTProvider(SpeechToTextProvider):
         self.model = model
         self.timeout = timeout
         self.max_retries = max_retries
+        self.client = None
 
     def transcribe(self, audio: "str | bytes", silent: bool = False) -> str:
         if not self.api_key:
@@ -159,13 +163,15 @@ class NebiusSTTProvider(SpeechToTextProvider):
         data = {"model": self.model}
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
 
+        if self.client is None:
+            self.client = httpx.Client(timeout=self.timeout)
+
         backoff = 1.0
         for attempt in range(self.max_retries + 1):
             try:
-                with httpx.Client(timeout=self.timeout) as client:
-                    response = client.post(self.url, headers=headers, data=data, files=files)
-                    response.raise_for_status()
-                    return response.json().get("text", "").strip()
+                response = self.client.post(self.url, headers=headers, data=data, files=files)
+                response.raise_for_status()
+                return response.json().get("text", "").strip()
 
             except httpx.HTTPStatusError as e:
                 status_code = e.response.status_code
@@ -200,6 +206,7 @@ class OpenAISTTProvider(SpeechToTextProvider):
     """
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.client = None
 
     def transcribe(self, audio: "str | bytes", silent: bool = False) -> str:
         if not self.api_key:
@@ -224,11 +231,13 @@ class OpenAISTTProvider(SpeechToTextProvider):
         data = {"model": "whisper-1", "language": "en"}
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
 
+        if self.client is None:
+            self.client = httpx.Client(timeout=15.0)
+
         try:
-            with httpx.Client(timeout=15.0) as client:
-                response = client.post(url, headers=headers, data=data, files=files)
-                response.raise_for_status()
-                return response.json().get("text", "").strip()
+            response = self.client.post(url, headers=headers, data=data, files=files)
+            response.raise_for_status()
+            return response.json().get("text", "").strip()
         except Exception as e:
             raise Exception(f"OpenAI Whisper API error: {e}")
 
@@ -239,6 +248,7 @@ class GroqSTTProvider(SpeechToTextProvider):
     """
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.client = None
 
     def transcribe(self, audio: "str | bytes", silent: bool = False) -> str:
         if not self.api_key:
@@ -263,11 +273,13 @@ class GroqSTTProvider(SpeechToTextProvider):
         data = {"model": "whisper-large-v3", "language": "en"}
         files = {"file": ("audio.wav", audio_bytes, "audio/wav")}
 
+        if self.client is None:
+            self.client = httpx.Client(timeout=15.0)
+
         try:
-            with httpx.Client(timeout=15.0) as client:
-                response = client.post(url, headers=headers, data=data, files=files)
-                response.raise_for_status()
-                return response.json().get("text", "").strip()
+            response = self.client.post(url, headers=headers, data=data, files=files)
+            response.raise_for_status()
+            return response.json().get("text", "").strip()
         except Exception as e:
             raise Exception(f"Groq Whisper API error: {e}")
 
@@ -278,6 +290,7 @@ class DeepgramSTTProvider(SpeechToTextProvider):
     """
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.client = None
 
     def transcribe(self, audio: "str | bytes", silent: bool = False) -> str:
         if not self.api_key:
@@ -303,18 +316,20 @@ class DeepgramSTTProvider(SpeechToTextProvider):
         }
         url = "https://api.deepgram.com/v1/listen?model=nova-2&smart_format=true"
 
+        if self.client is None:
+            self.client = httpx.Client(timeout=15.0)
+
         try:
-            with httpx.Client(timeout=15.0) as client:
-                response = client.post(url, headers=headers, content=audio_bytes)
-                response.raise_for_status()
-                resp_json = response.json()
-                
-                channels = resp_json.get("results", {}).get("channels", [])
-                if channels:
-                    alternatives = channels[0].get("alternatives", [])
-                    if alternatives:
-                        return alternatives[0].get("transcript", "").strip()
-                return ""
+            response = self.client.post(url, headers=headers, content=audio_bytes)
+            response.raise_for_status()
+            resp_json = response.json()
+            
+            channels = resp_json.get("results", {}).get("channels", [])
+            if channels:
+                alternatives = channels[0].get("alternatives", [])
+                if alternatives:
+                    return alternatives[0].get("transcript", "").strip()
+            return ""
         except Exception as e:
             raise Exception(f"Deepgram STT API error: {e}")
 

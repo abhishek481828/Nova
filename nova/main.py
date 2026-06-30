@@ -133,7 +133,14 @@ def run_daemon() -> None:
                         query = payload["query"]
                         client_env = payload.get("env", {})
                         if isinstance(client_env, dict):
-                            os.environ.update(client_env)
+                            # Allow only specific GUI and standard Nix variables (Security check)
+                            SAFE_ENV_ALLOWLIST = {
+                                "DISPLAY", "XAUTHORITY", "DBUS_SESSION_BUS_ADDRESS", 
+                                "PATH", "LANG", "LC_ALL", "XDG_RUNTIME_DIR",
+                                "CHROMIUM_BIN", "CHROME_BIN"
+                            }
+                            filtered_env = {k: v for k, v in client_env.items() if k in SAFE_ENV_ALLOWLIST}
+                            os.environ.update(filtered_env)
                         client_chromium_bin = payload.get("chromium_bin") or payload.get("chrome_bin")
                         if client_chromium_bin:
                             os.environ["CHROMIUM_BIN"] = client_chromium_bin
@@ -163,14 +170,13 @@ def run_daemon() -> None:
                     transition_state(VoiceState.VOICE_IDLE)
                     voice_active_event.set()
                     conn.sendall(b"Nova is now listening.\n")
-                elif state == VoiceState.VOICE_IDLE:
-                    # Deactivate!
+                else:
+                    # Deactivate immediately — covers VOICE_IDLE, PUSH_TO_TALK,
+                    # LISTENING, TRANSCRIBING, EXECUTING, SPEAKING, WAKE_DETECTED.
+                    # The recorder and voice loop both check _current_state and will
+                    # exit their inner loops as soon as they see INACTIVE.
                     transition_state(VoiceState.INACTIVE)
                     conn.sendall(b"Nova has stopped listening.\n")
-                elif state in (VoiceState.EXECUTING, VoiceState.SPEAKING, VoiceState.LISTENING, VoiceState.TRANSCRIBING, VoiceState.WAKE_DETECTED):
-                    # Flag deferred deactivation
-                    set_deferred_deactivate(True)
-                    conn.sendall(b"Nova will stop listening after the current interaction finishes.\n")
                 conn.close()
                 set_socket_conn(None)
                 continue
@@ -459,7 +465,11 @@ def main() -> None:
     except Exception:
         pass
 
-    if daemon_running and "--daemon" not in args:
+    # Run interactive/voice mode directly in the foreground if stdin is a TTY and either
+    # no arguments are passed or "--text" is specified.
+    is_interactive = sys.stdin.isatty() and (not args or "--text" in args)
+
+    if not is_interactive and daemon_running and "--daemon" not in args:
         if not args:
             run_client("TOGGLE_VOICE")
             return
@@ -468,7 +478,7 @@ def main() -> None:
             run_client(query)
             return
 
-    if not daemon_running and "--daemon" not in args:
+    if not is_interactive and not daemon_running and "--daemon" not in args:
         if not args:
             # Launcher mode / shortcut: start daemon silently in the background
             import subprocess
@@ -577,7 +587,7 @@ def main() -> None:
                         print(f"Missing dependency:\n{dep}\n")
                         print(f"Reason:\n{reason}\n")
                     continue
-                result = run_voice_loop(ai_client, dispatcher)
+                result = run_voice_loop(ai_client, dispatcher, interactive=True)
             except ModuleNotFoundError as e:
                 missing_pkg = e.name if hasattr(e, 'name') and e.name else str(e)
                 print_error("Voice mode is unavailable.\n")

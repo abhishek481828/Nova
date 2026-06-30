@@ -48,7 +48,7 @@
     genericName = "AI Desktop Assistant";
     comment = "Voice and Text Desktop Assistant";
     exec = "/home/nixos/.local/bin/nova";
-    icon = "/home/nixos/Projects/Nova/nova.png";
+    icon = "nova_app";
     terminal = false;
     categories = [ "Utility" ];
     startupNotify = true;
@@ -60,7 +60,7 @@
     genericName = "Mission Control Dashboard";
     comment = "Open the Nova Mission Control Dashboard";
     exec = "xdg-open http://127.0.0.1:11436";
-    icon = "/home/nixos/Projects/Nova/nova.png";
+    icon = "nova_app";
     terminal = false;
     categories = [ "Utility" ];
     startupNotify = true;

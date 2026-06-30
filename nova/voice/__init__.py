@@ -12,12 +12,16 @@ def check_voice_dependencies() -> list[tuple[str, str]]:
     dependencies = [
         ("numpy", "numpy"),
         ("sounddevice", "sounddevice"),
-        ("edge-tts", "edge_tts"),
+        ("edge_tts", "edge_tts"),
         ("scipy", "scipy"),
         ("python-dotenv", "dotenv"),
         ("requests", "requests"),
         ("httpx", "httpx"),
-        ("soundfile", "soundfile")
+        ("soundfile", "soundfile"),
+        ("webrtcvad", "webrtcvad"),
+        ("faster_whisper", "faster_whisper"),
+        ("openwakeword", "openwakeword"),
+        ("resemblyzer", "resemblyzer")
     ]
     
     for label, module_name in dependencies:
@@ -29,3 +33,15 @@ def check_voice_dependencies() -> list[tuple[str, str]]:
             issues.append((label, str(e)))
             
     return issues
+
+
+def get_diagnostics():
+    """
+    Return the active VoiceDiagnosticsEngine instance registered by the
+    voice conversation loop, or None if the voice loop is not running.
+    """
+    try:
+        import nova.voice.config as _cfg
+        return _cfg.active_diagnostics
+    except Exception:
+        return None

@@ -46,8 +46,10 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
     rms_threshold = calibrated_threshold if calibrated_threshold is not None else VAD_THRESHOLD
     
     # Preprocessing engines
-    from nova.voice.audio_processor import HighPassFilter, RNNoiseWrapper, AutomaticGainControl, WebRTCVoiceActivityDetector
+    from nova.voice.audio_processor import HighPassFilter, RNNoiseWrapper, AutomaticGainControl, WebRTCVoiceActivityDetector, AecProcessor
+    from nova.voice.config import ENABLE_ECHO_CANCEL
     
+    aec = AecProcessor() if ENABLE_ECHO_CANCEL else None
     hp_filter = HighPassFilter(cutoff=HIGHPASS_CUTOFF, fs=SAMPLE_RATE) if ENABLE_HIGHPASS_FILTER else None
     rnnoise = RNNoiseWrapper() if ENABLE_NOISE_SUPPRESSION else None
     agc = AutomaticGainControl() if ENABLE_AGC else None
@@ -75,6 +77,10 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
         # 0. DC offset removal — subtract mean to remove microphone DC bias
         if ENABLE_DC_OFFSET_REMOVAL:
             chunk = chunk - chunk.mean()
+
+        # Acoustic Echo Cancellation
+        if aec:
+            chunk = aec.process(chunk)
         
         # 1. AGC
         if agc:
@@ -84,11 +90,9 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
         if hp_filter:
             chunk = hp_filter.process(chunk)
             
-        # 3. RNNoise (operates on 10ms / 160 sample subframes)
+        # 3. RNNoise (optimized bulk chunk processing)
         if rnnoise and rnnoise.is_available():
-            sub_frames = np.split(chunk, 3)
-            denoised_subs = [rnnoise.denoise_frame(sf) for sf in sub_frames]
-            chunk = np.concatenate(denoised_subs)
+            chunk = rnnoise.denoise_chunk(chunk)
             
         chunk = chunk.reshape(-1, 1)
         
@@ -100,6 +104,7 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
         audio_data.append((chunk, is_speech))
 
     try:
+        consecutive_silent_frames = 0
         with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, callback=callback, blocksize=block_samples):
             while True:
                 elapsed = time.time() - start_time
@@ -109,19 +114,22 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
                 
                 # Check VAD states for silence detection
                 if len(audio_data) > 0:
-                    # Find the last time speech was detected
-                    speech_detected = False
-                    for i in range(len(audio_data) - 1, -1, -1):
-                        if audio_data[i][1]: # is_speech
-                            speech_detected = True
-                            last_sound_time = time.time()
-                            has_speech_started = True
-                            break
+                    last_is_speech = audio_data[-1][1]
+                    if last_is_speech:
+                        last_sound_time = time.time()
+                        has_speech_started = True
+                        consecutive_silent_frames = 0
+                    else:
+                        if has_speech_started:
+                            consecutive_silent_frames += 1
                             
+                    # Fast VAD endpoint detection (0.8s VAD silence)
+                    max_silent_frames = int(0.8 / (block_samples / SAMPLE_RATE))
                     silence_duration = time.time() - last_sound_time
-                    if has_speech_started and silence_duration >= SILENCE_TIMEOUT:
+                    
+                    if has_speech_started and (consecutive_silent_frames >= max_silent_frames or silence_duration >= SILENCE_TIMEOUT):
                         if enable_debug:
-                            print_info("🛑 Silence detected")
+                            print_info("🛑 Silence detected (fast endpoint)")
                         break
                     elif not has_speech_started and silence_duration >= 5.0:
                         logger.debug("No speech detected at the start. Stopping.")
@@ -182,12 +190,22 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
             
     return wav_bytes
 
-def record_audio_from_stream(stream, output_file: str | None = None, calibrated_threshold: float | None = None) -> bytes | str:
+def record_audio_from_stream(
+    stream, 
+    output_file: str | None = None, 
+    calibrated_threshold: float | None = None,
+    hp_filter=None,
+    rnnoise=None,
+    agc=None,
+    vad=None,
+    aec=None
+) -> bytes | str:
     """
     Records audio from the provided open sounddevice InputStream, routing it through the
     preprocessing pipeline: High-pass Filter -> RNNoise Denoising -> AGC -> WebRTC VAD.
     """
     import numpy as np
+    import nova.voice.config as voice_config
     
     # Emit Mic Active to Dashboard
     try:
@@ -200,12 +218,24 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
     rms_threshold = calibrated_threshold if calibrated_threshold is not None else VAD_THRESHOLD
     
     # Preprocessing engines
-    from nova.voice.audio_processor import HighPassFilter, RNNoiseWrapper, AutomaticGainControl, WebRTCVoiceActivityDetector
-    
-    hp_filter = HighPassFilter(cutoff=HIGHPASS_CUTOFF, fs=SAMPLE_RATE) if ENABLE_HIGHPASS_FILTER else None
-    rnnoise = RNNoiseWrapper() if ENABLE_NOISE_SUPPRESSION else None
-    agc = AutomaticGainControl() if ENABLE_AGC else None
-    vad = WebRTCVoiceActivityDetector(aggressiveness=VAD_AGGRESSIVENESS, default_threshold=rms_threshold) if ENABLE_VAD else None
+    from nova.voice.audio_processor import HighPassFilter, RNNoiseWrapper, AutomaticGainControl, WebRTCVoiceActivityDetector, AecProcessor
+    from nova.voice.config import ENABLE_ECHO_CANCEL
+
+    local_aec = False
+    if aec is None and ENABLE_ECHO_CANCEL:
+        aec = AecProcessor()
+        local_aec = True
+
+    local_rnnoise = False
+    if hp_filter is None:
+        hp_filter = HighPassFilter(cutoff=HIGHPASS_CUTOFF, fs=SAMPLE_RATE) if ENABLE_HIGHPASS_FILTER else None
+    if rnnoise is None:
+        rnnoise = RNNoiseWrapper() if ENABLE_NOISE_SUPPRESSION else None
+        local_rnnoise = True
+    if agc is None:
+        agc = AutomaticGainControl() if ENABLE_AGC else None
+    if vad is None:
+        vad = WebRTCVoiceActivityDetector(aggressiveness=VAD_AGGRESSIVENESS, default_threshold=rms_threshold) if ENABLE_VAD else None
 
     # Emit Denoising Start if active
     if rnnoise and rnnoise.is_available():
@@ -226,16 +256,22 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
     start_time = time.time()
     last_sound_time = time.time()
     has_speech_started = False
+    consecutive_silent_frames = 0
     
     try:
-        # Flush any pending buffer in the input stream before starting recording
-        if stream.read_available > 0:
-            stream.read(stream.read_available)
+        # Flush any pending buffer in the input stream before starting recording (B44 / stream_lock)
+        with voice_config.stream_lock:
+            if stream.read_available > 0:
+                stream.read(stream.read_available)
             
         while True:
             try:
-                from nova.voice.conversation import shutdown_event
+                from nova.voice.conversation import shutdown_event, get_current_state, VoiceState
                 if shutdown_event.is_set():
+                    break
+                # Stop recording immediately if voice is deactivated (e.g. shortcut pressed to toggle off)
+                if get_current_state() == VoiceState.INACTIVE:
+                    logger.debug("Recording interrupted: voice deactivated by user.")
                     break
             except ImportError:
                 pass
@@ -245,9 +281,10 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
                 logger.debug(f"Recording reached maximum timeout of {RECORDING_TIMEOUT} seconds.")
                 break
                 
-            # Read 480 samples from the stream
+            # Read 480 samples from the stream (B44 / stream_lock)
             try:
-                indata, overflow = stream.read(block_samples)
+                with voice_config.stream_lock:
+                    indata, overflow = stream.read(block_samples)
             except Exception as e:
                 logger.debug(f"Audio stream read error during record: {e}")
                 break
@@ -257,6 +294,10 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
             # 0. DC offset removal — subtract mean to remove microphone DC bias
             if ENABLE_DC_OFFSET_REMOVAL:
                 chunk = chunk - chunk.mean()
+
+            # Acoustic Echo Cancellation
+            if aec:
+                chunk = aec.process(chunk)
             
             # 1. AGC
             if agc:
@@ -266,11 +307,9 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
             if hp_filter:
                 chunk = hp_filter.process(chunk)
                 
-            # 3. RNNoise (operates on 10ms / 160 sample subframes)
+            # 3. RNNoise (optimized bulk chunk processing)
             if rnnoise and rnnoise.is_available():
-                sub_frames = np.split(chunk, 3)
-                denoised_subs = [rnnoise.denoise_frame(sf) for sf in sub_frames]
-                chunk = np.concatenate(denoised_subs)
+                chunk = rnnoise.denoise_chunk(chunk)
                 
             chunk = chunk.reshape(-1, 1)
             
@@ -284,6 +323,7 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
             # Update silence tracking based on the latest chunk only
             if is_speech:
                 last_sound_time = time.time()
+                consecutive_silent_frames = 0
                 if not has_speech_started:
                     try:
                         from nova.dashboard.event_bus import emit
@@ -291,11 +331,17 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
                     except Exception:
                         pass
                 has_speech_started = True
+            else:
+                if has_speech_started:
+                    consecutive_silent_frames += 1
 
+            # Fast VAD endpoint detection (0.8s VAD silence)
+            max_silent_frames = int(0.8 / (block_samples / SAMPLE_RATE))
             silence_duration = time.time() - last_sound_time
-            if has_speech_started and silence_duration >= SILENCE_TIMEOUT:
+            
+            if has_speech_started and (consecutive_silent_frames >= max_silent_frames or silence_duration >= SILENCE_TIMEOUT):
                 if enable_debug:
-                    print_info("🛑 Silence detected")
+                    print_info("🛑 Silence detected (fast endpoint)")
                 break
             elif not has_speech_started and silence_duration >= 8.0:  # give user 8s to start talking
                 logger.debug("No speech detected within 8 seconds. Stopping.")
@@ -304,8 +350,10 @@ def record_audio_from_stream(stream, output_file: str | None = None, calibrated_
     except Exception as e:
         raise RuntimeError(f"Microphone read error: {e}")
     finally:
-        if rnnoise:
+        if local_rnnoise and rnnoise:
             rnnoise.destroy()
+        if local_aec and aec:
+            aec.destroy()
 
     # Dynamic Speech Buffer: Strip leading and trailing silence
     first_speech_idx = None

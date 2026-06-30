@@ -1,5 +1,6 @@
 import os
 import tempfile
+import threading
 try:
     from dotenv import load_dotenv
     from pathlib import Path
@@ -8,9 +9,10 @@ except ImportError:
     pass
 
 def get_env(name: str, default: str) -> str:
-    # Check NOVA_ prefixed environment variable first, then NOVA_ prefixed one.
-    nova_name = name.replace("NOVA_", "NOVA_")
-    return os.environ.get(nova_name, os.environ.get(name, default))
+    # Check NOVA_ prefixed environment variable first, then name.
+    nova_name = name if name.startswith("NOVA_") else f"NOVA_{name}"
+    unprefixed_name = name.replace("NOVA_", "")
+    return os.environ.get(nova_name, os.environ.get(unprefixed_name, default))
 
 ENABLE_VOICE = True
 ENABLE_TTS = True
@@ -21,7 +23,7 @@ ENABLE_HIGHPASS_FILTER = True     # Butterworth high-pass (removes fan hum / AC 
 ENABLE_AGC = True                 # Automatic Gain Control
 ENABLE_VAD = True                 # WebRTC Voice Activity Detection
 ENABLE_DC_OFFSET_REMOVAL = True   # Subtract mean to remove microphone DC bias
-ENABLE_ECHO_CANCEL = False        # Software AEC (requires speex-dsp; disabled by default)
+ENABLE_ECHO_CANCEL = get_env("ENABLE_ECHO_CANCEL", "True").lower() == "true"
 
 # Block / Frame Sizes (samples)
 BLOCK_SIZE  = 480   # 30 ms at 16 kHz — required minimum for WebRTC VAD and RNNoise
@@ -44,8 +46,15 @@ SAMPLE_RATE = 16000        # 16kHz standard for Speech-to-Text
 CHANNELS = 1               # Mono audio
 RECORDING_TIMEOUT = 20.0   # Maximum length of recording in seconds
 SILENCE_TIMEOUT = 2.0      # Stop recording after 2 seconds of silence
-CHUNK_DURATION = 0.1       # Duration of each recorded audio chunk in seconds
-TEMP_AUDIO_DIR = get_env("NOVA_TEMP_AUDIO_DIR", tempfile.gettempdir())
+# Secure user-private temp directory for temporary voice recordings (S2)
+_user_temp_dir = os.path.expanduser("~/.config/nova/tmp")
+try:
+    os.makedirs(_user_temp_dir, mode=0o700, exist_ok=True)
+except Exception:
+    _user_temp_dir = tempfile.gettempdir()
+
+TEMP_AUDIO_DIR = get_env("NOVA_TEMP_AUDIO_DIR", _user_temp_dir)
+
 
 # VAD (Voice Activity Detection) Configs
 VAD_THRESHOLD = 0.001      # Root Mean Square (RMS) energy threshold to detect voice activity
@@ -60,13 +69,35 @@ WAKE_WORD_CHECK_INTERVAL = 0.8  # Passive listening evaluation interval in secon
 enable_wake_word = True
 wake_word_phrase = "Hey Nova"
 
+# Confidence Fusion Engine Weights
+FUSION_WEIGHT_WAKE = 0.40
+FUSION_WEIGHT_SPEAKER = 0.30
+FUSION_WEIGHT_VAD = 0.15
+FUSION_WEIGHT_QUALITY = 0.10
+FUSION_WEIGHT_NOISE = 0.05
+
+# Speaker Verification Continuous Learning
+ENABLE_SPEAKER_CONTINUOUS_LEARNING = True
+SPEAKER_DRIFT_THRESHOLD = 0.70
+
 # Resolve built-in model path dynamically inside the virtual environment
-_current_dir = os.path.dirname(os.path.abspath(__file__))
-_project_root = os.path.dirname(os.path.dirname(_current_dir))
-_default_model_path = os.path.join(
-    _project_root,
-    ".venv/lib/python3.12/site-packages/openwakeword/resources/models/hey_nova_v0.1.onnx"
-)
+_default_model_path = ""
+try:
+    import openwakeword
+    _default_model_path = os.path.join(
+        os.path.dirname(openwakeword.__file__),
+        "resources",
+        "models",
+        "hey_nova_v0.1.onnx"
+    )
+except Exception:
+    # Fallback to older hardcoded path structure if import fails
+    _current_dir = os.path.dirname(os.path.abspath(__file__))
+    _project_root = os.path.dirname(os.path.dirname(_current_dir))
+    _default_model_path = os.path.join(
+        _project_root,
+        ".venv/lib/python3.12/site-packages/openwakeword/resources/models/hey_nova_v0.1.onnx"
+    )
 
 wake_word_model_path = get_env("NOVA_WAKE_WORD_MODEL_PATH", _default_model_path)
 wake_word_threshold = float(get_env("NOVA_WAKE_THRESHOLD", "0.3"))
@@ -123,4 +154,7 @@ DIAGNOSTICS_LOG_PATH = os.path.expanduser(
 # Shared runtime variables for voice feedback interruption
 active_stream = None
 active_wake_detector = None
+active_diagnostics = None   # VoiceDiagnosticsEngine instance (set by conversation loop)
 interrupt_speaking = False
+stream_lock = threading.Lock()
+

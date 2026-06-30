@@ -2,7 +2,7 @@ import json
 import urllib.request
 import urllib.error
 from typing import Optional
-from nova.config import OLLAMA_API_URL, OLLAMA_MODEL, SYSTEM_PROMPT
+from nova.config import OLLAMA_API_URL, OLLAMA_MODEL, SYSTEM_PROMPT, DISABLE_OLLAMA
 from nova.logger import log_error, log_request
 
 class OllamaClient:
@@ -108,10 +108,10 @@ class OllamaClient:
                         time.sleep(backoff)
                         backoff *= 2.0
                 
-        # Disable Ollama as requested
-        DISABLE_OLLAMA = True
+        # Fallback to local Ollama if not explicitly disabled (Critical fix)
         if DISABLE_OLLAMA:
             return None
+
 
         # --- Local Ollama execution ---
         # Prepare the chat request payload
@@ -209,10 +209,10 @@ class OllamaClient:
             except Exception as e:
                 log_error("Nebius summary generation failed, falling back to local Ollama", e)
 
-        # Disable Ollama as requested
-        DISABLE_OLLAMA = True
+        # Fallback to local Ollama if not explicitly disabled (Critical fix)
         if DISABLE_OLLAMA:
             pass
+
         # Local Ollama fallback if Nebius didn't succeed
         elif not content:
             url = f"{self.api_url}/api/chat"

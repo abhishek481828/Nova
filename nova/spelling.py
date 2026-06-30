@@ -48,6 +48,12 @@ VALID_WORDS: Set[str] = {
     "openai", "weather", "crypto", "news", "coingecko", "tavily", "bitcoin", "ethereum", "solana", "ocr", "ipinfo", "ip_info", "tmdb", "fmp",
     # Currency / rates terms
     "rate", "rates", "currency", "exchange", "convert", "conversion", "value", "dollar", "dollars", "euro", "euros", "finance", "stock", "stocks", "aapl", "tsla", "msft",
+    # Common conversational, query, and pronouns/articles
+    "now", "cover", "can", "you", "tell", "about", "today", "all", "the", "apple", "market", "bbc",
+    "show", "how", "what", "where", "who", "why", "when", "more", "look", "give", "get", "say", "me",
+    "him", "her", "them", "us", "this", "that", "these", "those", "here", "there", "then", "soon",
+    "day", "night", "time", "week", "month", "year", "tomorrow", "yesterday", "okay", "are", "listening",
+    "perfectly", "good", "morning", "afternoon", "evening", "doing", "well",
     # Name
     "nova"
 }

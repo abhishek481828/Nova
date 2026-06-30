@@ -83,6 +83,8 @@ def _get_best_local_model(api_url: str) -> str:
     return "llama3.2:1b"
 
 OLLAMA_MODEL = _get_best_local_model(OLLAMA_API_URL)
+DISABLE_OLLAMA = os.environ.get("NOVA_DISABLE_OLLAMA", "false").lower() == "true"
+
 
 # Chromium DevTools Config
 CHROMIUM_DEVTOOLS_PORT = int(os.environ.get("CHROMIUM_DEVTOOLS_PORT", 9222))

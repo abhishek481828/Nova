@@ -30,6 +30,7 @@ import subprocess
 import collections
 import numpy as np
 import sounddevice as sd
+import nova.voice.config as voice_config
 
 from nova.voice.config import (
     SAMPLE_RATE, CHANNELS, VAD_THRESHOLD,
@@ -45,6 +46,10 @@ from nova.voice.tts import speak
 from nova.voice.recorder import record_audio_from_stream
 from nova.voice.wake_word import LocalWakeWordDetector
 from nova.voice.audio_processor import AudioDiagnostics, select_best_microphone
+from nova.voice.adaptive_wake import AdaptiveWakeController
+from nova.voice.confidence_fusion import ConfidenceFusionEngine
+from nova.voice.audio_quality import AudioQualityAnalyzer
+from nova.voice.diagnostics import VoiceDiagnosticsEngine
 from nova.logger import logger
 from nova.utils import print_info, print_warning, print_error, print_success
 from enum import Enum, auto
@@ -70,8 +75,9 @@ _current_state = VoiceState.INACTIVE
 _mic_healthy = False
 _wake_healthy = False
 _stt_healthy = False
-
 _deferred_deactivate = False
+
+_state_lock = threading.Lock()
 
 def set_deferred_deactivate(val: bool) -> None:
     global _deferred_deactivate
@@ -79,18 +85,22 @@ def set_deferred_deactivate(val: bool) -> None:
 
 def transition_state(new_state: VoiceState) -> None:
     global _current_state
-    _current_state = new_state
+    with _state_lock:
+        _current_state = new_state
     logger.debug(f"[STATE] Transitioned to {new_state.name}")
 
 def get_current_state() -> VoiceState:
     global _current_state
-    return _current_state
+    with _state_lock:
+        return _current_state
 
 def get_voice_status_report() -> dict:
     from nova.browser_manager import BrowserManager
     from nova.voice.config import ENABLE_TTS
     
-    state_name = _current_state.name if _current_state else "UNKNOWN"
+    with _state_lock:
+        state_name = _current_state.name if _current_state else "UNKNOWN"
+
     browser_running = BrowserManager.is_browser_running()
     browser_status = "Healthy (Active)" if browser_running else "Inactive"
     
@@ -166,6 +176,108 @@ def recover_wake_detector(old_detector):
 
 def clean_ansi(text: str) -> str:
     return re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", text)
+
+
+# Phrases that mean "stop what you're doing and listen to me again"
+_STOP_PHRASES = frozenset([
+    "stop nova", "stop", "cancel", "never mind", "nevermind", "that's enough",
+    "thats enough", "be quiet", "shut up", "pause", "wait", "hold on",
+    "hey nova", "ok nova", "okay nova", "nova stop", "nova cancel",
+])
+
+# Phrases that can be used at the start of a longer sentence to interrupt
+_PREFIX_STOP_PHRASES = frozenset([
+    "stop nova", "cancel", "never mind", "nevermind", "be quiet", "shut up",
+    "hey nova", "ok nova", "okay nova", "nova stop", "nova cancel",
+])
+
+def _is_interrupt_phrase(text: str) -> bool:
+    """Return True if the transcribed text is a stop/interrupt command."""
+    t = text.lower().strip().rstrip(".").rstrip(",")
+    if t in _STOP_PHRASES:
+        return True
+    # Also match if ANY prefix stop phrase appears at the start of the utterance
+    for phrase in _PREFIX_STOP_PHRASES:
+        if t.startswith(phrase):
+            return True
+    return False
+
+
+
+_interrupt_listener_active = threading.Event()
+
+def _start_background_interrupt_listener(stream, stt_provider, calibrated_threshold: float) -> None:
+    """
+    Spawns a daemon thread that continuously reads short audio bursts from the
+    microphone during SPEAKING / EXECUTING states and checks for interrupt phrases
+    ("stop nova", "hey nova", etc.).
+
+    When detected, sets voice_config.interrupt_speaking = True so the TTS
+    playback loop stops immediately.
+    """
+    import nova.voice.config as voice_config
+
+    _interrupt_listener_active.set()
+
+    def _listener():
+        import sounddevice as sd
+        import numpy as np
+        import io, wave
+        SAMPLE_RATE = 16000
+        CHANNELS = 1
+        LISTEN_SECS = 2.0          # record 2s bursts
+        SILENCE_GATE = calibrated_threshold * 1.5
+
+        while _interrupt_listener_active.is_set():
+            try:
+                # Read a short burst from the open stream (B44 / stream_lock)
+                n_samples = int(SAMPLE_RATE * LISTEN_SECS)
+                with voice_config.stream_lock:
+                    if stream is None or not stream.active:
+                        break
+                    try:
+                        raw, _ = stream.read(n_samples)
+                    except Exception:
+                        break
+
+                flat = raw.flatten()
+                rms = float(np.sqrt(np.mean(flat * flat)))
+                if rms < SILENCE_GATE:
+                    # Pure silence — skip transcription to save CPU
+                    continue
+
+                # Convert to 16-bit PCM WAV bytes for STT
+                audio_int16 = (np.clip(flat, -1.0, 1.0) * 32767).astype(np.int16)
+                wav_io = io.BytesIO()
+                with wave.open(wav_io, "wb") as wf:
+                    wf.setnchannels(CHANNELS)
+                    wf.setsampwidth(2)
+                    wf.setframerate(SAMPLE_RATE)
+                    wf.writeframes(audio_int16.tobytes())
+                wav_bytes = wav_io.getvalue()
+
+                try:
+                    heard = stt_provider.transcribe(wav_bytes, silent=True).strip()
+                except Exception:
+                    continue
+
+                if heard and _is_interrupt_phrase(heard):
+                    logger.debug(f"Background interrupt detected: '{heard}'")
+                    voice_config.interrupt_speaking = True
+                    _interrupt_listener_active.clear()
+                    break
+
+            except Exception as e:
+                logger.debug(f"Background interrupt listener error: {e}")
+                break
+
+    t = threading.Thread(target=_listener, daemon=True)
+    t.start()
+
+
+def _stop_background_interrupt_listener() -> None:
+    """Signal the background interrupt listener thread to exit."""
+    _interrupt_listener_active.clear()
 
 
 def play_confirmation_sound() -> None:
@@ -464,7 +576,7 @@ def _wait_for_wake(
     stream: sd.InputStream,
     wake_detector: "LocalWakeWordDetector",
     noise_floor: float,
-) -> tuple[bool, np.ndarray]:
+) -> tuple[bool, np.ndarray | None, float]:
     """
     Blocking.  Returns (True, wake_audio) when the wake phrase is detected.
     Returns (False, empty_array) only on unrecoverable stream error.
@@ -474,8 +586,9 @@ def _wait_for_wake(
     """
     # Drain any stale frames that accumulated while we were busy
     try:
-        if stream.read_available > 0:
-            stream.read(stream.read_available)
+        with voice_config.stream_lock:
+            if stream.read_available > 0:
+                stream.read(stream.read_available)
     except Exception:
         pass
 
@@ -508,24 +621,30 @@ def _wait_for_wake(
 
     while True:
         if shutdown_event.is_set() or _current_state == VoiceState.INACTIVE:
-            return False, None
+            return False, None, 0.0
 
         # Check if client signal / keyboard shortcut triggered listening
         if voice_active_event.is_set():
             voice_active_event.clear()
-            return True, None
+            return True, None, 1.0
 
         # --- read one 30 ms block (480 samples) from mic ---
         try:
-            recording, _ = stream.read(_WAKE_CHUNK)
+            with voice_config.stream_lock:
+                recording, _ = stream.read(_WAKE_CHUNK)
         except Exception as e:
             logger.debug(f"Wake-loop read error: {e}")
             stream = recover_microphone(stream)
             if shutdown_event.is_set() or _current_state == VoiceState.INACTIVE:
-                return False, None
+                return False, None, 0.0
             continue
 
         flat = recording.flatten()
+
+        # Apply Acoustic Echo Cancellation if enabled
+        aec = getattr(voice_config, "active_aec", None)
+        if aec is not None:
+            flat = aec.process(flat)
 
         # Keep raw float32 audio for speaker-verification capture buffer
         capture_buffer.extend(flat)
@@ -594,14 +713,849 @@ def _wait_for_wake(
             last_trigger = now
             score_history.clear()
             wake_audio = capture_buffer.get_latest()
-            return True, wake_audio   # ← wake detected
+            return True, wake_audio, float(score)   # ← wake detected
 
 
 # ---------------------------------------------------------------------------
 # Main voice loop
 # ---------------------------------------------------------------------------
 
-def run_voice_loop(ai_client, dispatcher) -> str:
+class VoiceLoopState:
+    """State context container for Nova's voice loop iterations."""
+    def __init__(self, diagnostics=None):
+        self.stt_provider = None
+        self.verifier = None
+        self.stream = None
+        self.wake_detector = None
+        self.adaptive_wake_ctrl = AdaptiveWakeController()
+        self.fusion_engine = ConfidenceFusionEngine()
+        self.quality_analyzer = AudioQualityAnalyzer()
+        self.diagnostics = diagnostics if diagnostics is not None else VoiceDiagnosticsEngine()
+        import nova.voice.config as _vc_cfg
+        _vc_cfg.active_diagnostics = self.diagnostics
+        self.use_wake_word = enable_wake_word
+        self.noise_floor = VAD_THRESHOLD
+        self.speech_threshold = VAD_THRESHOLD + NOISE_FLOOR_MARGIN
+        self.calibrated = False
+        self._greeted_this_activation = False
+        self._first_ptt_since_activation = False
+        self.last_command_snr = None
+        self.last_clipping_pct = None
+        self.skip_idle_wait = False
+        self.hp_filter = None
+        self.rnnoise = None
+        self.agc = None
+        self.vad = None
+        self.aec = None
+        self.current_state = VoiceState.INACTIVE
+        self.last_printed_state = None
+
+
+def process_single_iteration(
+    state: VoiceLoopState,
+    ai_client,
+    dispatcher,
+    transition_to
+) -> str:
+    """
+    Executes a single wake-detection and command-processing cycle of the voice pipeline.
+    
+    Returns
+    -------
+    "continue" - loop should continue to the next iteration
+    "break"    - loop should break and perform cleanup
+    "menu"     - loop should break and return "menu"
+    "exit"     - loop should break and return "exit"
+    """
+    global _mic_healthy, _wake_healthy, _stt_healthy, _deferred_deactivate
+
+    # Bind local variables from state container
+    stt_provider = state.stt_provider
+    verifier = state.verifier
+    stream = state.stream
+    wake_detector = state.wake_detector
+    adaptive_wake_ctrl = state.adaptive_wake_ctrl
+    fusion_engine = state.fusion_engine
+    quality_analyzer = state.quality_analyzer
+    diagnostics = state.diagnostics
+    use_wake_word = state.use_wake_word
+    noise_floor = state.noise_floor
+    speech_threshold = state.speech_threshold
+    calibrated = state.calibrated
+    _greeted_this_activation = state._greeted_this_activation
+    _first_ptt_since_activation = state._first_ptt_since_activation
+    last_command_snr = state.last_command_snr
+    last_clipping_pct = state.last_clipping_pct
+    skip_idle_wait = state.skip_idle_wait
+    hp_filter = state.hp_filter
+    rnnoise = state.rnnoise
+    agc = state.agc
+    vad = state.vad
+    aec = state.aec
+    last_printed_state = state.last_printed_state
+
+    from nova.voice.audio_processor import AmbientCalibrator
+
+    def save_state():
+        state.stt_provider = stt_provider
+        state.verifier = verifier
+        state.stream = stream
+        state.wake_detector = wake_detector
+        state.noise_floor = noise_floor
+        state.speech_threshold = speech_threshold
+        state.calibrated = calibrated
+        state._greeted_this_activation = _greeted_this_activation
+        state._first_ptt_since_activation = _first_ptt_since_activation
+        state.last_command_snr = last_command_snr
+        state.last_clipping_pct = last_clipping_pct
+        state.skip_idle_wait = skip_idle_wait
+        state.hp_filter = hp_filter
+        state.rnnoise = rnnoise
+        state.agc = agc
+        state.vad = vad
+        state.aec = aec
+        state.last_printed_state = last_printed_state
+
+    # Reset explicit state variables for each turn iteration
+    quality_metrics = None
+    speaker_score = None
+    cmd_start = time.time()
+
+    # Handle Inactive State (release microphone and sleep)
+    if _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
+        if stream is not None:
+            try:
+                stream.stop()
+                stream.close()
+            except Exception:
+                pass
+            stream = None
+            voice_config.active_stream = None
+            _mic_healthy = False
+        _greeted_this_activation = False
+        _first_ptt_since_activation = True  # next PTT activation is the first
+        
+        while _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE) and not shutdown_event.is_set():
+            if voice_active_event.is_set():
+                voice_active_event.clear()
+                transition_to(VoiceState.VOICE_IDLE)
+                break
+            time.sleep(0.1)
+        save_state()
+        return "continue"
+
+    # Lazily initialize voice loop components on activation
+    if _current_state == VoiceState.VOICE_IDLE:
+        # 1. Load STT Provider
+        if stt_provider is None:
+            try:
+                stt_provider = get_stt_provider()
+                _stt_healthy = True
+            except Exception as e:
+                logger.error(f"Failed to initialize STT provider: {e}")
+                _stt_healthy = False
+                stt_provider = None
+
+        # 2. Load Speaker Verifier
+        if verifier is None and enable_speaker_verification:
+            verifier = SpeakerVerifier(
+                embedding_path=speaker_embedding_path,
+                threshold=speaker_similarity_threshold,
+            )
+            if not _RESEMBLYZER_AVAILABLE:
+                print_warning("resemblyzer not installed — speaker verification disabled.")
+                verifier = None
+            elif not verifier.has_profile():
+                print_warning('No enrolled voice profile found. Using wake-word only. Run "nova voice-setup" to enroll.')
+                verifier = None
+
+        # 3. Load Microphone stream
+        if stream is None:
+            try:
+                if not sd.query_devices(kind="input"):
+                    raise RuntimeError("No input device found.")
+                stream = sd.InputStream(
+                    samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="float32"
+                )
+                stream.start()
+                _mic_healthy = True
+                voice_config.active_stream = stream
+            except Exception as e:
+                print_error(f"Failed to open microphone: {e}")
+                _mic_healthy = False
+                transition_to(VoiceState.INACTIVE)
+                save_state()
+                return "continue"
+
+        # 4. Calibrate ambient noise floor
+        if not calibrated:
+            try:
+                calib_n = int(SAMPLE_RATE * AMBIENT_CALIBRATION_DURATION)
+                with voice_config.stream_lock:
+                    calib_audio, _ = stream.read(calib_n)
+                calibrator = AmbientCalibrator()
+                calibrator.calibrate(calib_audio)
+                noise_floor = calibrator.noise_floor
+                speech_threshold = calibrator.speech_threshold
+                if noise_floor > 0.5:
+                    speech_threshold = 0.02
+                calibrated = True
+            except Exception as e:
+                logger.debug(f"Calibration error: {e}")
+                print_warning("Calibration failed — using defaults.")
+                calibrated = True
+
+        # 4b. Initialize persistent audio preprocessors (B13)
+        if hp_filter is None:
+            try:
+                from nova.voice.audio_processor import HighPassFilter, RNNoiseWrapper, AutomaticGainControl, WebRTCVoiceActivityDetector, AecProcessor
+                from nova.voice.config import ENABLE_HIGHPASS_FILTER, ENABLE_NOISE_SUPPRESSION, ENABLE_AGC, ENABLE_VAD, ENABLE_ECHO_CANCEL, HIGHPASS_CUTOFF, VAD_AGGRESSIVENESS
+                
+                aec = AecProcessor() if ENABLE_ECHO_CANCEL else None
+                voice_config.active_aec = aec
+
+                hp_filter = HighPassFilter(cutoff=HIGHPASS_CUTOFF, fs=SAMPLE_RATE) if ENABLE_HIGHPASS_FILTER else None
+                rnnoise = RNNoiseWrapper() if ENABLE_NOISE_SUPPRESSION else None
+                agc = AutomaticGainControl() if ENABLE_AGC else None
+                vad = WebRTCVoiceActivityDetector(aggressiveness=VAD_AGGRESSIVENESS, default_threshold=speech_threshold) if ENABLE_VAD else None
+            except Exception as e:
+                logger.debug(f"Failed to initialize persistent preprocessors: {e}")
+
+        # 5. Load wake-word detector
+        use_wake_word = enable_wake_word
+        if wake_detector is None and use_wake_word:
+            try:
+                wake_detector = LocalWakeWordDetector(
+                    model_path=wake_word_model_path,
+                    confidence_threshold=wake_word_threshold,
+                )
+                _wake_healthy = True
+                voice_config.active_wake_detector = wake_detector
+            except Exception as e:
+                logger.debug(f"Wake-engine load error: {e}")
+                _wake_healthy = False
+                use_wake_word = False
+
+        # Speak activation greeting (once per activation cycle)
+        if not _greeted_this_activation:
+            _greeted_this_activation = True
+            try:
+                from nova.voice.greeting import get_activation_greeting
+                greeting_text = get_activation_greeting()
+                speak(greeting_text)
+                # Flush mic buffer so the greeting audio doesn't trigger wake detection
+                time.sleep(0.3)
+                if stream is not None:
+                    with voice_config.stream_lock:
+                        if stream.read_available > 0:
+                            stream.read(stream.read_available)
+            except Exception:
+                pass
+
+    # -----------------------------------------------------------------
+    # STATE: VOICE_IDLE or PUSH_TO_TALK
+    # -----------------------------------------------------------------
+    if not skip_idle_wait:
+        if verifier is not None:
+            verifier.clear_pending_adaptation()
+        
+        # Apply dynamic environmental threshold adaptation
+        try:
+            adapted = adaptive_wake_ctrl.adapt(
+                noise_floor,
+                signal_quality_snr=last_command_snr,
+                clipping_pct=last_clipping_pct
+            )
+            if wake_detector is not None:
+                wake_detector.confidence_threshold = adapted["wake_threshold"]
+            if verifier is not None:
+                verifier._threshold = adapted["speaker_threshold"]
+        except Exception as adapt_err:
+            logger.debug(f"Threshold adaptation error: {adapt_err}")
+
+        if use_wake_word:
+            transition_to(VoiceState.VOICE_IDLE)
+            if last_printed_state != VoiceState.VOICE_IDLE:
+                print_info(f'👂 Waiting for "{wake_word_phrase}"')
+                last_printed_state = VoiceState.VOICE_IDLE
+            detected, wake_audio, wake_score = _wait_for_wake(stream, wake_detector, noise_floor)
+            if _current_state == VoiceState.INACTIVE:
+                save_state()
+                return "continue"
+            if not detected:
+                if shutdown_event.is_set():
+                    save_state()
+                    return "break"
+                # stream read error — safe to retry
+                save_state()
+                return "continue"
+
+            # Publish Wake Detected to Dashboard (Robust exception protection)
+            try:
+                try:
+                    from nova.dashboard.event_bus import emit
+                    emit("wake_word_detected", module="voice", status="success", metadata={"detector": "OpenWakeWord"})
+                except Exception:
+                    pass
+
+                # ── Confidence Fusion Engine & Audio Quality Analysis ─────
+                transition_to(VoiceState.WAKE_DETECTED)
+                if wake_audio is not None:
+                    # 1. Analyze audio quality of the wake trigger audio
+                    quality_metrics = quality_analyzer.analyze(wake_audio)
+                    
+                    # 2. Compute VAD speech ratio in the wake audio
+                    vad_frames = 0
+                    total_frames = len(wake_audio) // 480
+                    if total_frames > 0 and vad is not None:
+                        for i in range(total_frames):
+                            chunk = wake_audio[i*480 : (i+1)*480]
+                            if vad.is_speech(chunk, SAMPLE_RATE):
+                                vad_frames += 1
+                        vad_score = vad_frames / total_frames
+                    else:
+                        vad_score = None
+                        
+                    # 3. Get speaker verification score
+                    speaker_score = None
+                    if verifier is not None:
+                        _, speaker_score = verifier.verify(wake_audio, SAMPLE_RATE)
+                        
+                    # 4. Fuse scores
+                    fused_score = fusion_engine.fuse(
+                        wake_score=wake_score,
+                        speaker_score=speaker_score,
+                        vad_score=vad_score,
+                        audio_quality=quality_metrics["overall_quality"],
+                        noise_level=quality_metrics["background_noise"]
+                    )
+                    
+                    if enable_debug:
+                        logger.debug(
+                            f"[FUSION] wake={wake_score:.3f} speaker={str(speaker_score)} "
+                            f"vad={str(vad_score)} quality={quality_metrics['overall_quality']:.3f} "
+                            f"noise={quality_metrics['background_noise']:.5f} -> fused={fused_score:.3f}"
+                        )
+                        print_info(f"Fused confidence score: {fused_score:.3f}")
+                        
+                    # 5. Check trigger decision threshold
+                    fusion_threshold = getattr(voice_config, "FUSION_TRIGGER_THRESHOLD", 0.50)
+                    if fused_score < fusion_threshold:
+                        print_warning(
+                            f"Trigger rejected by Confidence Fusion Engine (score {fused_score:.2f} < {fusion_threshold}) — continuing to listen."
+                        )
+                        try:
+                            wake_detector.log_false_wake(wake_detector.model_name, wake_score, quality_metrics["background_noise"])
+                        except Exception:
+                            pass
+                        diagnostics.record_false_wake(wake_score, quality_metrics["background_noise"])
+                        diagnostics.record_audio_quality(quality_metrics)
+                        save_state()
+                        return "continue"
+
+                    # Record successful wake trigger with true latency
+                    speech_start_t = getattr(wake_detector, "last_speech_start_time_abs", None)
+                    if speech_start_t is not None:
+                        wake_latency_ms = (time.time() - speech_start_t) * 1000.0
+                    else:
+                        wake_latency_ms = 800.0  # standard fallback
+                        if hasattr(wake_detector, "diagnostics_history") and wake_detector.diagnostics_history:
+                            last_diag = wake_detector.diagnostics_history[-1]
+                            if last_diag.get("event") == "wake_trigger":
+                                wake_latency_ms = last_diag.get("speaking_latency_ms", 800.0)
+                    
+                    diagnostics.record_wake_success(
+                        score=wake_score,
+                        latency_ms=wake_latency_ms,
+                    )
+                    diagnostics.record_audio_quality(quality_metrics)
+                    diagnostics.record_noise_sample(quality_metrics["background_noise"])
+                # ─────────────────────────────────────────────────────────────
+
+                if enable_debug:
+                    print_success("Wake Detected")
+
+                if confirmation_sound:
+                    play_confirmation_sound()
+                    time.sleep(0.15)
+
+                # Flush chime tail from mic buffer
+                try:
+                    with voice_config.stream_lock:
+                        if stream.read_available > 0:
+                            stream.read(stream.read_available)
+                except Exception:
+                    pass
+            except Exception as wake_err:
+                import traceback
+                logger.error(f"Unrecoverable exception in wake processing: {wake_err}")
+                logger.error(traceback.format_exc())
+                try:
+                    diagnostics.record_missed_wake(wake_score=wake_score, noise_floor=noise_floor)
+                except Exception:
+                    pass
+                transition_to(VoiceState.VOICE_IDLE)
+                save_state()
+                return "continue"
+
+        else:
+            # Push-to-Talk fallback (no wake engine)
+            transition_to(VoiceState.PUSH_TO_TALK)
+            try:
+                input("Press ENTER to record a command...")
+            except KeyboardInterrupt:
+                save_state()
+                return "break"
+            except EOFError:
+                # Running as a daemon with no TTY — stdin is closed.
+                # The keyboard shortcut (Ctrl+Alt+Space) IS the trigger:
+                #   - First press: activates voice (consumed in INACTIVE handler)
+                #     → proceed immediately to LISTENING (one-press behavior)
+                #   - Subsequent presses: wait for voice_active_event signal
+                logger.debug("PTT: No TTY detected — daemon mode, shortcut is the trigger.")
+                if _first_ptt_since_activation:
+                    # First activation via shortcut — go straight to LISTENING
+                    _first_ptt_since_activation = False
+                else:
+                    # Subsequent recordings — wait for next shortcut press
+                    while not shutdown_event.is_set() and _current_state not in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
+                        if voice_active_event.is_set():
+                            voice_active_event.clear()
+                            break  # shortcut pressed → fall through to LISTENING
+                        time.sleep(0.1)
+                    else:
+                        # shutdown or deactivated — exit the outer voice loop
+                        save_state()
+                        return "break"
+                # Fall through to LISTENING
+    else:
+        skip_idle_wait = False
+
+    # -----------------------------------------------------------------
+    # STATE: LISTENING — record user speech command
+    # -----------------------------------------------------------------
+    transition_to(VoiceState.LISTENING)
+    if last_printed_state != VoiceState.LISTENING:
+        print_info("🎤 Listening...")
+        last_printed_state = VoiceState.LISTENING
+        
+    # Publish Speech Started to Dashboard
+    try:
+        from nova.dashboard.event_bus import emit
+        emit("speech_started", module="voice", status="running")
+    except Exception:
+        pass
+        
+    cmd_start   = time.time()
+    record_start = time.time()
+
+    # Mute speakers while we record (prevents mic pickup of playback)
+    muted = False
+    try:
+        subprocess.run(
+            ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"],
+            check=True,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+        muted = True
+    except Exception:
+        pass
+
+    command_wav = None
+    try:
+        command_wav = record_audio_from_stream(
+            stream, calibrated_threshold=speech_threshold,
+            hp_filter=hp_filter, rnnoise=rnnoise, agc=agc, vad=vad,
+            aec=aec
+        )
+    except Exception as e:
+        print_error(f"Recording failed: {e}")
+    finally:
+        if muted:
+            try:
+                subprocess.run(
+                    ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"],
+                    check=True,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                )
+            except Exception:
+                pass
+
+    if command_wav is None:
+        # Recording failed — go back to WAITING
+        try:
+            from nova.dashboard.event_bus import emit
+            emit("speech_finished", module="voice", status="failed", metadata={"reason": "recording_failed"})
+        except Exception:
+            pass
+        save_state()
+        return "continue"
+
+    record_dur = time.time() - record_start
+    
+    # Publish Speech Finished to Dashboard
+    try:
+        from nova.dashboard.event_bus import emit
+        emit("speech_finished", module="voice", status="success", metadata={"duration": record_dur})
+    except Exception:
+        pass
+
+    # Measure audio quality diagnostics on the captured command
+    if isinstance(command_wav, bytes):
+        try:
+            import io as _io, wave as _wave
+            with _wave.open(_io.BytesIO(command_wav), "rb") as wf:
+                raw = wf.readframes(wf.getnframes())
+            import numpy as _np
+            samples = _np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
+            diag = AudioDiagnostics(SAMPLE_RATE)
+            m = diag.measure(samples)
+            last_command_snr = m.get('snr_db', None)
+            last_clipping_pct = m.get('clipping_pct', None)
+            if enable_debug:
+                print(
+                    f"[DBG rec] dur={record_dur:.2f}s  "
+                    f"rms={m.get('rms',0):.4f}  peak={m.get('peak',0):.4f}  "
+                    f"clip={m.get('clipping_pct',0):.2f}%  "
+                    f"snr={m.get('snr_db',0):.1f}dB  "
+                    f"speech={m.get('speech_dur_s',0):.2f}s"
+                )
+        except Exception as diag_err:
+            logger.debug(f"Diagnostics measurement failed: {diag_err}")
+
+    # -----------------------------------------------------------------
+    # STATE: TRANSCRIBING — Whisper speech recognition
+    # -----------------------------------------------------------------
+    transition_to(VoiceState.TRANSCRIBING)
+    if enable_debug:
+        print_info("🧠 Transcribing")
+
+    # Publish Transcription Partial to Dashboard
+    try:
+        from nova.dashboard.event_bus import emit
+        emit("transcription_partial", module="stt", status="running")
+    except Exception:
+        pass
+
+    t0 = time.time()
+    try:
+        text = stt_provider.transcribe(command_wav, silent=True)
+        _stt_healthy = True
+    except Exception as e:
+        print_error(f"Transcription failed: {e}")
+        
+        # Publish Transcription Failed to Dashboard
+        try:
+            from nova.dashboard.event_bus import emit
+            emit("transcription_complete", module="stt", status="failed", metadata={"error": str(e)})
+        except Exception:
+            pass
+
+        logger.warning(f"STT failed: {e}. Re-initializing STT provider...")
+        try:
+            stt_provider = get_stt_provider()
+            _stt_healthy = True
+        except Exception as stt_err:
+            logger.error(f"Failed to re-initialize STT provider: {stt_err}")
+            _stt_healthy = False
+        save_state()
+        return "continue"
+    transcribe_dur = time.time() - t0
+
+    if not text:
+        print_warning("I didn't catch that.")
+        last_printed_state = VoiceState.VOICE_IDLE
+        if use_wake_word and wake_detector is not None:
+            try:
+                wake_detector.log_false_wake(wake_detector.model_name, 1.0, noise_floor)
+            except Exception:
+                pass
+        save_state()
+        return "continue"
+
+    print_success(f'Heard: "{text}"')
+
+    # exit-phrase shortcut
+    if text.lower().strip().rstrip(".") in ("exit", "quit", "goodbye"):
+        transition_to(VoiceState.SPEAKING)
+        speak("Goodbye!")
+        save_state()
+        return "break"
+
+    # ── Stop / interrupt phrase detection ──────────────────────────────
+    if _is_interrupt_phrase(text):
+        print_info("🛑 Stop command heard — going back to listening.")
+        transition_to(VoiceState.SPEAKING)
+        speak("Sure, I'm listening.")
+        last_printed_state = VoiceState.VOICE_IDLE
+        if confirmation_sound:
+            play_confirmation_sound()
+        skip_idle_wait = True
+        save_state()
+        return "continue"
+
+    # -----------------------------------------------------------------
+    # STATE: EXECUTING — parsing intent and dispatching actions
+    # -----------------------------------------------------------------
+    transition_to(VoiceState.EXECUTING)
+    if last_printed_state != VoiceState.EXECUTING:
+        print_info("▶ Executing...")
+        last_printed_state = VoiceState.EXECUTING
+
+    from nova.executor import CommandExecutor
+    CommandExecutor.clear_last_commands()
+
+    from nova.spelling import correct_query_spelling, correct_action_data
+    import nova.spelling as spelling
+    corrected = correct_query_spelling(text)
+
+    # Publish Transcription Complete to Dashboard
+    try:
+        from nova.dashboard.event_bus import emit
+        emit("transcription_complete", module="stt", status="success", metadata={"raw_text": text, "corrected_text": corrected})
+    except Exception:
+        pass
+
+    # Check for low-confidence transcription or major spelling corrections
+    requires_confirm = False
+    confirm_prompt = ""
+
+    # 1. Check Whisper logprob (unsure transcription)
+    if hasattr(stt_provider, "last_avg_logprob") and stt_provider.last_avg_logprob < -0.85:
+        requires_confirm = True
+        confirm_prompt = f"Did you mean '{corrected}'?"
+
+    # 2. Check spelling phrase corrections
+    if spelling.last_correction_applied:
+        try:
+            from nova.dashboard.event_bus import emit
+            emit("memory_indexed", module="memory", status="success", metadata={
+                "action": "spelling_correction",
+                "raw_query": text,
+                "corrected_query": corrected,
+                "prompt": spelling.correction_prompt
+            })
+        except Exception:
+            pass
+        requires_confirm = True
+        confirm_prompt = spelling.correction_prompt
+
+    if requires_confirm and confirm_prompt:
+        confirmed = get_user_confirmation(confirm_prompt, stream, speech_threshold)
+        if not confirmed:
+            speak("Cancelled.")
+            last_printed_state = VoiceState.VOICE_IDLE
+            save_state()
+            return "continue"
+
+    # Publish LLM Started to Dashboard
+    try:
+        from nova.dashboard.event_bus import emit
+        emit("llm_started", module="llm", status="running", metadata={"query": corrected})
+    except Exception:
+        pass
+
+    try:
+        raw_response = ai_client.parse_intent(corrected)
+        
+        # Publish LLM Finished to Dashboard
+        try:
+            from nova.dashboard.event_bus import emit
+            emit("llm_finished", module="llm", status="success", metadata={"query": corrected, "response": raw_response})
+        except Exception:
+            pass
+    except Exception as e:
+        print_error(f"Intent parsing failed: {e}")
+        
+        # Publish LLM Failed to Dashboard
+        try:
+            from nova.dashboard.event_bus import emit
+            emit("llm_finished", module="llm", status="failed", metadata={"query": corrected, "error": str(e)})
+        except Exception:
+            pass
+        save_state()
+        return "continue"
+
+    if not raw_response:
+        print_error("No response from AI — is Ollama running?")
+        save_state()
+        return "continue"
+
+    from nova.parser import parse_and_validate_action
+    try:
+        actions = parse_and_validate_action(raw_response)
+    except Exception as e:
+        print_error(f"Action validation failed: {e}")
+        save_state()
+        return "continue"
+
+    if not actions:
+        print_error("Could not parse an action from the AI response.")
+        save_state()
+        return "continue"
+
+    success_msgs = []
+    
+    # Check if there is a long-running action
+    is_long, ack_text, success_text, fail_text = check_long_running_action(dispatcher, actions, text)
+    
+    ack_thread = None
+    if is_long:
+        import threading
+        # Start acknowledgement speech in a non-blocking background thread
+        ack_thread = threading.Thread(target=speak, args=(ack_text,))
+        ack_thread.start()
+
+    # Start background interrupt listener so "stop nova" / "hey nova"
+    # during execution or speaking interrupts Nova immediately.
+    _stop_background_interrupt_listener()
+    if stt_provider is not None and stream is not None:
+        _start_background_interrupt_listener(stream, stt_provider, speech_threshold)
+
+    for action_data in actions:
+        action_data = correct_action_data(action_data, corrected)
+        name    = action_data.get("action")
+        handler = dispatcher.get(name)
+        if not handler:
+            print_error(f"No handler registered for '{name}'.")
+            continue
+        if enable_debug:
+            print_info(f"Action parsed: {name}")
+        try:
+            result = handler.execute(action_data)
+        except Exception as e:
+            print_error(f"Handler '{name}' raised: {e}")
+            continue
+        lresult = result.lower()
+        if "error" in lresult or "failed" in lresult:
+            print_error(result)
+        elif "aborted" in lresult or "cancelled" in lresult:
+            print_warning(result)
+        else:
+            print_success(result)
+            success_msgs.append(result)
+
+    # Commit pending speaker verification voice learning on success
+    if verifier is not None:
+        verifier.commit_adaptation()
+
+    total_dur = time.time() - cmd_start
+    logger.info(
+        f"Record: {record_dur:.2f}s | "
+        f"Transcribe: {transcribe_dur:.2f}s | "
+        f"Total: {total_dur:.2f}s"
+    )
+    if enable_debug:
+        print(
+            f"[DBG lat] record={record_dur:.2f}s  "
+            f"whisper={transcribe_dur:.2f}s  "
+            f"total={total_dur:.2f}s"
+        )
+
+    # Once execution finishes, wait for acknowledgement speech to finish playing (with 2s timeout to prevent hang)
+    if ack_thread:
+        ack_thread.join(timeout=2.0)
+
+    # Measure TTS speaking latency
+    _turn_tts_ms = 0.0
+    if is_long:
+        if success_msgs:
+            transition_to(VoiceState.SPEAKING)
+            last_printed_state = VoiceState.SPEAKING
+            _tts_start = time.perf_counter()
+            speak(success_text)
+            _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
+        else:
+            transition_to(VoiceState.SPEAKING)
+            last_printed_state = VoiceState.SPEAKING
+            _tts_start = time.perf_counter()
+            speak(fail_text)
+            _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
+    else:
+        if success_msgs:
+            transition_to(VoiceState.SPEAKING)
+            last_printed_state = VoiceState.SPEAKING
+            spoken = " ".join(clean_ansi(m) for m in success_msgs)
+            
+            # Check if the user explicitly asked to read the full response
+            user_text_lower = text.lower()
+            read_full_phrases = [
+                "read everything", "read the full response", "read the complete response", 
+                "read full response", "read all", "read full text", "read the full text"
+            ]
+            read_full = any(phrase in user_text_lower for phrase in read_full_phrases)
+            
+            if read_full:
+                _tts_start = time.perf_counter()
+                speak(spoken)
+                _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
+            else:
+                try:
+                    spoken_summary = ai_client.generate_tts_summary(text, spoken)
+                except Exception as e:
+                    logger.debug(f"Failed to generate spoken summary: {e}")
+                    spoken_summary = spoken
+                _tts_start = time.perf_counter()
+                speak(spoken_summary)
+                _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
+
+    if enable_debug:
+        print_success("✔ Finished")
+
+    # ── Record completed turn diagnostics ─────────────────────────
+    try:
+        _turn_e2e_ms = (time.time() - cmd_start) * 1000.0
+        _turn_stt_ms = transcribe_dur * 1000.0
+        _turn_quality = quality_metrics.get("overall_quality", 1.0) if quality_metrics is not None else 1.0
+        _turn_noise   = quality_metrics.get("background_noise", 0.0) if quality_metrics is not None else 0.0
+        _turn_speaker = float(speaker_score) if speaker_score is not None else None
+        diagnostics.record_turn(
+            latency_ms=_turn_e2e_ms,
+            stt_latency_ms=_turn_stt_ms,
+            tts_latency_ms=_turn_tts_ms,
+            audio_quality=_turn_quality,
+            speaker_confidence=_turn_speaker,
+            noise_floor=_turn_noise,
+        )
+    except Exception as _diag_err:
+        logger.debug(f"Diagnostics record_turn failed: {_diag_err}")
+
+    # Stop background interrupt listener
+    _stop_background_interrupt_listener()
+
+    # Check if speaking/execution was interrupted
+    if voice_config.interrupt_speaking:
+        voice_config.interrupt_speaking = False
+        print_success("Nova interrupted. Listening...")
+        if confirmation_sound:
+            play_confirmation_sound()
+        skip_idle_wait = True
+        save_state()
+        return "continue"
+
+    # Flush mic buffer
+    try:
+        time.sleep(0.8)
+        if stream is not None:
+            with voice_config.stream_lock:
+                if stream.read_available > 0:
+                    stream.read(stream.read_available)
+    except Exception:
+        pass
+
+    # Check if deferred deactivation was flagged
+    if _deferred_deactivate:
+        _deferred_deactivate = False
+        print_info("Nova has stopped listening.")
+        transition_to(VoiceState.INACTIVE)
+
+    save_state()
+    return "continue"
+
+
+def run_voice_loop(ai_client, dispatcher, interactive=False) -> str:
     """
     Voice Mode state machine.
 
@@ -611,12 +1565,11 @@ def run_voice_loop(ai_client, dispatcher) -> str:
     "exit"  — quit Nova entirely
     """
     global _mic_healthy, _wake_healthy, _stt_healthy, _deferred_deactivate
-    current_state = VoiceState.TEXT_MODE
-    last_printed_state = None
+
+    state = VoiceLoopState()
 
     def transition_to(new_state: VoiceState, detail: str = ""):
-        nonlocal current_state
-        current_state = new_state
+        state.current_state = new_state
         global _current_state
         _current_state = new_state
         logger.debug(f"[STATE] Transitioned to {new_state.name}{f' ({detail})' if detail else ''}")
@@ -629,557 +1582,27 @@ def run_voice_loop(ai_client, dispatcher) -> str:
     # =========================================================================
     # Initial state — daemon starts INACTIVE, waiting for toggle
     # =========================================================================
-    transition_to(VoiceState.INACTIVE)
+    if interactive:
+        transition_to(VoiceState.VOICE_IDLE)
+    else:
+        transition_to(VoiceState.INACTIVE)
     print_success("Voice Mode Ready")
 
     # =========================================================================
-    # STATE 2 SETUP (Lazy dynamic initialization)
-    # =========================================================================
-    stt_provider = None
-    verifier = None
-    stream = None
-    wake_detector = None
-    use_wake_word = enable_wake_word
-    noise_floor = VAD_THRESHOLD
-    speech_threshold = VAD_THRESHOLD + NOISE_FLOOR_MARGIN
-    calibrated = False
-    _greeted_this_activation = False
-    skip_idle_wait = False
-
-    from nova.voice.audio_processor import AmbientCalibrator
-
-    # =========================================================================
-    # MAIN LOOP   (no model reloading)
+    # MAIN LOOP
     # =========================================================================
     try:
         while True:
             if shutdown_event.is_set():
                 break
 
-            # Handle Inactive State (release microphone and sleep)
-            if _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
-                if stream is not None:
-                    try:
-                        stream.stop()
-                        stream.close()
-                    except Exception:
-                        pass
-                    stream = None
-                    import nova.voice.config as voice_config
-                    voice_config.active_stream = None
-                    _mic_healthy = False
-                _greeted_this_activation = False
-                
-                while _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE) and not shutdown_event.is_set():
-                    if voice_active_event.is_set():
-                        voice_active_event.clear()
-                        transition_to(VoiceState.VOICE_IDLE)
-                        break
-                    time.sleep(0.1)
-                continue
-
-            # Lazily initialize voice loop components on activation
-            if _current_state == VoiceState.VOICE_IDLE:
-                # 1. Load STT Provider
-                if stt_provider is None:
-                    try:
-                        stt_provider = get_stt_provider()
-                        _stt_healthy = True
-                    except Exception as e:
-                        logger.error(f"Failed to initialize STT provider: {e}")
-                        _stt_healthy = False
-                        stt_provider = None
-
-                # 2. Load Speaker Verifier
-                if verifier is None and enable_speaker_verification:
-                    verifier = SpeakerVerifier(
-                        embedding_path=speaker_embedding_path,
-                        threshold=speaker_similarity_threshold,
-                    )
-                    if not _RESEMBLYZER_AVAILABLE:
-                        print_warning("resemblyzer not installed — speaker verification disabled.")
-                        verifier = None
-                    elif not verifier.has_profile():
-                        print_warning('No enrolled voice profile found. Using wake-word only. Run "nova voice-setup" to enroll.')
-                        verifier = None
-
-                # 3. Load Microphone stream
-                if stream is None:
-                    try:
-                        if not sd.query_devices(kind="input"):
-                            raise RuntimeError("No input device found.")
-                        stream = sd.InputStream(
-                            samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="float32"
-                        )
-                        stream.start()
-                        _mic_healthy = True
-                        import nova.voice.config as voice_config
-                        voice_config.active_stream = stream
-                    except Exception as e:
-                        print_error(f"Failed to open microphone: {e}")
-                        _mic_healthy = False
-                        transition_to(VoiceState.INACTIVE)
-                        continue
-
-                # 4. Calibrate ambient noise floor
-                if not calibrated:
-                    try:
-                        calib_n = int(SAMPLE_RATE * AMBIENT_CALIBRATION_DURATION)
-                        calib_audio, _ = stream.read(calib_n)
-                        calibrator = AmbientCalibrator()
-                        calibrator.calibrate(calib_audio)
-                        noise_floor = calibrator.noise_floor
-                        speech_threshold = calibrator.speech_threshold
-                        if noise_floor > 0.5:
-                            speech_threshold = 0.02
-                        calibrated = True
-                    except Exception as e:
-                        logger.debug(f"Calibration error: {e}")
-                        print_warning("Calibration failed — using defaults.")
-                        calibrated = True
-
-                # 5. Load wake-word detector
-                use_wake_word = enable_wake_word
-                if wake_detector is None and use_wake_word:
-                    try:
-                        wake_detector = LocalWakeWordDetector(
-                            model_path=wake_word_model_path,
-                            confidence_threshold=wake_word_threshold,
-                        )
-                        _wake_healthy = True
-                        import nova.voice.config as voice_config
-                        voice_config.active_wake_detector = wake_detector
-                    except Exception as e:
-                        logger.debug(f"Wake-engine load error: {e}")
-                        _wake_healthy = False
-                        use_wake_word = False
-
-                # Speak activation greeting (once per activation cycle)
-                if not _greeted_this_activation:
-                    _greeted_this_activation = True
-                    try:
-                        from nova.voice.greeting import get_activation_greeting
-                        greeting_text = get_activation_greeting()
-                        speak(greeting_text)
-                        # Flush mic buffer so the greeting audio doesn't trigger wake detection
-                        time.sleep(0.3)
-                        if stream is not None and stream.read_available > 0:
-                            stream.read(stream.read_available)
-                    except Exception:
-                        pass
-
-            # -----------------------------------------------------------------
-            # STATE: VOICE_IDLE or PUSH_TO_TALK
-            # -----------------------------------------------------------------
-            if not skip_idle_wait:
-                if use_wake_word:
-                    transition_to(VoiceState.VOICE_IDLE)
-                    if last_printed_state != VoiceState.VOICE_IDLE:
-                        print_info(f'👂 Waiting for "{wake_word_phrase}"')
-                        last_printed_state = VoiceState.VOICE_IDLE
-                    detected, wake_audio = _wait_for_wake(stream, wake_detector, noise_floor)
-                    if _current_state == VoiceState.INACTIVE:
-                        continue
-                    if not detected:
-                        if shutdown_event.is_set():
-                            break
-                        # stream read error — safe to retry
-                        continue
-
-                    # Publish Wake Detected to Dashboard
-                    try:
-                        from nova.dashboard.event_bus import emit
-                        emit("wake_word_detected", module="voice", status="success", metadata={"detector": "OpenWakeWord"})
-                    except Exception:
-                        pass
-
-                    # ── Optional speaker verification (STATE: WAKE_DETECTED) ─────
-                    transition_to(VoiceState.WAKE_DETECTED)
-                    if verifier is not None:
-                        is_match, score = verifier.verify(wake_audio, SAMPLE_RATE)
-                        if enable_debug:
-                            logger.debug(f"Speaker similarity: {score:.3f}  (threshold: {speaker_similarity_threshold})")
-                            print_info(f"Speaker score: {score:.3f}")
-                        if not is_match:
-                            print_warning(
-                                f"Voice not matched (score {score:.2f}) — continuing to listen."
-                            )
-                            continue   # loop back to WAITING without triggering command
-                    # ─────────────────────────────────────────────────────────────
-
-                    if enable_debug:
-                        print_success("Wake Detected")
-
-                    if confirmation_sound:
-                        play_confirmation_sound()
-                        time.sleep(0.15)
-
-                    # Flush chime tail from mic buffer
-                    try:
-                        if stream.read_available > 0:
-                            stream.read(stream.read_available)
-                    except Exception:
-                        pass
-
-                else:
-                    # Push-to-Talk fallback (no wake engine)
-                    transition_to(VoiceState.PUSH_TO_TALK)
-                    try:
-                        input("Press ENTER to record a command...")
-                    except (KeyboardInterrupt, EOFError):
-                        break
-            else:
-                skip_idle_wait = False
-
-            # -----------------------------------------------------------------
-            # STATE: LISTENING — record user speech command
-            # -----------------------------------------------------------------
-            transition_to(VoiceState.LISTENING)
-            if last_printed_state != VoiceState.LISTENING:
-                print_info("🎤 Listening...")
-                last_printed_state = VoiceState.LISTENING
-                
-            # Publish Speech Started to Dashboard
-            try:
-                from nova.dashboard.event_bus import emit
-                emit("speech_started", module="voice", status="running")
-            except Exception:
-                pass
-                
-            cmd_start   = time.time()
-            record_start = time.time()
-
-            # Mute speakers while we record (prevents mic pickup of playback)
-            muted = False
-            try:
-                subprocess.run(
-                    ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"],
-                    check=True,
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                )
-                muted = True
-            except Exception:
-                pass
-
-            command_wav = None
-            try:
-                command_wav = record_audio_from_stream(
-                    stream, calibrated_threshold=speech_threshold
-                )
-            except Exception as e:
-                print_error(f"Recording failed: {e}")
-            finally:
-                if muted:
-                    try:
-                        subprocess.run(
-                            ["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "0"],
-                            check=True,
-                            stdout=subprocess.DEVNULL,
-                            stderr=subprocess.DEVNULL,
-                        )
-                    except Exception:
-                        pass
-
-            if command_wav is None:
-                # Recording failed — go back to WAITING
-                try:
-                    from nova.dashboard.event_bus import emit
-                    emit("speech_finished", module="voice", status="failed", metadata={"reason": "recording_failed"})
-                except Exception:
-                    pass
-                continue
-
-            record_dur = time.time() - record_start
-            
-            # Publish Speech Finished to Dashboard
-            try:
-                from nova.dashboard.event_bus import emit
-                emit("speech_finished", module="voice", status="success", metadata={"duration": record_dur})
-            except Exception:
-                pass
-
-            # Debug: audio quality diagnostics on the captured command
-            if enable_debug and isinstance(command_wav, bytes):
-                try:
-                    import io as _io, wave as _wave
-                    with _wave.open(_io.BytesIO(command_wav), "rb") as wf:
-                        raw = wf.readframes(wf.getnframes())
-                    import numpy as _np
-                    samples = _np.frombuffer(raw, dtype=np.int16).astype(np.float32) / 32768.0
-                    diag = AudioDiagnostics(SAMPLE_RATE)
-                    m = diag.measure(samples)
-                    print(
-                        f"[DBG rec] dur={record_dur:.2f}s  "
-                        f"rms={m.get('rms',0):.4f}  peak={m.get('peak',0):.4f}  "
-                        f"clip={m.get('clipping_pct',0):.2f}%  "
-                        f"snr={m.get('snr_db',0):.1f}dB  "
-                        f"speech={m.get('speech_dur_s',0):.2f}s"
-                    )
-                except Exception:
-                    pass
-
-            # -----------------------------------------------------------------
-            # STATE: TRANSCRIBING — Whisper speech recognition
-            # -----------------------------------------------------------------
-            transition_to(VoiceState.TRANSCRIBING)
-            if enable_debug:
-                print_info("🧠 Transcribing")
-
-            # Publish Transcription Partial to Dashboard
-            try:
-                from nova.dashboard.event_bus import emit
-                emit("transcription_partial", module="stt", status="running")
-            except Exception:
-                pass
-
-            t0 = time.time()
-            try:
-                text = stt_provider.transcribe(command_wav, silent=True)
-                _stt_healthy = True
-            except Exception as e:
-                print_error(f"Transcription failed: {e}")
-                
-                # Publish Transcription Failed to Dashboard
-                try:
-                    from nova.dashboard.event_bus import emit
-                    emit("transcription_complete", module="stt", status="failed", metadata={"error": str(e)})
-                except Exception:
-                    pass
-
-                logger.warning(f"STT failed: {e}. Re-initializing STT provider...")
-                try:
-                    stt_provider = get_stt_provider()
-                    _stt_healthy = True
-                except Exception as stt_err:
-                    logger.error(f"Failed to re-initialize STT provider: {stt_err}")
-                    _stt_healthy = False
-                continue
-            transcribe_dur = time.time() - t0
-
-            if not text:
-                print_warning("I didn't catch that.")
-                last_printed_state = VoiceState.VOICE_IDLE
-                continue
-
-            print_success(f'Heard: "{text}"')
-
-            # exit-phrase shortcut
-            if text.lower().strip().rstrip(".") in ("exit", "quit", "goodbye"):
-                transition_to(VoiceState.SPEAKING)
-                speak("Goodbye!")
+            action = process_single_iteration(state, ai_client, dispatcher, transition_to)
+            if action == "break":
                 break
-
-            # -----------------------------------------------------------------
-            # STATE: EXECUTING — parsing intent and dispatching actions
-            # -----------------------------------------------------------------
-            transition_to(VoiceState.EXECUTING)
-            if last_printed_state != VoiceState.EXECUTING:
-                print_info("▶ Executing...")
-                last_printed_state = VoiceState.EXECUTING
-
-            from nova.executor import CommandExecutor
-            CommandExecutor.clear_last_commands()
-
-            from nova.spelling import correct_query_spelling, correct_action_data
-            import nova.spelling as spelling
-            corrected = correct_query_spelling(text)
-
-            # Publish Transcription Complete to Dashboard
-            try:
-                from nova.dashboard.event_bus import emit
-                emit("transcription_complete", module="stt", status="success", metadata={"raw_text": text, "corrected_text": corrected})
-            except Exception:
-                pass
-
-            # Check for low-confidence transcription or major spelling corrections
-            requires_confirm = False
-            confirm_prompt = ""
-
-            # 1. Check Whisper logprob (unsure transcription)
-            if hasattr(stt_provider, "last_avg_logprob") and stt_provider.last_avg_logprob < -0.85:
-                requires_confirm = True
-                confirm_prompt = f"Did you mean '{corrected}'?"
-
-            # 2. Check spelling phrase corrections
-            if spelling.last_correction_applied:
-                try:
-                    from nova.dashboard.event_bus import emit
-                    emit("memory_indexed", module="memory", status="success", metadata={
-                        "action": "spelling_correction",
-                        "raw_query": text,
-                        "corrected_query": corrected,
-                        "prompt": spelling.correction_prompt
-                    })
-                except Exception:
-                    pass
-                requires_confirm = True
-                confirm_prompt = spelling.correction_prompt
-
-            if requires_confirm and confirm_prompt:
-                confirmed = get_user_confirmation(confirm_prompt, stream, speech_threshold)
-                if not confirmed:
-                    speak("Cancelled.")
-                    last_printed_state = VoiceState.VOICE_IDLE
-                    continue
-
-            # Publish LLM Started to Dashboard
-            try:
-                from nova.dashboard.event_bus import emit
-                emit("llm_started", module="llm", status="running", metadata={"query": corrected})
-            except Exception:
-                pass
-
-            try:
-                raw_response = ai_client.parse_intent(corrected)
-                
-                # Publish LLM Finished to Dashboard
-                try:
-                    from nova.dashboard.event_bus import emit
-                    emit("llm_finished", module="llm", status="success", metadata={"query": corrected, "response": raw_response})
-                except Exception:
-                    pass
-            except Exception as e:
-                print_error(f"Intent parsing failed: {e}")
-                
-                # Publish LLM Failed to Dashboard
-                try:
-                    from nova.dashboard.event_bus import emit
-                    emit("llm_finished", module="llm", status="failed", metadata={"query": corrected, "error": str(e)})
-                except Exception:
-                    pass
+            elif action == "continue":
                 continue
-
-            if not raw_response:
-                print_error("No response from AI — is Ollama running?")
-                continue
-
-            from nova.parser import parse_and_validate_action
-            try:
-                actions = parse_and_validate_action(raw_response)
-            except Exception as e:
-                print_error(f"Action validation failed: {e}")
-                continue
-
-            if not actions:
-                print_error("Could not parse an action from the AI response.")
-                continue
-
-            success_msgs = []
-            
-            # Check if there is a long-running action
-            is_long, ack_text, success_text, fail_text = check_long_running_action(dispatcher, actions, text)
-            
-            ack_thread = None
-            if is_long:
-                import threading
-                # Start acknowledgement speech in a non-blocking background thread
-                ack_thread = threading.Thread(target=speak, args=(ack_text,))
-                ack_thread.start()
-
-            for action_data in actions:
-                action_data = correct_action_data(action_data, corrected)
-                name    = action_data.get("action")
-                handler = dispatcher.get(name)
-                if not handler:
-                    print_error(f"No handler registered for '{name}'.")
-                    continue
-                if enable_debug:
-                    print_info(f"Action parsed: {name}")
-                try:
-                    result = handler.execute(action_data)
-                except Exception as e:
-                    print_error(f"Handler '{name}' raised: {e}")
-                    continue
-                lresult = result.lower()
-                if "error" in lresult or "failed" in lresult:
-                    print_error(result)
-                elif "aborted" in lresult or "cancelled" in lresult:
-                    print_warning(result)
-                else:
-                    print_success(result)
-                    success_msgs.append(result)
-
-            total_dur = time.time() - cmd_start
-            logger.info(
-                f"Record: {record_dur:.2f}s | "
-                f"Transcribe: {transcribe_dur:.2f}s | "
-                f"Total: {total_dur:.2f}s"
-            )
-            if enable_debug:
-                print(
-                    f"[DBG lat] record={record_dur:.2f}s  "
-                    f"whisper={transcribe_dur:.2f}s  "
-                    f"total={total_dur:.2f}s"
-                )
-
-            # Once execution finishes, wait for acknowledgement speech to finish playing
-            if ack_thread:
-                ack_thread.join()
-
-            # -----------------------------------------------------------------
-            # STATE: SPEAKING — speak response via TTS
-            # -----------------------------------------------------------------
-            if is_long:
-                if success_msgs:
-                    transition_to(VoiceState.SPEAKING)
-                    last_printed_state = VoiceState.SPEAKING
-                    speak(success_text)
-                else:
-                    transition_to(VoiceState.SPEAKING)
-                    last_printed_state = VoiceState.SPEAKING
-                    speak(fail_text)
-            else:
-                if success_msgs:
-                    transition_to(VoiceState.SPEAKING)
-                    last_printed_state = VoiceState.SPEAKING
-                    spoken = " ".join(clean_ansi(m) for m in success_msgs)
-                    
-                    # Check if the user explicitly asked to read the full response
-                    user_text_lower = text.lower()
-                    read_full_phrases = [
-                        "read everything", "read the full response", "read the complete response", 
-                        "read full response", "read all", "read full text", "read the full text"
-                    ]
-                    read_full = any(phrase in user_text_lower for phrase in read_full_phrases)
-                    
-                    if read_full:
-                        speak(spoken)
-                    else:
-                        try:
-                            spoken_summary = ai_client.generate_tts_summary(text, spoken)
-                        except Exception as e:
-                            logger.debug(f"Failed to generate spoken summary: {e}")
-                            spoken_summary = spoken
-                        speak(spoken_summary)
-
-            if enable_debug:
-                print_success("✔ Finished")
-
-            # Check if speaking/execution was interrupted
-            import nova.voice.config as voice_config
-            if voice_config.interrupt_speaking:
-                voice_config.interrupt_speaking = False
-                print_success("Nova interrupted. Listening...")
-                if confirmation_sound:
-                    play_confirmation_sound()
-                skip_idle_wait = True
-                continue
-
-            # Flush mic buffer so chime / TTS tail doesn't bleed into next wake loop.
-            # We sleep briefly first to allow the hardware input buffer to ingest the tail of the spoken audio.
-            try:
-                time.sleep(0.8)
-                if stream is not None and stream.read_available > 0:
-                    stream.read(stream.read_available)
-            except Exception:
-                pass
-
-            # Check if deferred deactivation was flagged during executing/speaking
-            if _deferred_deactivate:
-                _deferred_deactivate = False
-                print_info("Nova has stopped listening.")
-                transition_to(VoiceState.INACTIVE)
+            elif action in ("menu", "exit"):
+                return action
 
     except KeyboardInterrupt:
         print()
@@ -1189,14 +1612,33 @@ def run_voice_loop(ai_client, dispatcher) -> str:
     # =========================================================================
     transition_to(VoiceState.SHUTDOWN)
     _mic_healthy = False
-    if stream is not None:
+
+    # Flush diagnostics to disk on clean shutdown
+    try:
+        state.diagnostics.flush_to_disk()
+    except Exception:
+        pass
+
+    if state.stream is not None:
         try:
-            stream.stop()
-            stream.close()
+            state.stream.stop()
+            state.stream.close()
         except Exception:
             pass
         import nova.voice.config as voice_config
         voice_config.active_stream = None
+
+    if state.rnnoise:
+        try:
+            state.rnnoise.destroy()
+        except Exception:
+            pass
+
+    if state.aec:
+        try:
+            state.aec.destroy()
+        except Exception:
+            pass
 
     print_info("Voice Mode Closed")
     return "menu"
