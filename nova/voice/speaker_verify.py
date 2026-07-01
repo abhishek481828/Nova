@@ -183,10 +183,16 @@ class SpeakerVerifier:
             return True, 1.0
 
         try:
+            # Check for silent audio first to prevent Resemblyzer exception (division by zero)
+            rms = float(np.sqrt(np.mean(audio ** 2)))
+            if rms < 0.001:  # too quiet to be meaningful speech
+                logger.debug(f"Speaker verification skipped: audio too quiet (RMS={rms:.6f})")
+                return False, 0.0
+
             encoder = self._get_encoder()
             wav = preprocess_wav(audio.flatten(), source_sr=sr)
             if len(wav) < sr * 0.3:          # too short to be meaningful
-                return True, 1.0
+                return False, 0.0
                 
             emb = encoder.embed_utterance(wav)
             emb = emb / (np.linalg.norm(emb) + 1e-9)
@@ -204,8 +210,8 @@ class SpeakerVerifier:
 
             return is_match, max_score
         except Exception as e:
-            logger.debug(f"Speaker verification error (fail-open): {e}")
-            return True, 1.0
+            logger.debug(f"Speaker verification error (failing closed for invalid audio): {e}")
+            return False, 0.0
 
     def commit_adaptation(self) -> None:
         """
