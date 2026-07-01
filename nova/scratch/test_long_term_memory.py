@@ -213,16 +213,41 @@ class TestLongTermMemory(unittest.TestCase):
         # Create mock connection and cursor
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
-        mock_cursor.fetchall.return_value = [("id", "TEXT"), ("category", "TEXT"), ("title", "TEXT"), ("content", "TEXT"), ("importance", "INTEGER"), ("confidence", "REAL"), ("source", "TEXT"), ("tags", "TEXT"), ("created_at", "REAL"), ("updated_at", "REAL"), ("accessed_at", "REAL"), ("access_count", "INTEGER"), ("version", "INTEGER"), ("active", "INTEGER"), ("meta_notes", "TEXT")]
         mock_conn.cursor.return_value = mock_cursor
         
         # When attempting to save, cursor execute raises IntegrityError
+        last_sql = [None]
         def execute_side_effect(sql, *args, **kwargs):
-            if "INSERT OR REPLACE" in sql:
+            last_sql[0] = sql
+            if ("INSERT" in sql or "UPDATE" in sql) and "schema_info" not in sql:
                 raise sqlite3.IntegrityError("Simulated DB lock")
             return MagicMock()
             
         mock_conn.execute.side_effect = execute_side_effect
+        mock_cursor.execute.side_effect = execute_side_effect
+        mock_cursor.fetchone.return_value = None
+
+        def fetchall_side_effect():
+            if last_sql[0] and "table_info" in last_sql[0]:
+                return [
+                    (0, "id", "TEXT", 1, None, 1),
+                    (1, "category", "TEXT", 1, None, 0),
+                    (2, "title", "TEXT", 1, None, 0),
+                    (3, "content", "TEXT", 1, None, 0),
+                    (4, "importance", "INTEGER", 1, None, 0),
+                    (5, "confidence", "REAL", 1, None, 0),
+                    (6, "source", "TEXT", 1, None, 0),
+                    (7, "tags", "TEXT", 1, None, 0),
+                    (8, "created_at", "REAL", 1, None, 0),
+                    (9, "updated_at", "REAL", 1, None, 0),
+                    (10, "accessed_at", "REAL", 1, None, 0),
+                    (11, "access_count", "INTEGER", 1, None, 0),
+                    (12, "version", "INTEGER", 1, None, 0),
+                    (13, "active", "INTEGER", 1, None, 0),
+                    (14, "meta_notes", "TEXT", 0, "''", 0)
+                ]
+            return []
+        mock_cursor.fetchall.side_effect = fetchall_side_effect
         mock_connect.return_value = mock_conn
 
         # Instantiate fresh storage and manager
@@ -378,6 +403,54 @@ class TestLongTermMemory(unittest.TestCase):
         res = self.manager.retriever.retrieve(category="facts")
         self.assertEqual(res[0].id, m2.id)
         self.assertEqual(res[1].id, m1.id)
+
+    def test_duplicate_detection_and_merge(self):
+        m1 = self.manager.create_memory("facts", "duplicate test", "first content", importance=2, tags=["first"])
+        
+        # Creating a duplicate in the same category/title should merge into m1
+        m2 = self.manager.create_memory("facts", "duplicate test", "second content", importance=4, tags=["second"])
+        
+        self.assertEqual(m1.id, m2.id)
+        self.assertEqual(m2.version, 2)
+        self.assertEqual(m2.content, "second content")
+        self.assertEqual(m2.importance, 4)
+        self.assertEqual(sorted(m2.tags), ["first", "second"])
+
+        # Listing memories should only show a single record
+        memories = self.manager.list_memories(category="facts")
+        self.assertEqual(len(memories), 1)
+
+    def test_version_history_archiving(self):
+        m = self.manager.create_memory("facts", "history test", "version 1", importance=2)
+        m_id = m.id
+        
+        # Perform updates to increment version
+        self.manager.update_memory(m_id, content="version 2")
+        self.manager.update_memory(m_id, content="version 3")
+        
+        # Verify history versions exist in storage
+        h1 = self.storage.get_history_version(m_id, 1)
+        h2 = self.storage.get_history_version(m_id, 2)
+        
+        self.assertIsNotNone(h1)
+        self.assertEqual(h1.content, "version 1")
+        self.assertIsNotNone(h2)
+        self.assertEqual(h2.content, "version 2")
+
+    def test_rollback_historical_state(self):
+        m = self.manager.create_memory("facts", "rollback test", "state 1", importance=2)
+        m_id = m.id
+        orig_created_at = m.created_at
+        
+        self.manager.update_memory(m_id, content="state 2")
+        self.manager.update_memory(m_id, content="state 3")
+        
+        # Roll back to version 1
+        rolled = self.manager.rollback_memory(m_id, 1)
+        
+        self.assertEqual(rolled.content, "state 1")
+        self.assertEqual(rolled.version, 4)  # 1 (create) -> 2 (update) -> 3 (update) -> 4 (rollback)
+        self.assertEqual(rolled.created_at, orig_created_at)  # Original timestamp preserved
 
 if __name__ == "__main__":
     unittest.main()
