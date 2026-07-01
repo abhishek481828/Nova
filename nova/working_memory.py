@@ -1,16 +1,22 @@
 """
 Working Memory component for Nova AI Assistant.
 Represents the short-term cognitive state, goals, context, and current execution trace.
+Includes a dedicated Session State layer for runtime context management.
 """
 
 from __future__ import annotations
 
 import time
 import logging
+import uuid
 from dataclasses import dataclass, field, asdict
 from typing import Any, Optional, Dict, List
 
 from nova.logger import logger
+
+# Allowed values for runtime execution status
+VALID_STATUSES = {"idle", "running", "paused", "completed", "failed", "aborted"}
+
 
 @dataclass
 class BrowserInfo:
@@ -48,6 +54,57 @@ class Interaction:
 
 
 @dataclass
+class SessionState:
+    """
+    Manages Nova's current runtime session state.
+    Provides validation constraints for runtime fields.
+    """
+    session_identifier: str = field(default_factory=lambda: f"session_{uuid.uuid4()}")
+    session_start_time: float = field(default_factory=time.time)
+    current_execution_status: str = "idle"
+    current_conversation: List[Interaction] = field(default_factory=list)
+    active_task: Optional[str] = None
+    active_goal: Optional[str] = None
+    current_application: Optional[str] = None
+    current_browser: Optional[str] = None
+    current_website: Optional[str] = None
+    current_webpage: Optional[str] = None
+    current_search_query: Optional[str] = None
+    previous_command: Optional[str] = None
+    previous_assistant_reply: Optional[str] = None
+    conversation_topic: Optional[str] = None
+
+    def __post_init__(self) -> None:
+        self.validate()
+
+    def validate(self) -> None:
+        """
+        Validates the session state attributes.
+        Raises ValueError or TypeError if validation fails.
+        """
+        # Validate session_identifier
+        if not isinstance(self.session_identifier, str) or not self.session_identifier.strip():
+            raise ValueError("session_identifier must be a non-empty string.")
+
+        # Validate session_start_time
+        if not isinstance(self.session_start_time, (int, float)) or self.session_start_time <= 0:
+            raise ValueError("session_start_time must be a positive number.")
+
+        # Validate execution status
+        if self.current_execution_status not in VALID_STATUSES:
+            raise ValueError(
+                f"current_execution_status must be one of {VALID_STATUSES}, got '{self.current_execution_status}'"
+            )
+
+        # Validate conversation is list of Interaction objects
+        if not isinstance(self.current_conversation, list):
+            raise TypeError("current_conversation must be a list.")
+        for item in self.current_conversation:
+            if not isinstance(item, Interaction):
+                raise TypeError("All items in current_conversation must be Interaction objects.")
+
+
+@dataclass
 class WorkingMemoryState:
     """
     The structured state container for Nova's short-term cognitive memory.
@@ -66,12 +123,15 @@ class WorkingMemoryState:
     timestamped_events: List[MemoryEvent] = field(default_factory=list)
     conversation_history: List[Interaction] = field(default_factory=list)
     additional_properties: Dict[str, Any] = field(default_factory=dict)
+    
+    # Nested runtime Session State
+    session_state: SessionState = field(default_factory=SessionState)
 
 
 class WorkingMemory:
     """
     WorkingMemory manager. Provides object-oriented APIs to store, retrieve,
-    clear, and restore short-term cognitive states.
+    clear, and restore short-term cognitive states and runtime sessions.
     """
 
     def __init__(self) -> None:
@@ -81,10 +141,21 @@ class WorkingMemory:
     def set(self, key: str, value: Any) -> None:
         """
         Sets a value in working memory. If the key matches a predefined attribute in
-        WorkingMemoryState, it updates the attribute directly. Otherwise, it stores
-        it in additional_properties for extensibility.
+        SessionState or WorkingMemoryState, it updates the attribute directly and validates.
+        Otherwise, it stores it in additional_properties for extensibility.
         """
-        if hasattr(self.state, key) and key != "additional_properties":
+        if hasattr(self.state.session_state, key):
+            orig_val = getattr(self.state.session_state, key)
+            try:
+                setattr(self.state.session_state, key, value)
+                self.state.session_state.validate()
+                logger.debug(f"Session state attribute updated: '{key}'", extra={"key": key, "value": value})
+            except Exception as e:
+                # Rollback changes to preserve validation state consistency
+                setattr(self.state.session_state, key, orig_val)
+                logger.error(f"Validation failed for session state key '{key}': {e}")
+                raise e
+        elif hasattr(self.state, key) and key != "additional_properties" and key != "session_state":
             setattr(self.state, key, value)
             logger.debug(f"State attribute updated: '{key}'", extra={"key": key, "value": value})
         else:
@@ -93,20 +164,34 @@ class WorkingMemory:
 
     def get(self, key: str, default: Any = None) -> Any:
         """
-        Retrieves a value by key. Looks up predefined state attributes first,
-        then falls back to dynamic properties.
+        Retrieves a value by key. Looks up SessionState attributes first,
+        then predefined state attributes, then falls back to dynamic properties.
         """
-        if hasattr(self.state, key) and key != "additional_properties":
+        if hasattr(self.state.session_state, key):
+            return getattr(self.state.session_state, key)
+        if hasattr(self.state, key) and key != "additional_properties" and key != "session_state":
             return getattr(self.state, key)
         return self.state.additional_properties.get(key, default)
 
     def remove(self, key: str) -> None:
         """
-        Removes a key from working memory. If it is a predefined attribute, resets it to
-        its default value. If it is a dynamic property, deletes it.
+        Removes a key from working memory. Resets it to its default value if it is predefined
+        in SessionState or WorkingMemoryState. Deletes it if it is a dynamic property.
         """
-        if hasattr(self.state, key) and key != "additional_properties":
-            # Reset core attribute to default
+        if hasattr(self.state.session_state, key):
+            default_val = None
+            if key == "current_conversation":
+                default_val = []
+            elif key == "current_execution_status":
+                default_val = "idle"
+            elif key == "session_identifier":
+                default_val = f"session_{uuid.uuid4()}"
+            elif key == "session_start_time":
+                default_val = time.time()
+            setattr(self.state.session_state, key, default_val)
+            self.state.session_state.validate()
+            logger.debug(f"Session state attribute reset: '{key}'", extra={"key": key})
+        elif hasattr(self.state, key) and key != "additional_properties" and key != "session_state":
             default_val = None
             if key == "conversation_context" or key == "temporary_execution_context":
                 default_val = {}
@@ -122,14 +207,14 @@ class WorkingMemory:
 
     def clear(self) -> None:
         """
-        Clears dynamic properties and resets all structured state attributes to defaults.
+        Clears dynamic properties and resets all structured state and session attributes.
         """
         self.state = WorkingMemoryState()
         logger.info("Working memory successfully cleared.")
 
     def snapshot(self) -> Dict[str, Any]:
         """
-        Serializes and returns a complete dictionary snapshot of the current state.
+        Serializes and returns a complete dictionary snapshot of the current state and session.
         This dictionary is fully JSON-serializable.
         """
         logger.info("Creating working memory snapshot.")
@@ -137,8 +222,8 @@ class WorkingMemory:
 
     def restore(self, snapshot_data: Dict[str, Any]) -> None:
         """
-        Restores working memory from a dictionary snapshot.
-        Re-constructs all structured sub-dataclasses (BrowserInfo, MemoryEvent, Interaction).
+        Restores working memory and session from a dictionary snapshot.
+        Re-constructs all structured sub-dataclasses (BrowserInfo, MemoryEvent, Interaction, SessionState).
         """
         if not isinstance(snapshot_data, dict):
             logger.error("Failed to restore memory snapshot: Invalid format.")
@@ -190,9 +275,38 @@ class WorkingMemory:
             for inter in snapshot_data.get("conversation_history", [])
         ]
 
+        # Reconstruct SessionState
+        session_data = snapshot_data.get("session_state", {})
+        session_conv = [
+            Interaction(
+                user_prompt=inter.get("user_prompt", ""),
+                assistant_response=inter.get("assistant_response", ""),
+                intent=inter.get("intent"),
+                timestamp=inter.get("timestamp", time.time()),
+                metadata=dict(inter.get("metadata", {}))
+            )
+            for inter in session_data.get("current_conversation", [])
+        ]
+        new_state.session_state = SessionState(
+            session_identifier=session_data.get("session_identifier", f"session_{uuid.uuid4()}"),
+            session_start_time=session_data.get("session_start_time", time.time()),
+            current_execution_status=session_data.get("current_execution_status", "idle"),
+            current_conversation=session_conv,
+            active_task=session_data.get("active_task"),
+            active_goal=session_data.get("active_goal"),
+            current_application=session_data.get("current_application"),
+            current_browser=session_data.get("current_browser"),
+            current_website=session_data.get("current_website"),
+            current_webpage=session_data.get("current_webpage"),
+            current_search_query=session_data.get("current_search_query"),
+            previous_command=session_data.get("previous_command"),
+            previous_assistant_reply=session_data.get("previous_assistant_reply"),
+            conversation_topic=session_data.get("conversation_topic"),
+        )
+
         new_state.additional_properties = dict(snapshot_data.get("additional_properties", {}))
         self.state = new_state
-        logger.info("Working memory successfully restored from snapshot.")
+        logger.info("Working memory and session successfully restored from snapshot.")
 
     def append_history(self, interaction: Dict[str, Any] | Interaction) -> None:
         """

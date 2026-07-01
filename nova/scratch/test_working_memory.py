@@ -6,7 +6,7 @@ import time
 # Ensure project path is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../..")))
 
-from nova.working_memory import WorkingMemory, WorkingMemoryState, BrowserInfo, MemoryEvent, Interaction
+from nova.working_memory import WorkingMemory, WorkingMemoryState, BrowserInfo, MemoryEvent, Interaction, SessionState
 
 class TestWorkingMemory(unittest.TestCase):
 
@@ -167,6 +167,112 @@ class TestWorkingMemory(unittest.TestCase):
         """Verify restore raises exception on invalid input formats."""
         with self.assertRaises(ValueError):
             self.wm.restore("not a dictionary")
+
+    # ── Session State Extension Tests ─────────────────────────────────────
+
+    def test_session_initialization(self):
+        """Verify that default SessionState is initialized with valid values."""
+        self.assertIsInstance(self.wm.state.session_state, SessionState)
+        self.assertTrue(self.wm.state.session_state.session_identifier.startswith("session_"))
+        self.assertGreater(self.wm.state.session_state.session_start_time, 0.0)
+        self.assertEqual(self.wm.state.session_state.current_execution_status, "idle")
+        self.assertEqual(len(self.wm.state.session_state.current_conversation), 0)
+
+    def test_session_flat_routing(self):
+        """Verify flat set/get updates the attributes in the nested session_state."""
+        self.wm.set("active_task", "Refactor Session Layer")
+        self.wm.set("active_goal", "Enhance cognitive context")
+        self.wm.set("current_application", "Terminal")
+        self.wm.set("current_browser", "Chromium")
+        self.wm.set("current_website", "github.com")
+        self.wm.set("current_webpage", "/projects")
+        self.wm.set("current_search_query", "python standard library")
+        self.wm.set("previous_command", "git status")
+        self.wm.set("previous_assistant_reply", "Done.")
+        self.wm.set("conversation_topic", "architecture")
+        self.wm.set("current_execution_status", "running")
+
+        # Verify values from get() API
+        self.assertEqual(self.wm.get("active_task"), "Refactor Session Layer")
+        self.assertEqual(self.wm.get("active_goal"), "Enhance cognitive context")
+        self.assertEqual(self.wm.get("current_application"), "Terminal")
+        self.assertEqual(self.wm.get("current_browser"), "Chromium")
+        self.assertEqual(self.wm.get("current_website"), "github.com")
+        self.assertEqual(self.wm.get("current_webpage"), "/projects")
+        self.assertEqual(self.wm.get("current_search_query"), "python standard library")
+        self.assertEqual(self.wm.get("previous_command"), "git status")
+        self.assertEqual(self.wm.get("previous_assistant_reply"), "Done.")
+        self.assertEqual(self.wm.get("conversation_topic"), "architecture")
+        self.assertEqual(self.wm.get("current_execution_status"), "running")
+
+        # Verify values directly inside nested session_state
+        self.assertEqual(self.wm.state.session_state.active_task, "Refactor Session Layer")
+        self.assertEqual(self.wm.state.session_state.current_execution_status, "running")
+
+    def test_session_validation_constraints(self):
+        """Verify that constraint violations trigger exceptions and preserve current state."""
+        # 1. Invalid status validation check
+        with self.assertRaises(ValueError):
+            self.wm.set("current_execution_status", "sleeping")
+        self.assertEqual(self.wm.get("current_execution_status"), "idle")  # verify rolled back to original
+
+        # 2. Invalid session identifier
+        with self.assertRaises(ValueError):
+            self.wm.set("session_identifier", "")
+        with self.assertRaises(ValueError):
+            self.wm.set("session_identifier", 12345)
+
+        # 3. Invalid start time
+        with self.assertRaises(ValueError):
+            self.wm.set("session_start_time", -1.0)
+        with self.assertRaises(ValueError):
+            self.wm.set("session_start_time", "yesterday")
+
+        # 4. Invalid current_conversation type
+        with self.assertRaises(TypeError):
+            self.wm.set("current_conversation", "no-list")
+        with self.assertRaises(TypeError):
+            self.wm.set("current_conversation", [Interaction("A", "B"), "not-interaction"])
+
+    def test_session_snapshot_and_restore(self):
+        """Verify nested session state fields and list parameters serialize and reconstruct cleanly."""
+        self.wm.set("session_identifier", "session_test_xyz")
+        self.wm.set("active_task", "Reconstruct Session Task")
+        
+        # Add conversation interaction in session state
+        turn = Interaction(user_prompt="Say Hi", assistant_response="Hi!")
+        self.wm.set("current_conversation", [turn])
+
+        snap = self.wm.snapshot()
+        self.assertEqual(snap["session_state"]["session_identifier"], "session_test_xyz")
+        self.assertEqual(snap["session_state"]["current_conversation"][0]["user_prompt"], "Say Hi")
+
+        # Mutate/clear
+        self.wm.clear()
+        self.assertNotEqual(self.wm.get("session_identifier"), "session_test_xyz")
+
+        # Restore
+        self.wm.restore(snap)
+        self.assertEqual(self.wm.get("session_identifier"), "session_test_xyz")
+        self.assertEqual(self.wm.get("active_task"), "Reconstruct Session Task")
+        
+        # Verify typed reconstruction of current_conversation
+        conv = self.wm.get("current_conversation")
+        self.assertEqual(len(conv), 1)
+        self.assertIsInstance(conv[0], Interaction)
+        self.assertEqual(conv[0].user_prompt, "Say Hi")
+        self.assertEqual(conv[0].assistant_response, "Hi!")
+
+    def test_session_remove_routing(self):
+        """Verify remove correctly resets session parameters to defaults."""
+        self.wm.set("active_task", "Active task")
+        self.wm.set("current_execution_status", "completed")
+        
+        self.wm.remove("active_task")
+        self.wm.remove("current_execution_status")
+
+        self.assertIsNone(self.wm.get("active_task"))
+        self.assertEqual(self.wm.get("current_execution_status"), "idle")
 
 if __name__ == "__main__":
     unittest.main()
