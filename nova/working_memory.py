@@ -1,7 +1,7 @@
 """
 Working Memory component for Nova AI Assistant.
 Represents the short-term cognitive state, goals, context, and current execution trace.
-Includes a dedicated Session State layer for runtime context management.
+Includes a dedicated Session State layer for runtime context management and a Context Manager.
 """
 
 from __future__ import annotations
@@ -151,6 +151,16 @@ class SessionState:
 
 
 @dataclass
+class MemoryContext:
+    """
+    Represents a specific runtime focus or workspace context.
+    """
+    name: str
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    timestamp: float = field(default_factory=time.time)
+
+
+@dataclass
 class WorkingMemoryState:
     """
     The structured state container for Nova's short-term cognitive memory.
@@ -173,6 +183,102 @@ class WorkingMemoryState:
     # Nested runtime Session State
     session_state: SessionState = field(default_factory=SessionState)
 
+    # Nested Context Manager states
+    active_contexts: List[MemoryContext] = field(default_factory=list)
+    previous_context: Optional[MemoryContext] = None
+
+
+class TemporaryContext:
+    """
+    Helper wrapper for 'with' statement scopes.
+    """
+    def __init__(self, manager: MemoryContextManager, name: str, metadata: Optional[Dict[str, Any]] = None):
+        self.manager = manager
+        self.name = name
+        self.metadata = metadata or {}
+        self.context = None
+
+    def __enter__(self) -> MemoryContext:
+        self.context = self.manager.enter_context(self.name, self.metadata)
+        return self.context
+
+    def __exit__(self, exc_type, exc_val, exc_tb) -> None:
+        self.manager.exit_context(self.name)
+
+
+class MemoryContextManager:
+    """
+    Coordinates entering, exiting, switching, and restoring cognitive context scopes.
+    """
+    def __init__(self, wm: WorkingMemory):
+        self.wm = wm
+
+    @property
+    def current_context(self) -> Optional[MemoryContext]:
+        if self.wm.state.active_contexts:
+            return self.wm.state.active_contexts[-1]
+        return None
+
+    @property
+    def previous_context(self) -> Optional[MemoryContext]:
+        return self.wm.state.previous_context
+
+    @previous_context.setter
+    def previous_context(self, val: Optional[MemoryContext]) -> None:
+        self.wm.state.previous_context = val
+
+    def enter_context(self, name: str, metadata: Optional[Dict[str, Any]] = None) -> MemoryContext:
+        """Pushes a new context onto the stack, making it active."""
+        ctx = MemoryContext(name=name, metadata=metadata or {})
+        self.wm.state.active_contexts.append(ctx)
+        logger.info(f"Entered context: '{name}'")
+        return ctx
+
+    def exit_context(self, name: Optional[str] = None) -> Optional[MemoryContext]:
+        """Pops the active context from the stack and sets it as the previous context."""
+        if not self.wm.state.active_contexts:
+            logger.warning("Attempted to exit context from an empty stack.")
+            return None
+        
+        ctx = self.wm.state.active_contexts[-1]
+        if name is not None and ctx.name != name:
+            logger.warning(f"Exiting context mismatch: expected '{name}', got '{ctx.name}'")
+            
+        popped = self.wm.state.active_contexts.pop()
+        self.previous_context = popped
+        logger.info(f"Exited context: '{popped.name}'")
+        return popped
+
+    def switch_context(self, name: str, metadata: Optional[Dict[str, Any]] = None) -> MemoryContext:
+        """Switches the active context by replacing the top of the stack."""
+        if self.wm.state.active_contexts:
+            self.previous_context = self.wm.state.active_contexts.pop()
+        ctx = MemoryContext(name=name, metadata=metadata or {})
+        self.wm.state.active_contexts.append(ctx)
+        logger.info(f"Switched context to: '{name}'")
+        return ctx
+
+    def clear_contexts(self) -> None:
+        """Wipes the context stack and previous context history."""
+        self.wm.state.active_contexts.clear()
+        self.previous_context = None
+        logger.info("Cleared all contexts.")
+
+    def restore_context(self) -> Optional[MemoryContext]:
+        """Pushes the previous context back onto the stack."""
+        if self.previous_context is None:
+            logger.warning("No previous context available to restore.")
+            return None
+        ctx = self.previous_context
+        self.wm.state.active_contexts.append(ctx)
+        self.previous_context = None
+        logger.info(f"Restored context: '{ctx.name}'")
+        return ctx
+
+    def temporary(self, name: str, metadata: Optional[Dict[str, Any]] = None) -> TemporaryContext:
+        """Returns a TemporaryContext wrapper for block-scoped with statements."""
+        return TemporaryContext(self, name, metadata)
+
 
 class WorkingMemory:
     """
@@ -182,6 +288,7 @@ class WorkingMemory:
 
     def __init__(self) -> None:
         self.state = WorkingMemoryState()
+        self.context_manager = MemoryContextManager(self)
         # Register the default memory instance onto BaseAction class
         try:
             from nova.actions.base import BaseAction
@@ -214,6 +321,15 @@ class WorkingMemory:
                 for item in value:
                     if not isinstance(item, dict):
                         raise TypeError("All items in recent_actions must be dictionaries.")
+            elif key == "active_contexts":
+                if not isinstance(value, list):
+                    raise TypeError("active_contexts must be a list.")
+                for item in value:
+                    if not isinstance(item, MemoryContext):
+                        raise TypeError("All items in active_contexts must be MemoryContext objects.")
+            elif key == "previous_context":
+                if value is not None and not isinstance(value, MemoryContext):
+                    raise TypeError("previous_context must be a MemoryContext object or None.")
             setattr(self.state, key, value)
             logger.debug(f"State attribute updated: '{key}'", extra={"key": key, "value": value})
         else:
@@ -271,6 +387,10 @@ class WorkingMemory:
                 default_val = []
             elif key == "execution_status":
                 default_val = "idle"
+            elif key == "active_contexts":
+                default_val = []
+            elif key == "previous_context":
+                default_val = None
             setattr(self.state, key, default_val)
             logger.debug(f"State attribute reset: '{key}'", extra={"key": key})
         elif key in self.state.additional_properties:
@@ -389,6 +509,25 @@ class WorkingMemory:
             download_activity=list(session_data.get("download_activity", [])),
             open_tabs_count=session_data.get("open_tabs_count", 0),
         )
+
+        # Reconstruct active_contexts
+        new_state.active_contexts = [
+            MemoryContext(
+                name=c.get("name"),
+                metadata=dict(c.get("metadata", {})),
+                timestamp=c.get("timestamp", time.time())
+            )
+            for c in snapshot_data.get("active_contexts", [])
+        ]
+        
+        # Reconstruct previous_context
+        prev_c = snapshot_data.get("previous_context")
+        if prev_c is not None:
+            new_state.previous_context = MemoryContext(
+                name=prev_c.get("name"),
+                metadata=dict(prev_c.get("metadata", {})),
+                timestamp=prev_c.get("timestamp", time.time())
+            )
 
         new_state.additional_properties = dict(snapshot_data.get("additional_properties", {}))
         self.state = new_state
