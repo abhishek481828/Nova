@@ -182,6 +182,12 @@ class WorkingMemory:
 
     def __init__(self) -> None:
         self.state = WorkingMemoryState()
+        # Register the default memory instance onto BaseAction class
+        try:
+            from nova.actions.base import BaseAction
+            BaseAction._shared_working_memory = self
+        except Exception:
+            pass
         logger.info("Working memory system initialized.")
 
     def set(self, key: str, value: Any) -> None:
@@ -202,6 +208,12 @@ class WorkingMemory:
                 logger.error(f"Validation failed for session state key '{key}': {e}")
                 raise e
         elif hasattr(self.state, key) and key != "additional_properties" and key != "session_state":
+            if key == "recent_actions":
+                if not isinstance(value, list):
+                    raise TypeError("recent_actions must be a list.")
+                for item in value:
+                    if not isinstance(item, dict):
+                        raise TypeError("All items in recent_actions must be dictionaries.")
             setattr(self.state, key, value)
             logger.debug(f"State attribute updated: '{key}'", extra={"key": key, "value": value})
         else:
