@@ -247,5 +247,42 @@ class TestLongTermMemory(unittest.TestCase):
         plan_str = " ".join([p[3] for p in plan])
         self.assertIn("idx_memories_category", plan_str)
 
+    def test_memory_classification_validation(self):
+        # Create memory with unregistered category raises ValueError
+        with self.assertRaises(ValueError):
+            self.manager.create_memory(category="custom_test_cat", title="T", content="C")
+
+        # Register custom category on classifier
+        self.manager.classifier.register_category("custom_test_cat")
+        
+        # Now it succeeds
+        mem = self.manager.create_memory(category="custom_test_cat", title="T", content="C")
+        self.assertEqual(mem.category, "custom_test_cat")
+
+        # Attempting to update to an unregistered category raises ValueError
+        with self.assertRaises(ValueError):
+            self.manager.update_memory(mem.id, category="another_fake_cat")
+
+    def test_heuristic_text_classification(self):
+        classifier = self.manager.classifier
+        
+        # Test heuristic matching paths
+        self.assertEqual(classifier.classify_text("My name is Abhishek"), "user_profile")
+        self.assertEqual(classifier.classify_text("I live in San Francisco"), "user_profile")
+        
+        self.assertEqual(classifier.classify_text("I prefer dark mode"), "preferences")
+        self.assertEqual(classifier.classify_text("My favorite food is pizza"), "preferences")
+        
+        self.assertEqual(classifier.classify_text("Developing a new Python repository"), "projects")
+        self.assertEqual(classifier.classify_text("I bought a new computer"), "devices")
+        
+        self.assertEqual(classifier.classify_text("I want to run a marathon next year"), "goals")
+        self.assertEqual(classifier.classify_text("Fluent in Javascript coding"), "skills")
+        
+        self.assertEqual(classifier.classify_text("Alice is my sister"), "relationships")
+        self.assertEqual(classifier.classify_text("Did you know that water boils at 100C?"), "facts")
+        
+        self.assertEqual(classifier.classify_text("Generic sentence that falls back"), "knowledge")
+
 if __name__ == "__main__":
     unittest.main()

@@ -1,7 +1,8 @@
 """
 Long-Term Memory (LTM) subsystem for Nova AI Assistant.
 Manages persistent memories independent of Working Memory.
-Supports structured storage, metadata tracking, SQLite backend, indexes, and schema migrations.
+Supports structured storage, metadata tracking, SQLite backend, indexes, schema migrations,
+and semantic memory category classification.
 """
 
 from __future__ import annotations
@@ -17,6 +18,95 @@ from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
 
 logger = logging.getLogger("nova")
+
+
+class MemoryCategory:
+    """
+    Standard memory categories supported by LTM.
+    """
+    USER_PROFILE = "user_profile"
+    PREFERENCES = "preferences"
+    PROJECTS = "projects"
+    DEVICES = "devices"
+    GOALS = "goals"
+    SKILLS = "skills"
+    RELATIONSHIPS = "relationships"
+    FACTS = "facts"
+    KNOWLEDGE = "knowledge"
+    CUSTOM = "custom"
+
+    SYSTEM_CATEGORIES = {
+        USER_PROFILE,
+        PREFERENCES,
+        PROJECTS,
+        DEVICES,
+        GOALS,
+        SKILLS,
+        RELATIONSHIPS,
+        FACTS,
+        KNOWLEDGE,
+        CUSTOM
+    }
+
+
+class MemoryClassifier:
+    """
+    Handles memory category registration, validation, and heuristic-based text classification.
+    """
+    def __init__(self, custom_categories: Optional[List[str]] = None) -> None:
+        self._categories = set(MemoryCategory.SYSTEM_CATEGORIES)
+        if custom_categories:
+            for cat in custom_categories:
+                self.register_category(cat)
+
+    def register_category(self, category: str) -> None:
+        """Registers a new custom category."""
+        category_clean = category.strip().lower()
+        if not category_clean:
+            raise ValueError("Category name cannot be empty.")
+        self._categories.add(category_clean)
+        logger.info(f"Registered custom memory category: '{category_clean}'")
+
+    def get_registered_categories(self) -> List[str]:
+        """Returns list of registered categories."""
+        return sorted(list(self._categories))
+
+    def validate_category(self, category: str) -> bool:
+        """Validates if a category is registered."""
+        return category.strip().lower() in self._categories
+
+    def classify_text(self, text: str) -> str:
+        """
+        Suggests a category for raw text using heuristic patterns.
+        """
+        text_lower = text.lower()
+        
+        # Heuristics mapping rules
+        if any(kw in text_lower for kw in ("name is", "born in", "live in", "i am a", "my age", "profile")):
+            return MemoryCategory.USER_PROFILE
+            
+        if any(kw in text_lower for kw in ("like", "dislike", "prefer", "favorite", "hobby", "love to", "loves to")):
+            return MemoryCategory.PREFERENCES
+            
+        if any(kw in text_lower for kw in ("project", "repo", "codebase", "develop", "build", "task")):
+            return MemoryCategory.PROJECTS
+            
+        if any(kw in text_lower for kw in ("phone", "computer", "laptop", "device", "server", "hardware")):
+            return MemoryCategory.DEVICES
+            
+        if any(kw in text_lower for kw in ("want to", "goal", "plan to", "aim", "target", "aspire")):
+            return MemoryCategory.GOALS
+            
+        if any(kw in text_lower for kw in ("python", "javascript", "program", "fluent in", "know how to", "expert")):
+            return MemoryCategory.SKILLS
+            
+        if any(kw in text_lower for kw in ("friend", "spouse", "wife", "husband", "son", "daughter", "mother", "father", "colleague", "sister", "brother", "boss", "manager")):
+            return MemoryCategory.RELATIONSHIPS
+            
+        if any(kw in text_lower for kw in ("did you know", "fact", "definition", "capital of", "sun rises")):
+            return MemoryCategory.FACTS
+            
+        return MemoryCategory.KNOWLEDGE
 
 
 @dataclass
@@ -329,11 +419,12 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
 
 class LongTermMemoryManager:
     """
-    Coordinates LTM operations using an injected storage adapter.
+    Coordinates LTM operations using an injected storage adapter and classifier service.
     """
 
-    def __init__(self, storage: BaseMemoryStorage) -> None:
+    def __init__(self, storage: BaseMemoryStorage, classifier: Optional[MemoryClassifier] = None) -> None:
         self.storage = storage
+        self.classifier = classifier or MemoryClassifier()
         logger.info("Long-Term Memory Manager initialized.")
 
     def create_memory(
@@ -348,11 +439,15 @@ class LongTermMemoryManager:
         meta_notes: str = ""
     ) -> Memory:
         """
-        Creates and stores a new Memory.
+        Creates and stores a new Memory after validating its category.
         """
+        category_clean = category.strip().lower()
+        if not self.classifier.validate_category(category_clean):
+            raise ValueError(f"Category '{category}' is not a registered category.")
+
         now = time.time()
         memory = Memory(
-            category=category,
+            category=category_clean,
             title=title,
             content=content,
             importance=importance,
@@ -368,7 +463,7 @@ class LongTermMemoryManager:
             meta_notes=meta_notes
         )
         self.storage.save(memory)
-        logger.info(f"Created new memory: [{category}] '{title}' (ID: {memory.id})")
+        logger.info(f"Created new memory: [{category_clean}] '{title}' (ID: {memory.id})")
         return memory
 
     def get_memory(self, memory_id: str) -> Optional[Memory]:
@@ -391,6 +486,13 @@ class LongTermMemoryManager:
         if not memory:
             logger.error(f"Cannot update memory: ID '{memory_id}' not found.")
             raise ValueError(f"Memory with ID '{memory_id}' does not exist.")
+
+        # Validate category if changing
+        if "category" in kwargs:
+            category_clean = kwargs["category"].strip().lower()
+            if not self.classifier.validate_category(category_clean):
+                raise ValueError(f"Category '{kwargs['category']}' is not a registered category.")
+            kwargs["category"] = category_clean
 
         # Exclude internal properties from dynamic updates
         read_only = {"id", "created_at", "accessed_at", "access_count", "version"}
@@ -423,7 +525,8 @@ class LongTermMemoryManager:
         """
         Lists stored memories.
         """
-        return self.storage.list_all(category=category, active_only=active_only)
+        category_clean = category.strip().lower() if category is not None else None
+        return self.storage.list_all(category=category_clean, active_only=active_only)
 
     def import_memories(self, data: List[Dict[str, Any]]) -> int:
         """
@@ -437,9 +540,13 @@ class LongTermMemoryManager:
                 if isinstance(tags, str):
                     tags = json.loads(tags)
 
+                category_clean = item.get("category", "general").strip().lower()
+                if not self.classifier.validate_category(category_clean):
+                    self.classifier.register_category(category_clean)
+
                 mem = Memory(
                     id=item.get("id", str(uuid.uuid4())),
-                    category=item.get("category", "general"),
+                    category=category_clean,
                     title=item.get("title", ""),
                     content=item.get("content", ""),
                     importance=item.get("importance", 1),
