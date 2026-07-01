@@ -335,5 +335,49 @@ class TestLongTermMemory(unittest.TestCase):
         self.assertEqual(len(res_facts), 1)
         self.assertEqual(res_facts[0].id, m2.id)
 
+    def test_relevance_ranking_sort_order(self):
+        # Create 3 memories with distinct parameters
+        m_low = self.manager.create_memory("knowledge", "low rank", "content", importance=1, confidence=0.5)
+        m_med = self.manager.create_memory("facts", "medium rank", "content", importance=3, confidence=0.8)
+        m_high = self.manager.create_memory("user_profile", "high rank", "content", importance=5, confidence=1.0)
+        
+        # Verify retrieve sorts descending by score
+        res = self.manager.retriever.retrieve()
+        self.assertEqual(res[0].id, m_high.id)
+        self.assertEqual(res[1].id, m_med.id)
+        self.assertEqual(res[2].id, m_low.id)
+
+    def test_ranking_time_decay(self):
+        # Create fresh memory
+        m_fresh = self.manager.create_memory("facts", "fresh fact", "content", importance=4)
+        
+        # Create old memory (decayed by 2 days)
+        m_old = self.manager.create_memory("facts", "old fact", "content", importance=4)
+        m_old.updated_at = time.time() - (86400 * 2)
+        self.storage.save(m_old)
+        
+        res = self.manager.retriever.retrieve(category="facts")
+        self.assertEqual(res[0].id, m_fresh.id)
+        self.assertEqual(res[1].id, m_old.id)
+
+    def test_custom_ranker_override(self):
+        from nova.long_term_memory import BaseMemoryRanker
+        
+        class ReverseRanker(BaseMemoryRanker):
+            def rank(self, memories):
+                # Reverse list sorting
+                return list(reversed(memories))
+                
+        # Inject custom ranker
+        self.manager.retriever.ranker = ReverseRanker()
+        
+        m1 = self.manager.create_memory("facts", "fact A", "content")
+        m2 = self.manager.create_memory("facts", "fact B", "content")
+        
+        # Standard query returns reverse ordered list
+        res = self.manager.retriever.retrieve(category="facts")
+        self.assertEqual(res[0].id, m2.id)
+        self.assertEqual(res[1].id, m1.id)
+
 if __name__ == "__main__":
     unittest.main()

@@ -2,7 +2,7 @@
 Long-Term Memory (LTM) subsystem for Nova AI Assistant.
 Manages persistent memories independent of Working Memory.
 Supports structured storage, metadata tracking, SQLite backend, indexes, schema migrations,
-semantic memory category classification, and query-based memory retrieval.
+semantic memory category classification, query-based memory retrieval, and relevance ranking.
 """
 
 from __future__ import annotations
@@ -13,6 +13,7 @@ import sqlite3
 import json
 import logging
 import threading
+import math
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
@@ -471,13 +472,95 @@ class BaseSemanticRetriever(ABC):
         pass
 
 
+class BaseMemoryRanker(ABC):
+    """
+    Abstract interface for LTM ranking algorithms.
+    """
+    @abstractmethod
+    def rank(self, memories: List[Memory]) -> List[Memory]:
+        """Ranks list of memories returning them sorted by relevance."""
+        pass
+
+
+class HeuristicMemoryRanker(BaseMemoryRanker):
+    """
+    Standard relevance score ranking system utilizing weighted scores,
+    half-life time decays, category priorities, and access counters.
+    """
+    def __init__(
+        self,
+        weights: Optional[Dict[str, float]] = None,
+        category_priorities: Optional[Dict[str, float]] = None,
+        decay_half_life: float = 86400.0
+    ) -> None:
+        self.weights = weights or {
+            "importance": 0.3,
+            "confidence": 0.2,
+            "recency": 0.2,
+            "frequency": 0.1,
+            "category": 0.2
+        }
+        self.category_priorities = category_priorities or {
+            "user_profile": 1.5,
+            "preferences": 1.3,
+            "goals": 1.2,
+            "relationships": 1.2,
+            "skills": 1.1,
+            "projects": 1.0,
+            "devices": 1.0,
+            "facts": 1.0,
+            "knowledge": 0.8
+        }
+        self.decay_half_life = decay_half_life
+
+    def calculate_score(self, memory: Memory, now: float) -> float:
+        """Computes relevance score for a given memory record."""
+        # 1. Normalized Importance (1 to 5 scale -> 0.2 to 1.0)
+        s_imp = memory.importance / 5.0
+        
+        # 2. Confidence (0.0 to 1.0)
+        s_conf = memory.confidence
+        
+        # 3. Recency Time Decay (Exponential half-life decay)
+        delta_t = max(0.0, now - memory.updated_at)
+        decay_constant = 0.69314718 / self.decay_half_life  # ln(2)/half_life
+        s_rec = math.exp(-decay_constant * delta_t)
+        
+        # 4. Access Frequency (asymptote scaling: x/(x+1) -> 0.0 to 1.0)
+        s_freq = memory.access_count / (memory.access_count + 1.0)
+        
+        # 5. Category Priority Weights
+        s_cat = self.category_priorities.get(memory.category.lower(), 1.0)
+        
+        # Combined weighted sum
+        score = (
+            self.weights["importance"] * s_imp +
+            self.weights["confidence"] * s_conf +
+            self.weights["recency"] * s_rec +
+            self.weights["frequency"] * s_freq +
+            self.weights["category"] * s_cat
+        )
+        return score
+
+    def rank(self, memories: List[Memory]) -> List[Memory]:
+        now = time.time()
+        # Sort in descending order of relevance score
+        return sorted(memories, key=lambda m: self.calculate_score(m, now), reverse=True)
+
+
 class MemoryRetriever:
     """
     Modular retrieval engine supporting structural search and semantic overrides.
     """
-    def __init__(self, storage: BaseMemoryStorage, semantic_backend: Optional[BaseSemanticRetriever] = None) -> None:
+    def __init__(
+        self,
+        storage: BaseMemoryStorage,
+        semantic_backend: Optional[BaseSemanticRetriever] = None,
+        ranker: Optional[BaseMemoryRanker] = None
+    ) -> None:
         self.storage = storage
         self.semantic_backend = semantic_backend
+        self.ranker = ranker or HeuristicMemoryRanker()
         logger.info("Memory Retriever initialized.")
 
     def retrieve(
@@ -492,17 +575,17 @@ class MemoryRetriever:
         use_semantic: bool = True
     ) -> List[Memory]:
         """
-        Executes query retrieval across tags, keywords, categories, and titles.
-        If a query string and semantic backend are provided, attempts semantic search first.
+        Executes query retrieval across tags, keywords, categories, and titles,
+        and applies relevance ranking before returning results.
         """
-        # 1. Check if semantic search is requested and backend is registered
+        # 1. Execute retrieval (semantic or structural)
+        results = []
         if query and use_semantic and self.semantic_backend:
             try:
                 logger.info(f"Executing semantic retrieval for query: '{query}'")
                 semantic_results = self.semantic_backend.retrieve_semantic(query)
                 
-                # Apply post-retrieval structural filters if needed
-                filtered_results = []
+                # Apply post-retrieval structural filters
                 for mem in semantic_results:
                     if active_only and not mem.active:
                         continue
@@ -520,20 +603,29 @@ class MemoryRetriever:
                                 break
                         if not match:
                             continue
-                    filtered_results.append(mem)
-                return filtered_results
+                    results.append(mem)
             except Exception as e:
                 logger.error(f"Semantic search failed: {e}. Falling back to standard query.")
+                results = self.storage.query_memories(
+                    category=category,
+                    tags=tags,
+                    keywords=keywords,
+                    title=title,
+                    metadata=metadata,
+                    active_only=active_only
+                )
+        else:
+            results = self.storage.query_memories(
+                category=category,
+                tags=tags,
+                keywords=keywords,
+                title=title,
+                metadata=metadata,
+                active_only=active_only
+            )
 
-        # 2. Standard index-based/keyword fallback query
-        return self.storage.query_memories(
-            category=category,
-            tags=tags,
-            keywords=keywords,
-            title=title,
-            metadata=metadata,
-            active_only=active_only
-        )
+        # 2. Apply ranking sorting
+        return self.ranker.rank(results)
 
 
 class LongTermMemoryManager:
