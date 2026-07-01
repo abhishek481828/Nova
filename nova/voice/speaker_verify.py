@@ -187,12 +187,14 @@ class SpeakerVerifier:
             rms = float(np.sqrt(np.mean(audio ** 2)))
             if rms < 0.001:  # too quiet to be meaningful speech
                 logger.debug(f"Speaker verification skipped: audio too quiet (RMS={rms:.6f})")
-                return False, 0.0
+                # Return None score so the fusion engine skips this signal
+                # rather than treating it as "definitely not the owner"
+                return True, None
 
             encoder = self._get_encoder()
             wav = preprocess_wav(audio.flatten(), source_sr=sr)
             if len(wav) < sr * 0.3:          # too short to be meaningful
-                return False, 0.0
+                return True, None
                 
             emb = encoder.embed_utterance(wav)
             emb = emb / (np.linalg.norm(emb) + 1e-9)

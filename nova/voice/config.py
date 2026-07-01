@@ -114,6 +114,10 @@ ENABLE_CONFIRMATION_CHIME = get_env("ENABLE_CONFIRMATION_CHIME", "True").lower()
 enable_debug = get_env("NOVA_DEBUG", "false").lower() == "true"
 ENABLE_DEBUG = enable_debug
 
+# Voice Debug Mode — set NOVA_VOICE_DEBUG=true to print wake verification details
+enable_voice_debug = get_env("NOVA_VOICE_DEBUG", "false").lower() == "true"
+ENABLE_VOICE_DEBUG = enable_voice_debug
+
 # STT Configs
 NEBIUS_STT_URL = os.environ.get("NEBIUS_STT_URL", "https://api.studio.nebius.ai/v1/audio/transcriptions")
 NEBIUS_MODEL_NAME = os.environ.get("NEBIUS_MODEL_NAME", "whisper-1")

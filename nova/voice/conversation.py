@@ -611,13 +611,21 @@ def _wait_for_wake(
     # very reliably.
     _DETECT_THRESHOLD = 0.07
 
-    # Trigger immediately on a single frame exceeding the threshold (1-of-1).
-    # This maximizes activation responsiveness so it triggers on the first try.
-    _PATIENCE = 1
-    _PATIENCE_WINDOW = 1
+    # Require 2 frames above threshold within a 3-frame window.
+    # A single-frame trigger (1-of-1) is too sensitive and causes false
+    # wakes from TTS echo and noise spikes.  2-of-3 adds only ~160 ms
+    # latency while dramatically reducing false triggers.
+    _PATIENCE = 2
+    _PATIENCE_WINDOW = 3
     score_history = collections.deque(maxlen=_PATIENCE_WINDOW)
 
     last_trigger = 0.0
+
+    # Warm-up: feed OWW a few frames of silence/ambient to flush its
+    # internal mel-spectrogram buffer of any residual TTS audio that
+    # leaked through the mic.  Scores during warm-up are discarded.
+    _WARMUP_FRAMES = 6   # ~0.48 s of ignored OWW frames (6 × 80 ms)
+    warmup_remaining = _WARMUP_FRAMES
 
     while True:
         if shutdown_event.is_set() or _current_state == VoiceState.INACTIVE:
@@ -670,6 +678,12 @@ def _wait_for_wake(
             predictions = wake_detector.model.predict(oww_frame)
         except Exception as e:
             logger.debug(f"OWW inference error: {e}")
+            continue
+
+        # During warm-up, process frames (to flush OWW internal state)
+        # but ignore the scores — they may contain TTS echo residual.
+        if warmup_remaining > 0:
+            warmup_remaining -= 1
             continue
 
         score = predictions.get(wake_detector.model_name, 0.0)
@@ -1022,9 +1036,38 @@ def process_single_iteration(
                         _, speaker_score = verifier.verify(wake_audio, SAMPLE_RATE)
                         
                     # 4. Fuse scores
+                    # Normalize the raw OWW wake score to a confidence range.
+                    # The OWW model inherently produces low scores (0.07-0.18)
+                    # on typical laptop mics.  Since _wait_for_wake already
+                    # validated the score against _DETECT_THRESHOLD (0.07),
+                    # reaching this point means the wake word WAS detected.
+                    # Map the raw score to [0.70, 1.0] so the fusion engine
+                    # treats it as high confidence rather than dragging the
+                    # fused result down.
+                    _raw_wake = wake_score
+                    _wake_detect_thresh = 0.07   # mirrors _DETECT_THRESHOLD
+                    if _raw_wake >= _wake_detect_thresh:
+                        # Linear map: _wake_detect_thresh → 0.70, 1.0 → 1.0
+                        normalized_wake = 0.70 + 0.30 * min(1.0, (_raw_wake - _wake_detect_thresh) / (1.0 - _wake_detect_thresh))
+                    else:
+                        normalized_wake = _raw_wake
+
+                    # Similarly, normalize speaker score relative to its
+                    # verification threshold so that borderline matches
+                    # (e.g. 0.55-0.63 vs threshold 0.75) are not unfairly
+                    # penalised by the fusion.  Map: 0 → 0, threshold → 0.70, 1 → 1.
+                    normalized_speaker = speaker_score
+                    if speaker_score is not None and verifier is not None:
+                        _spk_thresh = verifier._threshold
+                        if speaker_score >= _spk_thresh:
+                            normalized_speaker = 0.70 + 0.30 * min(1.0, (speaker_score - _spk_thresh) / (1.0 - _spk_thresh))
+                        else:
+                            # Below threshold: scale proportionally into [0, 0.70)
+                            normalized_speaker = 0.70 * (speaker_score / _spk_thresh) if _spk_thresh > 0 else speaker_score
+
                     fused_score = fusion_engine.fuse(
-                        wake_score=wake_score,
-                        speaker_score=speaker_score,
+                        wake_score=normalized_wake,
+                        speaker_score=normalized_speaker,
                         vad_score=vad_score,
                         audio_quality=quality_metrics["overall_quality"],
                         noise_level=quality_metrics["background_noise"]
@@ -1032,7 +1075,8 @@ def process_single_iteration(
                     
                     if enable_debug:
                         logger.debug(
-                            f"[FUSION] wake={wake_score:.3f} speaker={str(speaker_score)} "
+                            f"[FUSION] raw_wake={wake_score:.3f} norm_wake={normalized_wake:.3f} "
+                            f"raw_speaker={str(speaker_score)} norm_speaker={str(normalized_speaker)} "
                             f"vad={str(vad_score)} quality={quality_metrics['overall_quality']:.3f} "
                             f"noise={quality_metrics['background_noise']:.5f} -> fused={fused_score:.3f}"
                         )
@@ -1040,15 +1084,49 @@ def process_single_iteration(
                         
                     # 5. Check trigger decision threshold
                     fusion_threshold = getattr(voice_config, "FUSION_TRIGGER_THRESHOLD", 0.50)
+
+                    # Voice Debug Mode logging
+                    if getattr(voice_config, "ENABLE_VOICE_DEBUG", False):
+                        wake_threshold = wake_detector.confidence_threshold if wake_detector is not None else getattr(voice_config, "WAKE_WORD_THRESHOLD", 0.30)
+                        speaker_threshold = verifier._threshold if verifier is not None else getattr(voice_config, "speaker_similarity_threshold", 0.75)
+                        decision = "ACCEPTED" if fused_score >= fusion_threshold else "REJECTED"
+                        
+                        reason = "N/A"
+                        if decision == "REJECTED":
+                            if wake_score < wake_threshold:
+                                reason = "Wake-word confidence too low"
+                            elif verifier is not None and speaker_score is not None and speaker_score < speaker_threshold:
+                                reason = "Speaker similarity too low"
+                            else:
+                                reason = "Overall fusion score too low"
+
+                        wake_val = f"{wake_score:.4f}"
+                        speaker_val = f"{speaker_score:.4f}" if speaker_score is not None else "N/A"
+                        vad_val = f"{vad_score:.4f}" if vad_score is not None else "N/A"
+                        quality_val = f"{quality_metrics.get('overall_quality'):.4f}" if quality_metrics else "N/A"
+                        noise_val = f"{quality_metrics.get('background_noise'):.6f}" if quality_metrics else "N/A"
+                        
+                        print("\n--- Voice Debug Mode ---")
+                        print(f"Wake-word model score           : {wake_val}")
+                        print(f"Speaker verification similarity : {speaker_val}")
+                        print(f"Speaker threshold               : {speaker_threshold:.4f}")
+                        print(f"Fusion inputs                   : wake={wake_val}, speaker={speaker_val}, vad={vad_val}, quality={quality_val}, noise={noise_val}")
+                        print(f"Final fusion score              : {fused_score:.4f}")
+                        print(f"Fusion threshold                : {fusion_threshold:.4f}")
+                        print(f"Ambient noise estimate          : {f'{noise_floor:.6f}' if noise_floor is not None else 'N/A'}")
+                        print(f"Decision                        : {decision}")
+                        print(f"Exact reason for rejection      : {reason}")
+                        print("------------------------\n")
+                        
                     if fused_score < fusion_threshold:
                         print_warning(
                             f"Trigger rejected by Confidence Fusion Engine (score {fused_score:.2f} < {fusion_threshold}) — continuing to listen."
                         )
-                        try:
-                            wake_detector.log_false_wake(wake_detector.model_name, wake_score, quality_metrics["background_noise"])
-                        except Exception:
-                            pass
-                        diagnostics.record_false_wake(wake_score, quality_metrics["background_noise"])
+                        # NOTE: Do NOT call wake_detector.log_false_wake() here.
+                        # A fusion rejection means the wake word model DID fire
+                        # correctly but the combined confidence was too low.
+                        # Logging it as a false wake would poison the auto-tuner,
+                        # ratcheting up the threshold and making detection harder.
                         diagnostics.record_audio_quality(quality_metrics)
                         save_state()
                         return "continue"
@@ -1267,11 +1345,9 @@ def process_single_iteration(
     if not text:
         print_warning("I didn't catch that.")
         last_printed_state = VoiceState.VOICE_IDLE
-        if use_wake_word and wake_detector is not None:
-            try:
-                wake_detector.log_false_wake(wake_detector.model_name, 1.0, noise_floor)
-            except Exception:
-                pass
+        # NOTE: Do NOT call log_false_wake here. An empty transcription
+        # (e.g. mic captured silence, user spoke too softly) does not
+        # mean the wake word detection itself was incorrect.
         save_state()
         return "continue"
 
