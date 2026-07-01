@@ -82,6 +82,16 @@ class SessionState:
     current_speaker: Optional[str] = None
     final_transcription: Optional[str] = None
 
+    # Browser integration properties
+    current_tab: Optional[str] = None
+    tab_title: Optional[str] = None
+    current_url: Optional[str] = None
+    domain: Optional[str] = None
+    search_engine: Optional[str] = None
+    navigation_history: List[str] = field(default_factory=list)
+    download_activity: List[Dict[str, Any]] = field(default_factory=list)
+    open_tabs_count: int = 0
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -124,6 +134,20 @@ class SessionState:
             not isinstance(self.recognition_confidence, (int, float)) or not (0.0 <= self.recognition_confidence <= 1.0)
         ):
             raise ValueError("recognition_confidence must be between 0.0 and 1.0.")
+
+        # Validate browser properties
+        if not isinstance(self.open_tabs_count, int) or self.open_tabs_count < 0:
+            raise ValueError("open_tabs_count must be a non-negative integer.")
+        if not isinstance(self.navigation_history, list):
+            raise TypeError("navigation_history must be a list.")
+        for item in self.navigation_history:
+            if not isinstance(item, str):
+                raise TypeError("All items in navigation_history must be strings.")
+        if not isinstance(self.download_activity, list):
+            raise TypeError("download_activity must be a list.")
+        for item in self.download_activity:
+            if not isinstance(item, dict):
+                raise TypeError("All items in download_activity must be dictionaries.")
 
 
 @dataclass
@@ -218,6 +242,12 @@ class WorkingMemory:
                 default_val = False
             elif key == "recognition_confidence":
                 default_val = 0.0
+            elif key == "navigation_history":
+                default_val = []
+            elif key == "download_activity":
+                default_val = []
+            elif key == "open_tabs_count":
+                default_val = 0
             setattr(self.state.session_state, key, default_val)
             self.state.session_state.validate()
             logger.debug(f"Session state attribute reset: '{key}'", extra={"key": key})
@@ -338,6 +368,14 @@ class WorkingMemory:
             recognition_confidence=session_data.get("recognition_confidence", 0.0),
             current_speaker=session_data.get("current_speaker"),
             final_transcription=session_data.get("final_transcription"),
+            current_tab=session_data.get("current_tab"),
+            tab_title=session_data.get("tab_title"),
+            current_url=session_data.get("current_url"),
+            domain=session_data.get("domain"),
+            search_engine=session_data.get("search_engine"),
+            navigation_history=list(session_data.get("navigation_history", [])),
+            download_activity=list(session_data.get("download_activity", [])),
+            open_tabs_count=session_data.get("open_tabs_count", 0),
         )
 
         new_state.additional_properties = dict(snapshot_data.get("additional_properties", {}))

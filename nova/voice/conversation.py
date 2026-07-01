@@ -1786,6 +1786,19 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
     except Exception as e:
         logger.debug(f"Failed to set voice_session_state: {e}")
 
+    try:
+        from nova.browser_manager import BrowserManager
+        BrowserManager._working_memory = state.working_memory
+    except Exception as e:
+        logger.debug(f"Failed to inject working memory to BrowserManager: {e}")
+
+    if dispatcher:
+        for action in dispatcher.values():
+            try:
+                action.working_memory = state.working_memory
+            except Exception:
+                pass
+
     def transition_to(new_state: VoiceState, detail: str = ""):
         state.current_state = new_state
         global _current_state

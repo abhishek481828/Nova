@@ -20,6 +20,21 @@ class ChromiumAction(BaseAction):
         return True
 
     def execute(self, params: Dict[str, Any]) -> str:
+        # Propagate working memory to BrowserManager
+        if hasattr(self, "working_memory") and self.working_memory is not None:
+            BrowserManager._working_memory = self.working_memory
+
+        try:
+            return self._execute_inner(params)
+        finally:
+            # Sync browser state to memory at end of action
+            try:
+                if hasattr(self, "working_memory") and self.working_memory is not None:
+                    BrowserManager.trigger_memory_update()
+            except Exception as e:
+                pass
+
+    def _execute_inner(self, params: Dict[str, Any]) -> str:
         operation = params.get("operation", "open").strip().lower()
 
         # Format URL for open operations

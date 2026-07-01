@@ -36,6 +36,9 @@ class BrowserManager:
     _playwright = None
     _browser = None
     _browser_context = None
+    
+    # Injected Working Memory
+    _working_memory = None
 
     @classmethod
     def is_process_alive(cls) -> bool:
@@ -642,7 +645,9 @@ class BrowserManager:
         if not browser.contexts:
             logger.warning("No active browser contexts found. Creating a fallback context.")
             try:
-                return browser.new_context()
+                ctx = browser.new_context()
+                cls._attach_context_state_listeners(ctx)
+                return ctx
             except Exception as e:
                 raise Exception(
                     f"No active browser contexts found, and failed to create a fallback context: {e}"
@@ -654,6 +659,7 @@ class BrowserManager:
             try:
                 # Accessing .pages validates that the context is active and not closed
                 _ = context.pages
+                cls._attach_context_state_listeners(context)
                 return context
             except Exception:
                 continue
@@ -661,7 +667,9 @@ class BrowserManager:
         # Fallback: if all existing contexts are invalid/closed, try to create a new one
         logger.warning("All existing browser contexts are inactive or closed. Creating a fallback context.")
         try:
-            return browser.new_context()
+            ctx = browser.new_context()
+            cls._attach_context_state_listeners(ctx)
+            return ctx
         except Exception as e:
             raise Exception(
                 f"No usable browser contexts found, and failed to create a fallback context: {e}"
@@ -793,6 +801,197 @@ class BrowserManager:
             page.bring_to_front()
         except Exception:
             pass
+
+    @classmethod
+    def _attach_context_state_listeners(cls, context) -> None:
+        """Registers automatic event listeners on the BrowserContext."""
+        if getattr(context, "_state_listeners_attached", False):
+            return
+        try:
+            context._state_listeners_attached = True
+            
+            # Listen for new page creation
+            def on_page(page):
+                cls._attach_page_state_listeners(page)
+                cls.trigger_memory_update()
+            context.on("page", on_page)
+
+            # Listen for downloads
+            def on_download(download):
+                cls._handle_download(download)
+            context.on("download", on_download)
+
+            # Attach to existing pages
+            for page in context.pages:
+                cls._attach_page_state_listeners(page)
+                
+            logger.debug("Attached state listeners to Playwright BrowserContext.")
+        except Exception as e:
+            logger.debug(f"Failed to attach context state listeners: {e}")
+
+    @classmethod
+    def _attach_page_state_listeners(cls, page) -> None:
+        """Registers event-driven triggers on a Playwright Page."""
+        if getattr(page, "_state_listeners_attached", False):
+            return
+        try:
+            page._state_listeners_attached = True
+            
+            # Hook navigation and lifecycle events
+            page.on("framenavigated", lambda frame: cls.trigger_memory_update())
+            page.on("load", lambda p: cls.trigger_memory_update())
+            page.on("close", lambda p: cls.trigger_memory_update())
+        except Exception as e:
+            logger.debug(f"Failed to attach page state listeners: {e}")
+
+    @classmethod
+    def _handle_download(cls, download) -> None:
+        """Safely records download events in working memory."""
+        logger.info(f"Detected browser download event: {download.suggested_filename}")
+        if cls._working_memory is None:
+            return
+        try:
+            downloads = list(cls._working_memory.get("download_activity") or [])
+            # Avoid duplicate writes
+            url = download.url
+            filename = download.suggested_filename
+            dup = any(d.get("url") == url and d.get("filename") == filename for d in downloads)
+            if not dup:
+                downloads.append({
+                    "filename": filename,
+                    "url": url,
+                    "timestamp": time.time()
+                })
+                cls._working_memory.set("download_activity", downloads)
+                logger.info(f"Recorded download in Working Memory: {filename}")
+        except Exception as e:
+            logger.debug(f"Failed to record download activity in Working Memory: {e}")
+
+    @classmethod
+    def trigger_memory_update(cls) -> None:
+        """Callbacks to update Working Memory dynamically when browser state shifts."""
+        if cls._working_memory is None:
+            return
+        try:
+            cls.update_browser_memory_state(cls._working_memory)
+        except Exception as e:
+            logger.debug(f"Failed to trigger browser memory update: {e}")
+
+    @classmethod
+    def update_browser_memory_state(cls, working_memory) -> None:
+        """
+        Queries Playwright context, extracts pages, title, URL, tabs count, domain,
+        search engine query details, and updates working memory attributes.
+        """
+        from urllib.parse import urlparse, parse_qs
+        
+        if not cls.is_browser_running():
+            # Reset values if browser is closed
+            working_memory.set("current_browser", None)
+            working_memory.set("current_tab", None)
+            working_memory.set("tab_title", None)
+            working_memory.set("current_url", None)
+            working_memory.set("domain", None)
+            working_memory.set("search_engine", None)
+            working_memory.set("current_search_query", None)
+            working_memory.set("open_tabs_count", 0)
+            return
+
+        try:
+            browser = cls.get_browser()
+            if browser is None or not browser.is_connected():
+                return
+            context = cls.get_persistent_context(browser)
+            pages = context.pages
+        except Exception:
+            return
+        
+        # Determine open tabs count
+        open_tabs_count = len(pages)
+        working_memory.set("open_tabs_count", open_tabs_count)
+
+        # Get active page
+        try:
+            from nova.browser_helper import find_active_page
+            active_page = find_active_page(context)
+        except Exception:
+            active_page = pages[0] if pages else None
+        
+        if active_page:
+            # Active browser
+            working_memory.set("current_browser", "Chromium")
+            
+            # Tab title and URL
+            try:
+                title = active_page.title()
+                url = active_page.url
+            except Exception:
+                return
+            
+            working_memory.set("tab_title", title)
+            working_memory.set("current_url", url)
+            
+            # Parse domain and query
+            domain = None
+            search_engine = None
+            search_query = None
+            
+            if url and url != "about:blank":
+                parsed = urlparse(url)
+                domain = parsed.netloc
+                working_memory.set("domain", domain)
+                
+                # Set active tab identifier (using url hash)
+                working_memory.set("current_tab", f"tab_{hash(url) & 0xffff}")
+                
+                # Check search engines
+                domain_lower = domain.lower()
+                if "google." in domain_lower:
+                    search_engine = "Google"
+                    queries = parse_qs(parsed.query)
+                    if "q" in queries:
+                        search_query = queries["q"][0]
+                elif "bing." in domain_lower:
+                    search_engine = "Bing"
+                    queries = parse_qs(parsed.query)
+                    if "q" in queries:
+                        search_query = queries["q"][0]
+                elif "duckduckgo." in domain_lower:
+                    search_engine = "DuckDuckGo"
+                    queries = parse_qs(parsed.query)
+                    if "q" in queries:
+                        search_query = queries["q"][0]
+                elif "yahoo." in domain_lower:
+                    search_engine = "Yahoo"
+                    queries = parse_qs(parsed.query)
+                    if "p" in queries:
+                        search_query = queries["p"][0]
+                        
+                working_memory.set("search_engine", search_engine)
+                working_memory.set("current_search_query", search_query)
+                
+                # History Context
+                try:
+                    history = list(working_memory.get("navigation_history") or [])
+                    # Avoid duplicate history entries
+                    if not history or history[-1] != url:
+                        history.append(url)
+                        working_memory.set("navigation_history", history)
+                except Exception as hist_err:
+                    logger.debug(f"History logging failed: {hist_err}")
+            else:
+                working_memory.set("domain", None)
+                working_memory.set("current_tab", "about:blank")
+                working_memory.set("search_engine", None)
+                working_memory.set("current_search_query", None)
+        else:
+            working_memory.set("current_browser", None)
+            working_memory.set("current_tab", None)
+            working_memory.set("tab_title", None)
+            working_memory.set("current_url", None)
+            working_memory.set("domain", None)
+            working_memory.set("search_engine", None)
+            working_memory.set("current_search_query", None)
 
 # Register the atexit hook to cleanly close the persistent Playwright CDP connection on exit
 atexit.register(BrowserManager.close_connection)
