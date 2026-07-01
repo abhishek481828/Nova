@@ -110,15 +110,14 @@ def correct_query_spelling(query: str) -> str:
     if not query:
         return query
 
-    # Clean leading "nova ❯", "nova:", "nova", and prompt symbols "❯", ">"
-    cleaned = query
-    while True:
-        prev = cleaned
-        cleaned = re.sub(r'^(nova\b|❯|>|:|\s)+', '', cleaned, flags=re.IGNORECASE).strip()
-        if cleaned == prev:
-            break
-    if cleaned:
-        query = cleaned
+    # Run modular NLP Preprocessing Pipeline
+    from nova.nlp_pipeline import NlpPipeline
+    pipeline = NlpPipeline()
+    nlp_res = pipeline.process(query)
+    query = nlp_res["corrected"]
+    
+    if nlp_res["corrections"]:
+        last_correction_applied = True
 
     query_lower = query.lower()
     
@@ -160,40 +159,7 @@ def correct_query_spelling(query: str) -> str:
         print_info("Mapping query to system suspend action...")
         return "suspend system"
 
-    # Combine static keywords with dynamic app names from apps.json
-    all_valid_words = VALID_WORDS.union(load_app_names())
-
-    # We match alphanumeric words of length >= 3
-    words_iter = list(re.finditer(r'\b[a-zA-Z]{3,}\b', query))
-    
-    corrected_query = query
-    # Iterate in reverse to keep index offsets accurate during replacement
-    for match in reversed(words_iter):
-        word = match.group(0)
-        word_lower = word.lower()
-        
-        # Skip if already a correct word
-        if word_lower in all_valid_words:
-            continue
-            
-        # Check if the word matches close terms in the dictionary
-        matches = difflib.get_close_matches(word_lower, all_valid_words, n=1, cutoff=0.8)
-        if matches:
-            closest_match = matches[0]
-            
-            # Match original case
-            replacement = closest_match
-            if word.istitle():
-                replacement = closest_match.capitalize()
-            elif word.isupper():
-                replacement = closest_match.upper()
-                
-            print_info(f"Correcting typo '{word}' to '{replacement}'...")
-            
-            start, end = match.span()
-            corrected_query = corrected_query[:start] + replacement + corrected_query[end:]
-            
-    return corrected_query
+    return query
 
 def correct_action_data(action_data: Dict[str, Any], query: str = "") -> Dict[str, Any]:
     """
