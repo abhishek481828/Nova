@@ -2,7 +2,7 @@
 Long-Term Memory (LTM) subsystem for Nova AI Assistant.
 Manages persistent memories independent of Working Memory.
 Supports structured storage, metadata tracking, SQLite backend, indexes, schema migrations,
-and semantic memory category classification.
+semantic memory category classification, and query-based memory retrieval.
 """
 
 from __future__ import annotations
@@ -200,6 +200,19 @@ class BaseMemoryStorage(ABC):
         pass
 
     @abstractmethod
+    def query_memories(
+        self,
+        category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        keywords: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        active_only: bool = True
+    ) -> List[Memory]:
+        """Queries stored memories using structural filter attributes."""
+        pass
+
+    @abstractmethod
     def close(self) -> None:
         """Closes any open backend storage connections."""
         pass
@@ -389,14 +402,46 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
                 raise e
 
     def list_all(self, category: Optional[str] = None, active_only: bool = True) -> List[Memory]:
+        return self.query_memories(category=category, active_only=active_only)
+
+    def query_memories(
+        self,
+        category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        keywords: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        active_only: bool = True
+    ) -> List[Memory]:
         query = "SELECT * FROM long_term_memories WHERE 1=1"
         params: List[Any] = []
 
         if category is not None:
             query += " AND category = ?"
             params.append(category)
+
         if active_only:
             query += " AND active = 1"
+
+        if title is not None:
+            query += " AND title LIKE ?"
+            params.append(f"%{title}%")
+
+        if tags is not None:
+            for tag in tags:
+                query += " AND tags LIKE ?"
+                params.append(f'%"{tag}"%')
+
+        if keywords is not None:
+            for kw in keywords:
+                query += " AND (title LIKE ? OR content LIKE ?)"
+                params.extend([f"%{kw}%", f"%{kw}%"])
+
+        if metadata is not None:
+            for key, val in metadata.items():
+                if key in ("importance", "confidence", "source", "version", "access_count"):
+                    query += f" AND {key} = ?"
+                    params.append(val)
 
         with self._lock:
             cursor = self.conn.cursor()
@@ -408,7 +453,7 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
             try:
                 memories.append(self._row_to_memory(row))
             except Exception as e:
-                logger.error(f"Failed to parse memory row: {e}")
+                logger.error(f"Failed to parse query memory row: {e}")
         return memories
 
     def close(self) -> None:
@@ -417,14 +462,94 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
         logger.info("SQLite connection closed.")
 
 
+class BaseSemanticRetriever(ABC):
+    """
+    Abstract interface for future Vector/Semantic search implementations.
+    """
+    @abstractmethod
+    def retrieve_semantic(self, query: str, limit: int = 5) -> List[Memory]:
+        pass
+
+
+class MemoryRetriever:
+    """
+    Modular retrieval engine supporting structural search and semantic overrides.
+    """
+    def __init__(self, storage: BaseMemoryStorage, semantic_backend: Optional[BaseSemanticRetriever] = None) -> None:
+        self.storage = storage
+        self.semantic_backend = semantic_backend
+        logger.info("Memory Retriever initialized.")
+
+    def retrieve(
+        self,
+        query: Optional[str] = None,
+        category: Optional[str] = None,
+        tags: Optional[List[str]] = None,
+        keywords: Optional[List[str]] = None,
+        title: Optional[str] = None,
+        metadata: Optional[Dict[str, Any]] = None,
+        active_only: bool = True,
+        use_semantic: bool = True
+    ) -> List[Memory]:
+        """
+        Executes query retrieval across tags, keywords, categories, and titles.
+        If a query string and semantic backend are provided, attempts semantic search first.
+        """
+        # 1. Check if semantic search is requested and backend is registered
+        if query and use_semantic and self.semantic_backend:
+            try:
+                logger.info(f"Executing semantic retrieval for query: '{query}'")
+                semantic_results = self.semantic_backend.retrieve_semantic(query)
+                
+                # Apply post-retrieval structural filters if needed
+                filtered_results = []
+                for mem in semantic_results:
+                    if active_only and not mem.active:
+                        continue
+                    if category and mem.category != category:
+                        continue
+                    if tags and not all(t in mem.tags for t in tags):
+                        continue
+                    if title and title.lower() not in mem.title.lower():
+                        continue
+                    if metadata:
+                        match = True
+                        for k, v in metadata.items():
+                            if getattr(mem, k, None) != v:
+                                match = False
+                                break
+                        if not match:
+                            continue
+                    filtered_results.append(mem)
+                return filtered_results
+            except Exception as e:
+                logger.error(f"Semantic search failed: {e}. Falling back to standard query.")
+
+        # 2. Standard index-based/keyword fallback query
+        return self.storage.query_memories(
+            category=category,
+            tags=tags,
+            keywords=keywords,
+            title=title,
+            metadata=metadata,
+            active_only=active_only
+        )
+
+
 class LongTermMemoryManager:
     """
-    Coordinates LTM operations using an injected storage adapter and classifier service.
+    Coordinates LTM operations using injected storage, classifier, and retrieval components.
     """
 
-    def __init__(self, storage: BaseMemoryStorage, classifier: Optional[MemoryClassifier] = None) -> None:
+    def __init__(
+        self,
+        storage: BaseMemoryStorage,
+        classifier: Optional[MemoryClassifier] = None,
+        retriever: Optional[MemoryRetriever] = None
+    ) -> None:
         self.storage = storage
         self.classifier = classifier or MemoryClassifier()
+        self.retriever = retriever or MemoryRetriever(self.storage)
         logger.info("Long-Term Memory Manager initialized.")
 
     def create_memory(

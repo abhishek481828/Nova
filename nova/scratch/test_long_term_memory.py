@@ -284,5 +284,56 @@ class TestLongTermMemory(unittest.TestCase):
         
         self.assertEqual(classifier.classify_text("Generic sentence that falls back"), "knowledge")
 
+    def test_retrieval_structural_filters(self):
+        m1 = self.manager.create_memory("facts", "Abhishek Profile Birthday", "June 12", importance=4, tags=["personal", "date"])
+        m2 = self.manager.create_memory("preferences", "Abhishek preference food", "pizza is great", importance=2, tags=["food"])
+        m3 = self.manager.create_memory("goals", "Run Marathon", "want to complete marathon", importance=5, tags=["health", "personal"])
+        
+        # 1. Search by category
+        res = self.manager.retriever.retrieve(category="preferences")
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0].id, m2.id)
+        
+        # 2. Search by tag
+        res = self.manager.retriever.retrieve(tags=["personal"])
+        self.assertEqual(len(res), 2)
+        
+        # 3. Search by keywords
+        res = self.manager.retriever.retrieve(keywords=["Marathon"])
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0].id, m3.id)
+        
+        # 4. Search by title
+        res = self.manager.retriever.retrieve(title="Profile")
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0].id, m1.id)
+        
+        # 5. Search by metadata
+        res = self.manager.retriever.retrieve(metadata={"importance": 5})
+        self.assertEqual(len(res), 1)
+        self.assertEqual(res[0].id, m3.id)
+
+    def test_retrieval_semantic_delegation(self):
+        from nova.long_term_memory import BaseSemanticRetriever
+        
+        m1 = Memory(id="sem-1", category="goals", title="Aim high", content="Climb Mt Everest", importance=5, tags=["climbing"])
+        m2 = Memory(id="sem-2", category="facts", title="Trivia facts", content="Everest is tall", importance=3, tags=["climbing"])
+        
+        mock_backend = MagicMock(spec=BaseSemanticRetriever)
+        mock_backend.retrieve_semantic.return_value = [m1, m2]
+        
+        # Inject semantic backend
+        self.manager.retriever.semantic_backend = mock_backend
+        
+        # 1. Verify semantic search is called
+        res = self.manager.retriever.retrieve(query="Everest info")
+        mock_backend.retrieve_semantic.assert_called_once_with("Everest info")
+        self.assertEqual(len(res), 2)
+        
+        # 2. Verify post-retrieval structural filters (e.g. category facts filter on semantic yields)
+        res_facts = self.manager.retriever.retrieve(query="Everest info", category="facts")
+        self.assertEqual(len(res_facts), 1)
+        self.assertEqual(res_facts[0].id, m2.id)
+
 if __name__ == "__main__":
     unittest.main()
