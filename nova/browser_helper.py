@@ -174,93 +174,31 @@ def smart_fill(page: Page, selector: str, value: str) -> None:
     Fill a form field robustly, handling both standard inputs and
     contenteditable/div-based inputs (common in modern web apps).
     """
-    # Check original selector visibility
-    primary_locator = page.locator(selector)
-    visible_locator = None
-    try:
-        for i in range(primary_locator.count()):
-            el = primary_locator.nth(i)
-            if el.is_visible():
-                visible_locator = el
-                break
-    except Exception:
-        pass
-
-    # If not found or visible, check smart generic fallbacks based on context
-    if visible_locator is None:
-        fallbacks = []
-        sel_lower = selector.lower()
-        if "prompt" in sel_lower or "chat" in sel_lower or "textarea" in sel_lower:
-            fallbacks.extend([
-                "textarea",
-                "div[contenteditable='true']",
-                "[contenteditable='true']",
-                "input#prompt-textarea",
-                "textarea#prompt-textarea",
-                "textarea[placeholder*='ChatGPT']",
-                "textarea[placeholder*='message']",
-                "textarea[placeholder*='Message']"
-            ])
-        elif "search" in sel_lower:
-            fallbacks.extend([
-                "input[type='search']",
-                "input[name='q']",
-                "input[name='search']",
-                "input[placeholder*='search']",
-                "input[placeholder*='Search']",
-                "input"
-            ])
-        elif "user" in sel_lower or "email" in sel_lower or "login" in sel_lower:
-            fallbacks.extend([
-                "input[type='email']",
-                "input[type='text'][name*='user']",
-                "input[name*='email']",
-                "input[placeholder*='username']",
-                "input[placeholder*='Username']",
-                "input[placeholder*='email']",
-                "input[placeholder*='Email']"
-            ])
-        elif "pass" in sel_lower:
-            fallbacks.extend([
-                "input[type='password']",
-                "input[name*='password']",
-                "input[placeholder*='password']",
-                "input[placeholder*='Password']"
-            ])
-
-        for fb_selector in fallbacks:
-            fb_locator = page.locator(fb_selector)
-            try:
-                for i in range(fb_locator.count()):
-                    el = fb_locator.nth(i)
-                    if el.is_visible():
-                        visible_locator = el
-                        break
-                if visible_locator is not None:
-                    break
-            except Exception:
-                pass
-
-    if visible_locator is None:
-        visible_locator = primary_locator.first
-
-    try:
-        tag = visible_locator.evaluate("el => el.tagName").lower()
-        is_editable = visible_locator.evaluate(
+    from nova.browser_interaction_helper import BrowserInteractionHelper
+    
+    def do_fill(loc):
+        tag = loc.evaluate("el => el.tagName").lower()
+        is_editable = loc.evaluate(
             "el => el.contentEditable === 'true' || "
             "el.getAttribute('contenteditable') === 'true'"
         )
-    except Exception as e:
-        raise Exception(f"Failed to inspect field '{selector}': {e}")
-
-    try:
         if tag == "div" or is_editable:
-            type_into_field(page, visible_locator, value)
+            type_into_field(page, loc, value)
         else:
-            visible_locator.fill(str(value))
+            loc.fill("")
+            loc.type(str(value))
+            
+    try:
+        BrowserInteractionHelper.execute_interaction(
+            page=page,
+            query=selector,
+            action_type="type",
+            action_fn=do_fill,
+            max_retries=3
+        )
     except Exception as e:
         try:
-            type_into_field(page, visible_locator, value)
+            type_into_field(page, page.locator(selector).first, value)
         except Exception as e2:
             raise Exception(f"Failed to fill field '{selector}': {e} (Fallback failed: {e2})")
 
@@ -388,6 +326,7 @@ def handle_fill_form(context: BrowserContext, params: dict) -> dict:
 
 
 def handle_click(context: BrowserContext, params: dict) -> dict:
+    from nova.browser_interaction_helper import BrowserInteractionHelper
     page = find_active_page(context)
     focus_page(page)
 
@@ -396,7 +335,13 @@ def handle_click(context: BrowserContext, params: dict) -> dict:
         return {"status": "error", "message": "No selector provided for click operation"}
 
     try:
-        page.click(selector, timeout=15000)
+        BrowserInteractionHelper.execute_interaction(
+            page=page,
+            query=selector,
+            action_type="click",
+            action_fn=lambda loc: loc.click(timeout=5000),
+            max_retries=3
+        )
     except Exception as e:
         url_lower = (page.url or "").lower()
         if "chatgpt.com" in url_lower and any(k in selector.lower() for k in ("submit", "send", "message")):
@@ -485,24 +430,27 @@ class ChatGPTHandler(WebsiteContextHandler):
         return any(k in query.lower() for k in ("ask", "prompt", "tell", "write", "say", "type", "send", "chatgpt", "gpt"))
 
     def handle(self, page: Page, query: str, params: dict) -> dict:
+        from nova.browser_interaction_helper import BrowserInteractionHelper
         prompt_text = params.get("value") or params.get("query") or query
         prompt_text = re.sub(r'^(ask|prompt|tell|write|say|type|send)\s+(chatgpt|gpt)?\s*', '', prompt_text, flags=re.IGNORECASE).strip()
         
         selector = "textarea#prompt-textarea"
-        try:
-            page.wait_for_selector(selector, timeout=10000)
-        except Exception:
-            try:
-                page.wait_for_selector("textarea", timeout=5000)
-                selector = "textarea"
-            except Exception:
-                try:
-                    page.wait_for_selector("[contenteditable='true']", timeout=5000)
-                    selector = "[contenteditable='true']"
-                except Exception:
-                    pass
         smart_fill(page, selector, prompt_text)
-        page.keyboard.press("Enter")
+        
+        def do_click(loc):
+            return loc.click(timeout=3000)
+            
+        try:
+            BrowserInteractionHelper.execute_interaction(
+                page=page,
+                query="[aria-label='Send prompt'], button[data-testid*='send'], Send",
+                action_type="click",
+                action_fn=do_click,
+                max_retries=2
+            )
+        except Exception:
+            page.keyboard.press("Enter")
+            
         return {"status": "success", "message": f"Sent prompt to ChatGPT: '{prompt_text}'"}
 
 
@@ -520,8 +468,7 @@ class GmailHandler(WebsiteContextHandler):
         search_query = re.sub(r'^(search|find|filter)\s+(email|emails|mail|gmail)?\s*', '', search_query, flags=re.IGNORECASE).strip()
         
         selector = "input[name='q']"
-        page.wait_for_selector(selector, timeout=10000)
-        type_into_field(page, page.locator(selector), search_query)
+        smart_fill(page, selector, search_query)
         page.keyboard.press("Enter")
         wait_for_page_ready(page)
         return {"status": "success", "message": f"Searched Gmail for: '{search_query}'"}
@@ -537,13 +484,22 @@ class GoogleDocsHandler(WebsiteContextHandler):
         return any(k in query.lower() for k in ("type", "write", "insert", "append", "text", "doc"))
 
     def handle(self, page: Page, query: str, params: dict) -> dict:
+        from nova.browser_interaction_helper import BrowserInteractionHelper
         text_to_type = params.get("value") or params.get("query") or query
         text_to_type = re.sub(r'^(type|write|insert|append)\s+(text|into doc|doc)?\s*', '', text_to_type, flags=re.IGNORECASE).strip()
         
         selector = ".docs-texteventtarget"
-        page.wait_for_selector(selector, timeout=10000)
-        page.focus(selector)
-        page.keyboard.type(text_to_type)
+        def do_type(loc):
+            loc.focus()
+            page.keyboard.type(text_to_type)
+            
+        BrowserInteractionHelper.execute_interaction(
+            page=page,
+            query=selector,
+            action_type="type",
+            action_fn=do_type,
+            max_retries=3
+        )
         return {"status": "success", "message": f"Typed text into Google Doc: '{text_to_type}'"}
 
 
@@ -557,23 +513,24 @@ class GitHubHandler(WebsiteContextHandler):
         return any(k in query.lower() for k in ("search", "find", "lookup", "repo", "repository", "github"))
 
     def handle(self, page: Page, query: str, params: dict) -> dict:
+        from nova.browser_interaction_helper import BrowserInteractionHelper
         search_query = params.get("query") or params.get("value") or query
         search_query = re.sub(r'^(search|find|lookup|open)\s+(repo|repository|github)?\s*', '', search_query, flags=re.IGNORECASE).strip()
         
         try:
             if not page.locator("input#query-builder-test").is_visible():
-                page.click("button.header-search-button", timeout=3000)
+                BrowserInteractionHelper.execute_interaction(
+                    page=page,
+                    query="button.header-search-button, Search",
+                    action_type="click",
+                    action_fn=lambda loc: loc.click(timeout=3000),
+                    max_retries=2
+                )
         except Exception:
             pass
         
         selector = "input#query-builder-test"
-        try:
-            page.wait_for_selector(selector, timeout=5000)
-        except Exception:
-            selector = "input[name='q']"
-            page.wait_for_selector(selector, timeout=5000)
-            
-        type_into_field(page, page.locator(selector), search_query)
+        smart_fill(page, selector, search_query)
         page.keyboard.press("Enter")
         wait_for_page_ready(page)
         return {"status": "success", "message": f"Searched GitHub for: '{search_query}'"}
@@ -596,13 +553,7 @@ class GoogleSearchHandler(WebsiteContextHandler):
         search_query = re.sub(r'^(search|find|lookup|look up|google)\s*', '', search_query, flags=re.IGNORECASE).strip()
         
         selector = "textarea[name='q']"
-        try:
-            page.wait_for_selector(selector, timeout=5000)
-        except Exception:
-            selector = "input[name='q']"
-            page.wait_for_selector(selector, timeout=5000)
-            
-        type_into_field(page, page.locator(selector), search_query)
+        smart_fill(page, selector, search_query)
         page.keyboard.press("Enter")
         wait_for_page_ready(page)
         return {"status": "success", "message": f"Searched Google for: '{search_query}'"}

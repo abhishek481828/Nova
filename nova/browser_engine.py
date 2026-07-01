@@ -923,6 +923,13 @@ class BrowserAutomationEngine:
         
     def resolve_locator(self, page: Page, selector_or_query: str, action_type: str) -> Locator:
         """Resolves raw CSS/XPath or uses semantic Element Detection Engine."""
+        from nova.browser_interaction_helper import BrowserInteractionHelper
+        locs = BrowserInteractionHelper.get_alternative_locators(page, selector_or_query, action_type)
+        if locs:
+            active = BrowserInteractionHelper.select_active_element(locs)
+            if active is not None:
+                return active
+            return locs[0]
         return self._detector.detect_element(page, selector_or_query, action_type)
         
     def recover_browser(self) -> None:
@@ -951,60 +958,24 @@ class BrowserAutomationEngine:
         max_retries: int = 3
     ) -> Any:
         """Runs the interaction function with automatic load waiting, checks, and retries."""
+        from nova.browser_interaction_helper import BrowserInteractionHelper
         page = self.get_active_page()
         
+        # Recover browser if closed/disconnected
         try:
-            page.wait_for_load_state("domcontentloaded", timeout=3000)
-            page.wait_for_load_state("load", timeout=3000)
+            if not self.is_browser_running() or not self.get_browser_instance().is_connected():
+                self.recover_browser()
+                page = self.get_active_page()
         except Exception:
             pass
             
-        try:
-            page.wait_for_load_state("networkidle", timeout=3000)
-        except Exception:
-            pass
-            
-        last_exception = None
-        
-        for attempt in range(1, max_retries + 1):
-            try:
-                locator = self.resolve_locator(page, selector_or_query, action_type)
-                
-                locator.first.wait_for(state="attached", timeout=max(1000.0, timeout / max_retries))
-                locator.first.wait_for(state="visible", timeout=max(1000.0, timeout / max_retries))
-                
-                if locator.first.is_disabled(timeout=1000):
-                    raise BrowserActionException(f"Element '{selector_or_query}' is disabled")
-                    
-                if action_type == "type" and not locator.first.is_editable(timeout=1000):
-                    raise BrowserActionException(f"Element '{selector_or_query}' is not editable")
-                    
-                return action_fn(locator.first)
-            except Exception as e:
-                last_exception = e
-                # Re-connect browser if crashed/closed
-                err_msg = str(e).lower()
-                if any(kw in err_msg for kw in ("closed", "disconnected", "target closed", "connection lost", "crashed")):
-                    try:
-                        self.recover_browser()
-                        page = self.get_active_page()
-                    except Exception:
-                        pass
-                try:
-                    locator = self.resolve_locator(page, selector_or_query, action_type)
-                    locator.first.scroll_into_view_if_needed(timeout=2000)
-                    locator.first.focus(timeout=2000)
-                except Exception:
-                    pass
-                
-                try:
-                    page.wait_for_timeout(500)
-                except Exception:
-                    pass
-                    
-        raise BrowserActionException(
-            f"Interaction '{action_type}' on '{selector_or_query}' failed after {max_retries} attempts. "
-            f"Last error: {last_exception}"
+        return BrowserInteractionHelper.execute_interaction(
+            page=page,
+            query=selector_or_query,
+            action_type=action_type,
+            action_fn=action_fn,
+            max_retries=max_retries,
+            initial_delay=0.5
         )
         
     def _attach_page_listeners(self, page: Page) -> None:
