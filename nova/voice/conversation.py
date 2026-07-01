@@ -918,6 +918,15 @@ def process_single_iteration(
         return "continue"
 
     # Lazily initialize voice loop components on activation
+    try:
+        state.working_memory.set("listening_state", "idle")
+        state.working_memory.set("wake_word_activation", False)
+        state.working_memory.set("recognition_confidence", 0.0)
+        state.working_memory.set("current_speaker", None)
+        state.working_memory.set("final_transcription", None)
+    except Exception as e:
+        logger.debug(f"Failed to reset turn memory: {e}")
+
     if _current_state == VoiceState.VOICE_IDLE:
         # 1. Load STT Provider
         if stt_provider is None:
@@ -1207,6 +1216,15 @@ def process_single_iteration(
                     )
                     diagnostics.record_audio_quality(quality_metrics)
                     diagnostics.record_noise_sample(quality_metrics["background_noise"])
+
+                    # Update Working Memory with trigger details
+                    try:
+                        state.working_memory.set("wake_word_activation", True)
+                        state.working_memory.set("listening_state", "listening")
+                        state.working_memory.set("recognition_confidence", fused_score)
+                        state.working_memory.set("current_speaker", "verified" if (speaker_score is not None and verifier is not None and speaker_score >= verifier._threshold) else "unknown")
+                    except Exception as e:
+                        logger.debug(f"Failed to update working memory after wake: {e}")
                 # ─────────────────────────────────────────────────────────────
 
                 if enable_debug:
@@ -1238,6 +1256,12 @@ def process_single_iteration(
         else:
             # Push-to-Talk fallback (no wake engine)
             transition_to(VoiceState.PUSH_TO_TALK)
+            try:
+                state.working_memory.set("listening_state", "listening")
+                state.working_memory.set("recognition_confidence", 1.0)
+                state.working_memory.set("current_speaker", "verified")
+            except Exception as e:
+                logger.debug(f"Failed to set PTT memory properties: {e}")
             try:
                 input("Press ENTER to record a command...")
             except KeyboardInterrupt:
@@ -1411,6 +1435,10 @@ def process_single_iteration(
         return "continue"
 
     print_success(f'Heard: "{text}"')
+    try:
+        state.working_memory.set("final_transcription", text)
+    except Exception as e:
+        logger.debug(f"Failed to set final_transcription: {e}")
 
     # exit-phrase shortcut
     if text.lower().strip().rstrip(".") in ("exit", "quit", "goodbye"):
@@ -1753,6 +1781,10 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
     global _mic_healthy, _wake_healthy, _stt_healthy, _deferred_deactivate
 
     state = VoiceLoopState(working_memory=working_memory)
+    try:
+        state.working_memory.set("voice_session_state", "active")
+    except Exception as e:
+        logger.debug(f"Failed to set voice_session_state: {e}")
 
     def transition_to(new_state: VoiceState, detail: str = ""):
         state.current_state = new_state
@@ -1827,4 +1859,9 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
             pass
 
     print_info("Voice Mode Closed")
+    try:
+        state.working_memory.set("voice_session_state", "inactive")
+        state.working_memory.set("listening_state", "idle")
+    except Exception as e:
+        logger.debug(f"Failed to reset voice properties: {e}")
     return "menu"

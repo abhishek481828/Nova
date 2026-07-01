@@ -74,6 +74,14 @@ class SessionState:
     previous_assistant_reply: Optional[str] = None
     conversation_topic: Optional[str] = None
 
+    # Voice pipeline properties
+    voice_session_state: Optional[str] = "inactive"
+    listening_state: Optional[str] = "idle"
+    wake_word_activation: Optional[bool] = False
+    recognition_confidence: Optional[float] = 0.0
+    current_speaker: Optional[str] = None
+    final_transcription: Optional[str] = None
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -102,6 +110,20 @@ class SessionState:
         for item in self.current_conversation:
             if not isinstance(item, Interaction):
                 raise TypeError("All items in current_conversation must be Interaction objects.")
+
+        # Validate voice integration properties
+        if self.voice_session_state not in {None, "active", "inactive", "idle"}:
+            raise ValueError(
+                f"voice_session_state must be one of {{'active', 'inactive', 'idle'}}, got '{self.voice_session_state}'"
+            )
+        if self.listening_state not in {None, "idle", "listening"}:
+            raise ValueError(
+                f"listening_state must be one of {{'idle', 'listening'}}, got '{self.listening_state}'"
+            )
+        if self.recognition_confidence is not None and (
+            not isinstance(self.recognition_confidence, (int, float)) or not (0.0 <= self.recognition_confidence <= 1.0)
+        ):
+            raise ValueError("recognition_confidence must be between 0.0 and 1.0.")
 
 
 @dataclass
@@ -188,6 +210,14 @@ class WorkingMemory:
                 default_val = f"session_{uuid.uuid4()}"
             elif key == "session_start_time":
                 default_val = time.time()
+            elif key == "voice_session_state":
+                default_val = "inactive"
+            elif key == "listening_state":
+                default_val = "idle"
+            elif key == "wake_word_activation":
+                default_val = False
+            elif key == "recognition_confidence":
+                default_val = 0.0
             setattr(self.state.session_state, key, default_val)
             self.state.session_state.validate()
             logger.debug(f"Session state attribute reset: '{key}'", extra={"key": key})
@@ -302,6 +332,12 @@ class WorkingMemory:
             previous_command=session_data.get("previous_command"),
             previous_assistant_reply=session_data.get("previous_assistant_reply"),
             conversation_topic=session_data.get("conversation_topic"),
+            voice_session_state=session_data.get("voice_session_state", "inactive"),
+            listening_state=session_data.get("listening_state", "idle"),
+            wake_word_activation=session_data.get("wake_word_activation", False),
+            recognition_confidence=session_data.get("recognition_confidence", 0.0),
+            current_speaker=session_data.get("current_speaker"),
+            final_transcription=session_data.get("final_transcription"),
         )
 
         new_state.additional_properties = dict(snapshot_data.get("additional_properties", {}))
