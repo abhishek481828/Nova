@@ -22,10 +22,10 @@ class TestPlanner(unittest.TestCase):
         
         self.assertTrue(result.success)
         self.assertIsNotNone(result.plan)
-        self.assertEqual(len(result.plan.steps), 2)
-        self.assertEqual(result.plan.steps[0].action_type, "chromium_action")
+        self.assertEqual(len(result.plan.steps), 3)
         self.assertEqual(result.plan.steps[1].action_type, "chromium_action")
-        self.assertIn(result.plan.steps[0].id, result.plan.steps[1].dependencies)
+        self.assertEqual(result.plan.steps[2].action_type, "chromium_action")
+        self.assertIn(result.plan.steps[1].id, result.plan.steps[2].dependencies)
 
     def test_invalid_goals(self):
         # 1. Empty goal validation

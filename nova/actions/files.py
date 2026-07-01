@@ -19,7 +19,14 @@ class FileAction(BaseAction):
 
         path = os.path.abspath(os.path.expanduser(path))
 
-        if operation == "create":
+        if operation == "create_directory":
+            try:
+                os.makedirs(path, exist_ok=True)
+                return f"Successfully created directory: {path}"
+            except Exception as e:
+                return f"Failed to create directory: {path}. Error: {e}"
+
+        elif operation == "create":
             try:
                 # Ensure parent directory exists
                 os.makedirs(os.path.dirname(path), exist_ok=True)
@@ -84,4 +91,4 @@ class FileAction(BaseAction):
                 return f"Failed to read file. Error: {e}"
 
         else:
-            return f"Error: Unsupported file operation '{operation}'. Supported: create, delete, list, read."
+            return f"Error: Unsupported file operation '{operation}'. Supported: create, create_directory, delete, list, read."

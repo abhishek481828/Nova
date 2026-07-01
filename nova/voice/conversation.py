@@ -1633,28 +1633,28 @@ def process_single_iteration(
     if stt_provider is not None and stream is not None:
         _start_background_interrupt_listener(stream, stt_provider, speech_threshold)
 
-    for action_data in actions:
-        action_data = correct_action_data(action_data, corrected)
-        name    = action_data.get("action")
-        handler = dispatcher.get(name)
-        if not handler:
-            print_error(f"No handler registered for '{name}'.")
-            continue
-        if enable_debug:
-            print_info(f"Action parsed: {name}")
-        try:
-            result = handler.execute(action_data)
-        except Exception as e:
-            print_error(f"Handler '{name}' raised: {e}")
-            continue
-        lresult = result.lower()
-        if "error" in lresult or "failed" in lresult:
-            print_error(result)
-        elif "aborted" in lresult or "cancelled" in lresult:
-            print_warning(result)
+    from nova.planner import Goal
+    from nova.execution_engine import route_query_to_planner_pipeline
+    from nova.state import StateManager
+    
+    approval_required = not StateManager.is_autonomous()
+    goal = Goal(description=corrected)
+    goal.metadata = {"actions": actions}
+    
+    try:
+        result_message = route_query_to_planner_pipeline(
+            query=corrected,
+            working_memory=state.working_memory,
+            dispatcher=dispatcher,
+            approval_required=approval_required
+        )
+        if "error" in result_message.lower() or "failed" in result_message.lower():
+            print_error(result_message)
         else:
-            print_success(result)
-            success_msgs.append(result)
+            print_success(result_message)
+            success_msgs.append(result_message)
+    except Exception as e:
+        print_error(f"Plan execution failed: {e}")
 
     # Commit pending speaker verification voice learning on success
     if verifier is not None:

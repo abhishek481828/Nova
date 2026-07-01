@@ -55,6 +55,8 @@ from nova.utils import (
 
 def run_daemon() -> None:
     print_info("Starting Nova daemon...")
+    from nova.working_memory import WorkingMemory
+    wm = WorkingMemory()
     
     # Start Dashboard Server
     try:
@@ -232,47 +234,40 @@ def run_daemon() -> None:
                     HistoryManager.add_entry(query, {}, CommandExecutor.get_last_commands(), "parse_failed")
                     conn.close()
                     continue
+
+                from nova.planner import Goal
+                from nova.execution_engine import route_query_to_planner_pipeline
+                from nova.state import StateManager
+                
+                # Check autonomous state to determine if approval is required
+                approval_required = not StateManager.is_autonomous()
+                
+                # Set up goal carrying NLP actions list as metadata for dynamic planners
+                goal = Goal(description=query)
+                goal.metadata = {"actions": actions_list}
+                
+                result_message = route_query_to_planner_pipeline(
+                    query=query,
+                    working_memory=wm,
+                    dispatcher=dispatcher,
+                    approval_required=approval_required
+                )
+                
+                if "error" in result_message.lower() or "failed" in result_message.lower():
+                    status = "execution_failed"
+                elif "aborted" in result_message.lower() or "cancelled" in result_message.lower():
+                    status = "aborted"
+                else:
+                    status = "success"
                     
-                for action_data in actions_list:
-                    action_data = correct_action_data(action_data, query)
-                    action_name = action_data.get("action")
-                    action_handler = dispatcher.get(action_name)
+                # Publish to Dashboard
+                try:
+                    from nova.dashboard.event_bus import emit
+                    emit("task_completed", module="core", status="success" if status == "success" else "failed", metadata={"goal": query, "message": result_message, "status_code": status})
+                except Exception:
+                    pass
                     
-                    if not action_handler:
-                        print_error(f"Intent recognized as '{action_name}', but no action handler is registered.")
-                        HistoryManager.add_entry(query, action_data, CommandExecutor.get_last_commands(), "no_handler")
-                        continue
-                        
-                    print_info(f"Action parsed: {action_name}")
-                    
-                    # Publish to Dashboard
-                    try:
-                        from nova.dashboard.event_bus import emit
-                        emit("action_parsed", module="core", status="running", metadata={"action": action_name, "parameters": action_data})
-                        emit("plugin_triggered", module="plugins", status="running", metadata={"plugin": action_name, "parameters": action_data})
-                    except Exception:
-                        pass
-                        
-                    result_message = action_handler.execute(action_data)
-                    
-                    if "error" in result_message.lower() or "failed" in result_message.lower():
-                        print_error(result_message)
-                        status = "execution_failed"
-                    elif "aborted" in result_message.lower() or "cancelled" in result_message.lower():
-                        print_warning(result_message)
-                        status = "aborted"
-                    else:
-                        print_success(result_message)
-                        status = "success"
-                        
-                    # Publish to Dashboard
-                    try:
-                        from nova.dashboard.event_bus import emit
-                        emit("task_completed", module="core", status="success" if status == "success" else "failed", metadata={"action": action_name, "message": result_message, "status_code": status})
-                    except Exception:
-                        pass
-                        
-                    HistoryManager.add_entry(query, action_data, CommandExecutor.get_last_commands(), status, result_message=result_message)
+                HistoryManager.add_entry(query, {}, CommandExecutor.get_last_commands(), status, result_message=result_message)
             except Exception as e:
                 try:
                     conn.sendall(f"{COLOR_RED}Exception occurred: {e}{COLOR_RESET}\n".encode("utf-8"))
@@ -534,6 +529,8 @@ def main() -> None:
         print_info("Initializing Nova intent parser...")
     
     # Initialize components
+    from nova.working_memory import WorkingMemory
+    wm = WorkingMemory()
     ai_client = OllamaClient()
     dispatcher = get_action_dispatcher()
     
@@ -701,69 +698,56 @@ def main() -> None:
                     status="parse_failed"
                 )
                 continue
-            for action_data in actions_list:
-                action_data = correct_action_data(action_data, user_input)
-                action_name = action_data.get("action")
-                action_handler = dispatcher.get(action_name)
+            
+            from nova.planner import Goal
+            from nova.execution_engine import route_query_to_planner_pipeline
+            from nova.state import StateManager
+            
+            # Check autonomous state to determine if approval is required
+            approval_required = not StateManager.is_autonomous()
+            
+            # Set up goal carrying NLP actions list as metadata for dynamic planners
+            goal = Goal(description=user_input)
+            goal.metadata = {"actions": actions_list}
+            
+            try:
+                result_message = route_query_to_planner_pipeline(
+                    query=user_input,
+                    working_memory=wm,
+                    dispatcher=dispatcher,
+                    approval_required=approval_required
+                )
                 
-                if not action_handler:
-                    print_error(f"Intent recognized as '{action_name}', but no action handler is registered.")
-                    HistoryManager.add_entry(
-                        user_input=user_input,
-                        parsed_action=action_data,
-                        executed_commands=CommandExecutor.get_last_commands(),
-                        status="no_handler"
-                    )
-                    continue
+                if "error" in result_message.lower() or "failed" in result_message.lower():
+                    status = "execution_failed"
+                elif "aborted" in result_message.lower() or "cancelled" in result_message.lower():
+                    status = "aborted"
+                else:
+                    status = "success"
                     
-                # Execute parsed action
+                # Publish to Dashboard
                 try:
-                    # Log execution info
-                    print_info(f"Action parsed: {action_name}")
+                    from nova.dashboard.event_bus import emit
+                    emit("task_completed", module="core", status="success" if status == "success" else "failed", metadata={"goal": user_input, "message": result_message, "status_code": status})
+                except Exception:
+                    pass
                     
-                    # Publish to Dashboard
-                    try:
-                        from nova.dashboard.event_bus import emit
-                        emit("action_parsed", module="core", status="running", metadata={"action": action_name, "parameters": action_data})
-                        emit("plugin_triggered", module="plugins", status="running", metadata={"plugin": action_name, "parameters": action_data})
-                    except Exception:
-                        pass
-                        
-                    result_message = action_handler.execute(action_data)
-                    
-                    if "error" in result_message.lower() or "failed" in result_message.lower():
-                        print_error(result_message)
-                        status = "execution_failed"
-                    elif "aborted" in result_message.lower() or "cancelled" in result_message.lower():
-                        print_warning(result_message)
-                        status = "aborted"
-                    else:
-                        print_success(result_message)
-                        status = "success"
-                        
-                    # Publish to Dashboard
-                    try:
-                        from nova.dashboard.event_bus import emit
-                        emit("task_completed", module="core", status="success" if status == "success" else "failed", metadata={"action": action_name, "message": result_message, "status_code": status})
-                    except Exception:
-                        pass
-                        
-                    # Save to history
-                    HistoryManager.add_entry(
-                        user_input=user_input,
-                        parsed_action=action_data,
-                        executed_commands=CommandExecutor.get_last_commands(),
-                        status=status,
-                        result_message=result_message
-                    )
-                except Exception as e:
-                    print_error(f"An exception occurred while executing action: {e}")
-                    HistoryManager.add_entry(
-                        user_input=user_input,
-                        parsed_action=action_data,
-                        executed_commands=CommandExecutor.get_last_commands(),
-                        status="exception_raised"
-                    )
+                # Save to history
+                HistoryManager.add_entry(
+                    user_input=user_input,
+                    parsed_action={},
+                    executed_commands=CommandExecutor.get_last_commands(),
+                    status=status,
+                    result_message=result_message
+                )
+            except Exception as e:
+                print_error(f"An exception occurred while executing plan: {e}")
+                HistoryManager.add_entry(
+                    user_input=user_input,
+                    parsed_action={},
+                    executed_commands=CommandExecutor.get_last_commands(),
+                    status="exception_raised"
+                )
                 
         except KeyboardInterrupt:
             # Handle Ctrl+C gracefully

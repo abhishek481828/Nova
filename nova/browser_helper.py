@@ -88,10 +88,11 @@ def find_active_page(context: BrowserContext) -> Page:
     Priority: visible -> focused -> first open page -> new blank page.
     """
     pages = context.pages
+    safe_pages = [p for p in pages if not (p.url or "").startswith("chrome-extension://")]
     return (
-        _visible_page(pages)
-        or _focused_page(pages)
-        or (pages[0] if pages else None)
+        _visible_page(safe_pages)
+        or _focused_page(safe_pages)
+        or (safe_pages[0] if safe_pages else None)
         or context.new_page()
     )
 

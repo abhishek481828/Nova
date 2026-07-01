@@ -6,7 +6,7 @@ STATE_FILE_PATH = Path.home() / ".config" / "nova" / "state.json"
 
 class StateManager:
     _state = {
-        "autonomous_mode": True  # Default to True as requested
+        "autonomous_mode": False  # Default to False: plans require approval before execution
     }
 
     @classmethod
