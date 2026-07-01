@@ -452,5 +452,115 @@ class TestLongTermMemory(unittest.TestCase):
         self.assertEqual(rolled.version, 4)  # 1 (create) -> 2 (update) -> 3 (update) -> 4 (rollback)
         self.assertEqual(rolled.created_at, orig_created_at)  # Original timestamp preserved
 
+    def test_consolidation_metadata_compression(self):
+        from nova.long_term_memory import MemoryConsolidator
+        m = Memory(
+            category="facts",
+            title="   Test Title  ",
+            content="   Test Content.  ",
+            tags=["tag", "TAG", "tag", "   another tag   "]
+        )
+        self.storage.save(m)
+        
+        consolidator = MemoryConsolidator(self.manager)
+        compressed = consolidator.compress_all_metadata()
+        
+        self.assertEqual(compressed, 1)
+        
+        cleaned = self.storage.load(m.id)
+        self.assertEqual(cleaned.title, "Test Title")
+        self.assertEqual(cleaned.content, "Test Content.")
+        self.assertEqual(cleaned.tags, ["another tag", "tag"])
+
+    def test_consolidation_merge_duplicates(self):
+        from nova.long_term_memory import MemoryConsolidator
+        
+        m1 = self.manager.create_memory("facts", "overlap topic", "This is some test content regarding python programming.", tags=["a"])
+        # Wait a tiny bit to have different timestamps
+        time.sleep(0.01)
+        m2 = self.manager.create_memory("facts", "different overlaps", "This is some test content regarding python coding guidelines.", tags=["b"])
+        
+        consolidator = MemoryConsolidator(self.manager)
+        proposals = consolidator.prepare_consolidation()
+        
+        # Verify proposal lists merge
+        merge_proposals = [p for p in proposals if p.action == "merge"]
+        self.assertEqual(len(merge_proposals), 1)
+        
+        prop = merge_proposals[0]
+        self.assertEqual(prop.primary_id, m1.id)
+        self.assertEqual(prop.target_ids, [m2.id])
+        
+        # Apply merge
+        applied = consolidator.apply_consolidation(proposals)
+        self.assertEqual(applied, 1)
+        
+        # Verify primary updated and target deactivated
+        primary_loaded = self.storage.load(m1.id)
+        target_loaded = self.storage.load(m2.id)
+        
+        self.assertIn("python coding guidelines", primary_loaded.content)
+        self.assertEqual(primary_loaded.tags, ["a", "b"])
+        self.assertFalse(target_loaded.active)
+
+    def test_consolidation_obsolete_purge(self):
+        from nova.long_term_memory import MemoryConsolidator
+        
+        # Older preference
+        m_old = self.manager.create_memory("preferences", "user favorite editor", "User favorite editor is Emacs.")
+        m_old.updated_at = time.time() - 100
+        self.storage.save(m_old)
+        
+        # Newer preference
+        m_new = self.manager.create_memory("preferences", "my favorite editor", "User favorite editor is VS Code.")
+        
+        consolidator = MemoryConsolidator(self.manager)
+        proposals = consolidator.prepare_consolidation()
+        
+        obsolete_proposals = [p for p in proposals if p.action == "delete_obsolete"]
+        self.assertEqual(len(obsolete_proposals), 1)
+        
+        prop = obsolete_proposals[0]
+        self.assertEqual(prop.primary_id, m_new.id)
+        self.assertEqual(prop.target_ids, [m_old.id])
+        
+        # Apply obsolete delete
+        applied = consolidator.apply_consolidation(proposals)
+        self.assertEqual(applied, 1)
+        
+        # Verify m_old is deleted
+        self.assertIsNone(self.storage.load(m_old.id))
+        
+        # Now verify importance=5 exemption
+        m_old_imp = self.manager.create_memory("preferences", "user favorite editor", "Important Emacs.", importance=5)
+        m_old_imp.updated_at = time.time() - 100
+        self.storage.save(m_old_imp)
+        
+        proposals_new = consolidator.prepare_consolidation()
+        obsolete_proposals_new = [p for p in proposals_new if p.action == "delete_obsolete"]
+        self.assertEqual(len(obsolete_proposals_new), 0)  # Exempted!
+
+    def test_consolidation_inactive_archival(self):
+        from nova.long_term_memory import MemoryConsolidator
+        
+        m_stale = self.manager.create_memory("knowledge", "stale fact", "Some content")
+        m_stale.created_at = time.time() - 5000000  # Older than 30 days
+        m_stale.updated_at = time.time() - 5000000
+        self.storage.save(m_stale)
+        
+        consolidator = MemoryConsolidator(self.manager, inactive_seconds=2592000)
+        proposals = consolidator.prepare_consolidation()
+        
+        archive_proposals = [p for p in proposals if p.action == "archive"]
+        self.assertEqual(len(archive_proposals), 1)
+        
+        # Apply archival
+        applied = consolidator.apply_consolidation(proposals)
+        self.assertEqual(applied, 1)
+        
+        # Verify archived (inactive)
+        stale_loaded = self.storage.load(m_stale.id)
+        self.assertFalse(stale_loaded.active)
+
 if __name__ == "__main__":
     unittest.main()

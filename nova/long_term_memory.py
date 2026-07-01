@@ -3,7 +3,7 @@ Long-Term Memory (LTM) subsystem for Nova AI Assistant.
 Manages persistent memories independent of Working Memory.
 Supports structured storage, metadata tracking, SQLite backend, indexes, schema migrations,
 semantic memory category classification, query-based memory retrieval, relevance ranking,
-version history archiving, duplicate merges, and rollbacks.
+version history archiving, duplicate merges, rollbacks, and memory consolidation.
 """
 
 from __future__ import annotations
@@ -977,3 +977,221 @@ class LongTermMemoryManager:
         exported = [asdict(m) for m in memories]
         logger.info(f"Exported {len(exported)} memories.")
         return exported
+
+
+@dataclass
+class ConsolidationProposal:
+    """
+    Represents a proposed action to consolidate memory records.
+    Requires user confirmation before executing.
+    """
+    action: str  # "merge", "archive", "delete_obsolete"
+    primary_id: str
+    target_ids: List[str]
+    reason: str
+    proposed_state: Dict[str, Any] = field(default_factory=dict)
+
+
+class MemoryConsolidator:
+    """
+    Analyzes stored memories to propose consolidation operations:
+    - Merging duplicate/overlapping records.
+    - Archiving inactive/stale memories.
+    - Deleting/archiving obsolete records overwritten by newer details.
+    - Compressing metadata (deduplicating tags, trimming content whitespace).
+    Requires client approval before applying changes to maintain data safety.
+    """
+    def __init__(self, manager: LongTermMemoryManager, inactive_seconds: float = 2592000) -> None:
+        self.manager = manager
+        self.inactive_seconds = inactive_seconds
+
+    def _get_words(self, text: str) -> set[str]:
+        return set(w.strip(".,!?;:()[]\"'") for w in text.lower().split() if len(w) > 2)
+
+    def _jaccard_similarity(self, s1: set[str], s2: set[str]) -> float:
+        if not s1 or not s2:
+            return 0.0
+        return len(s1 & s2) / len(s1 | s2)
+
+    def compress_all_metadata(self) -> int:
+        """
+        Scans all memories in the database and cleans metadata in-place:
+        - Removes duplicate, empty, and non-stripped tags.
+        - Trims whitespace on titles and contents.
+        Returns the count of memories modified.
+        """
+        all_memories = self.manager.list_memories(active_only=False)
+        compressed_count = 0
+        
+        for mem in all_memories:
+            modified = False
+            
+            # Deduplicate, strip, and lowercase tags
+            cleaned_tags = sorted(list(set(t.strip().lower() for t in mem.tags if t.strip())))
+            if cleaned_tags != mem.tags:
+                mem.tags = cleaned_tags
+                modified = True
+                
+            # Trim titles and contents
+            cleaned_title = mem.title.strip()
+            if cleaned_title != mem.title:
+                mem.title = cleaned_title
+                modified = True
+                
+            cleaned_content = mem.content.strip()
+            if cleaned_content != mem.content:
+                mem.content = cleaned_content
+                modified = True
+                
+            if modified:
+                mem.validate()
+                self.manager.storage.save(mem)
+                compressed_count += 1
+                
+        if compressed_count > 0:
+            logger.info(f"Compressed redundant metadata for {compressed_count} memories.")
+        return compressed_count
+
+    def prepare_consolidation(self) -> List[ConsolidationProposal]:
+        """
+        Scans all memories in the database and returns a list of proposed actions.
+        Does not apply any changes to storage.
+        """
+        # Proactively compress metadata before evaluating consolidation proposals
+        self.compress_all_metadata()
+
+        all_memories = self.manager.list_memories(active_only=True)
+        proposals: List[ConsolidationProposal] = []
+        processed_ids = set()
+        now = time.time()
+
+        # Group memories by category for comparison
+        by_category: Dict[str, List[Memory]] = {}
+        for mem in all_memories:
+            by_category.setdefault(mem.category, []).append(mem)
+
+        for category, memories in by_category.items():
+            n = len(memories)
+            for i in range(n):
+                m1 = memories[i]
+                if m1.id in processed_ids:
+                    continue
+
+                for j in range(i + 1, n):
+                    m2 = memories[j]
+                    if m2.id in processed_ids:
+                        continue
+
+                    # Compute overlap metrics
+                    t1_words = self._get_words(m1.title)
+                    t2_words = self._get_words(m2.title)
+                    title_sim = self._jaccard_similarity(t1_words, t2_words)
+
+                    c1_words = self._get_words(m1.content)
+                    c2_words = self._get_words(m2.content)
+                    content_sim = self._jaccard_similarity(c1_words, c2_words)
+
+                    # 1. Obsolete fact/preference override proposal (Check first to avoid merging contradictory preferences/facts)
+                    if title_sim > 0.4 and category in (MemoryCategory.PREFERENCES, MemoryCategory.FACTS):
+                        if m1.updated_at < m2.updated_at:
+                            old, new = m1, m2
+                        else:
+                            old, new = m2, m1
+
+                        # Validate: Do not auto-delete highly important memories
+                        if old.importance == 5:
+                            continue
+
+                        proposal = ConsolidationProposal(
+                            action="delete_obsolete",
+                            primary_id=new.id,
+                            target_ids=[old.id],
+                            reason=f"Stale preference/fact override. '{new.title}' (updated {new.updated_at}) supersedes '{old.title}' (updated {old.updated_at})."
+                        )
+                        proposals.append(proposal)
+                        processed_ids.add(old.id)
+                        break
+
+                    # 2. Duplicate content merge proposal
+                    elif content_sim > 0.5 or (title_sim > 0.5 and content_sim > 0.3):
+                        if m1.created_at <= m2.created_at:
+                            primary, target = m1, m2
+                        else:
+                            primary, target = m2, m1
+
+                        merged_tags = sorted(list(set(primary.tags + target.tags)))
+                        merged_content = f"{primary.content}\n{target.content}".strip()
+                        
+                        proposal = ConsolidationProposal(
+                            action="merge",
+                            primary_id=primary.id,
+                            target_ids=[target.id],
+                            reason=f"Semantic duplicate in '{category}'. Content overlap: {content_sim:.2f}, Title overlap: {title_sim:.2f}.",
+                            proposed_state={
+                                "content": merged_content,
+                                "tags": merged_tags,
+                                "importance": max(primary.importance, target.importance),
+                                "confidence": max(primary.confidence, target.confidence),
+                                "meta_notes": f"Consolidated content from duplicate memory {target.id}."
+                            }
+                        )
+                        proposals.append(proposal)
+                        processed_ids.add(target.id)
+                        processed_ids.add(primary.id)
+                        break
+
+        # 3. Archival proposal for inactive/stale items
+        for mem in all_memories:
+            if mem.id in processed_ids:
+                continue
+
+            time_stale = now - max(mem.created_at, mem.updated_at)
+            if mem.access_count == 0 and time_stale > self.inactive_seconds:
+                # Validate: Do not archive highly important memories
+                if mem.importance == 5:
+                    continue
+
+                proposal = ConsolidationProposal(
+                    action="archive",
+                    primary_id=mem.id,
+                    target_ids=[],
+                    reason=f"Memory has not been accessed and is older than {self.inactive_seconds / 86400:.1f} days."
+                )
+                proposals.append(proposal)
+                processed_ids.add(mem.id)
+
+        return proposals
+
+    def apply_consolidation(self, proposals: List[ConsolidationProposal]) -> int:
+        """
+        Applies approved consolidation proposals.
+        Returns the number of successfully applied proposals.
+        """
+        applied_count = 0
+        for prop in proposals:
+            try:
+                if prop.action == "merge":
+                    # Update primary memory
+                    self.manager.update_memory(prop.primary_id, **prop.proposed_state)
+                    # Archive/Deactivate targets to preserve history rather than hard deleting immediately
+                    for target_id in prop.target_ids:
+                        self.manager.update_memory(target_id, active=False, meta_notes=f"Merged into memory {prop.primary_id}.")
+                    applied_count += 1
+                    logger.info(f"Applied merge: {prop.primary_id} <- {prop.target_ids}")
+                    
+                elif prop.action == "delete_obsolete":
+                    # Permanently delete obsolete target records
+                    for target_id in prop.target_ids:
+                        self.manager.delete_memory(target_id)
+                    applied_count += 1
+                    logger.info(f"Applied obsolete deletion on targets: {prop.target_ids}")
+                    
+                elif prop.action == "archive":
+                    # Archive primary memory (make inactive)
+                    self.manager.update_memory(prop.primary_id, active=False, meta_notes="Archived due to inactivity.")
+                    applied_count += 1
+                    logger.info(f"Applied archival: {prop.primary_id}")
+            except Exception as e:
+                logger.error(f"Failed to apply consolidation proposal: {e}")
+                
+        return applied_count
