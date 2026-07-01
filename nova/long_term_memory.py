@@ -15,6 +15,7 @@ import json
 import logging
 import threading
 import math
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field, asdict
 from typing import Any, Dict, List, Optional
@@ -144,10 +145,20 @@ class Memory:
             raise ValueError("Memory ID must be a non-empty string.")
         if not isinstance(self.category, str) or not self.category.strip():
             raise ValueError("Memory category must be a non-empty string.")
+        if len(self.category) > 100:
+            raise ValueError("Category name cannot exceed 100 characters.")
+        if not re.match(r"^[a-zA-Z0-9_]+$", self.category):
+            raise ValueError("Category must only contain alphanumeric characters and underscores.")
+            
         if not isinstance(self.title, str) or not self.title.strip():
             raise ValueError("Memory title must be a non-empty string.")
+        if len(self.title) > 500:
+            raise ValueError("Memory title cannot exceed 500 characters.")
+            
         if not isinstance(self.content, str):
             raise TypeError("Memory content must be a string.")
+        if len(self.content) > 1000000:
+            raise ValueError("Memory content cannot exceed 1,000,000 characters.")
             
         if not isinstance(self.importance, int) or not (1 <= self.importance <= 5):
             raise ValueError("Memory importance must be an integer between 1 and 5.")
@@ -156,6 +167,8 @@ class Memory:
             
         if not isinstance(self.tags, list):
             raise TypeError("Memory tags must be a list of strings.")
+        if len(self.tags) > 100:
+            raise ValueError("Memory tags list cannot exceed 100 items.")
         for tag in self.tags:
             if not isinstance(tag, str):
                 raise TypeError("All items in tags must be strings.")
@@ -220,6 +233,16 @@ class BaseMemoryStorage(ABC):
         pass
 
     @abstractmethod
+    def check_integrity(self) -> bool:
+        """Runs checks to detect database corruption."""
+        pass
+
+    @abstractmethod
+    def backup_database(self, dest_db_path: str) -> None:
+        """Online backup copy of database to targeted file path."""
+        pass
+
+    @abstractmethod
     def close(self) -> None:
         """Closes any open backend storage connections."""
         pass
@@ -239,7 +262,7 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
 
     def _initialize_db(self) -> None:
         """
-        Configures WAL journal and synchronous modes, starts schema version control table,
+        Configures WAL journal, timeouts, caching, synchronous modes, starts schema version control table,
         and applies sequential migrations under transaction locks.
         """
         with self._lock:
@@ -247,6 +270,9 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
             self.conn.execute("PRAGMA journal_mode = WAL;")
             self.conn.execute("PRAGMA synchronous = NORMAL;")
             self.conn.execute("PRAGMA foreign_keys = ON;")
+            self.conn.execute("PRAGMA busy_timeout = 5000;")
+            self.conn.execute("PRAGMA cache_size = -2000;")
+            self.conn.execute("PRAGMA temp_store = MEMORY;")
             
             # Setup schema meta version table
             self.conn.execute("""
@@ -602,6 +628,29 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
                 )
         return None
 
+    def check_integrity(self) -> bool:
+        with self._lock:
+            try:
+                cursor = self.conn.cursor()
+                cursor.execute("PRAGMA integrity_check;")
+                row = cursor.fetchone()
+                return bool(row and row[0] == "ok")
+            except Exception as e:
+                logger.error(f"LTM database integrity check failed: {e}")
+                return False
+
+    def backup_database(self, dest_db_path: str) -> None:
+        with self._lock:
+            dst = sqlite3.connect(dest_db_path)
+            try:
+                self.conn.backup(dst)
+                logger.info(f"LTM database backed up successfully to: {dest_db_path}")
+            except Exception as e:
+                logger.error(f"LTM database backup failed: {e}")
+                raise e
+            finally:
+                dst.close()
+
     def close(self) -> None:
         with self._lock:
             self.conn.close()
@@ -774,6 +823,14 @@ class LongTermMemoryManager:
         self.classifier = classifier or MemoryClassifier()
         self.retriever = retriever or MemoryRetriever(self.storage)
         logger.info("Long-Term Memory Manager initialized.")
+
+    def check_integrity(self) -> bool:
+        """Exposes storage integrity check."""
+        return self.storage.check_integrity()
+
+    def backup_database(self, dest_db_path: str) -> None:
+        """Exposes online SQLite backup trigger."""
+        self.storage.backup_database(dest_db_path)
 
     def create_memory(
         self,

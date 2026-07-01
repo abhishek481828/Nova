@@ -629,5 +629,127 @@ class TestLongTermMemory(unittest.TestCase):
         self.assertIn("preferences", categories)
         self.assertNotIn("projects", categories)
 
+    def test_input_boundaries_validation(self):
+        # 1. Invalid Category formats
+        with self.assertRaises(ValueError):
+            Memory(category="invalid-format", title="title", content="content")
+            
+        with self.assertRaises(ValueError):
+            Memory(category="invalid name", title="title", content="content")
+
+        # 2. Category length limit (100 characters)
+        with self.assertRaises(ValueError):
+            Memory(category="a" * 101, title="title", content="content")
+
+        # 3. Title length limit (500 characters)
+        with self.assertRaises(ValueError):
+            Memory(category="facts", title="a" * 501, content="content")
+
+        # 4. Content length limit (1,000,000 characters)
+        with self.assertRaises(ValueError):
+            Memory(category="facts", title="title", content="a" * 1000001)
+
+        # 5. Tag count limit (100 tags)
+        with self.assertRaises(ValueError):
+            Memory(category="facts", title="title", content="content", tags=[f"t{i}" for i in range(101)])
+
+    def test_db_integrity_and_backup(self):
+        import tempfile
+        import os
+        
+        # Verify integrity of fresh db is ok
+        self.assertTrue(self.storage.check_integrity())
+        
+        # Save memory
+        m = self.manager.create_memory("facts", "test backup", "secret value")
+        
+        # Perform backup to a temp file path
+        fd, path = tempfile.mkstemp()
+        try:
+            self.storage.backup_database(path)
+            
+            # Open new storage from backup file path
+            backup_storage = SQLiteMemoryStorage(db_path=path)
+            self.assertTrue(backup_storage.check_integrity())
+            
+            # Load memory and assert content matches
+            loaded = backup_storage.load(m.id)
+            self.assertIsNotNone(loaded)
+            self.assertEqual(loaded.content, "secret value")
+            backup_storage.close()
+        finally:
+            os.close(fd)
+            os.remove(path)
+
+    def test_large_memory_collection(self):
+        # Bulk populate 1000 memory records
+        start_time = time.time()
+        for i in range(1000):
+            m = Memory(
+                id=f"large-id-{i}",
+                category="knowledge",
+                title=f"Topic title {i}",
+                content=f"Content details for topic {i} containing some sample keywords.",
+                tags=[f"tag_{i % 5}"]
+            )
+            self.storage.save(m)
+        populate_duration = time.time() - start_time
+        print(f"Populated 1000 memory records in {populate_duration:.3f} seconds.")
+        
+        # Query check (should utilize index fast)
+        start_query = time.time()
+        res = self.storage.query_memories(category="knowledge", tags=["tag_2"])
+        query_duration = time.time() - start_query
+        
+        self.assertEqual(len(res), 200)
+        # Latency should be sub-millisecond (usually < 0.05 seconds under unittest)
+        self.assertLess(query_duration, 0.1)
+
+    def test_concurrent_database_access(self):
+        import threading
+        
+        exceptions = []
+        threads = []
+        
+        # Worker function executing concurrent writes, updates, and retrievals
+        def worker(thread_idx):
+            try:
+                # 1. Save memory
+                m_id = f"thread-mem-{thread_idx}"
+                m = Memory(
+                    id=m_id,
+                    category="facts",
+                    title=f"Thread title {thread_idx}",
+                    content=f"Details {thread_idx}"
+                )
+                self.storage.save(m)
+                
+                # 2. Update memory
+                for update_idx in range(5):
+                    # Incrementing version
+                    m_loaded = self.storage.load(m_id)
+                    m_loaded.content = f"Details {thread_idx} updated {update_idx}"
+                    m_loaded.version += 1
+                    self.storage.save(m_loaded)
+                    
+                # 3. Retrieve queries
+                for _ in range(5):
+                    res = self.storage.query_memories(category="facts")
+                    self.assertGreaterEqual(len(res), 1)
+            except Exception as e:
+                exceptions.append(e)
+
+        # Spawn 10 concurrent threads
+        for i in range(10):
+            t = threading.Thread(target=worker, args=(i,))
+            threads.append(t)
+            t.start()
+            
+        for t in threads:
+            t.join()
+            
+        # Assert no concurrent thread experienced locks/exceptions
+        self.assertEqual(len(exceptions), 0, f"Concurrent access thread failures: {exceptions}")
+
 if __name__ == "__main__":
     unittest.main()
