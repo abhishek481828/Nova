@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.config import APPS_JSON_PATH
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.logger import log_error
 from nova.utils import print_info
 

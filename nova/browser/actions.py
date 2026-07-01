@@ -1,0 +1,125 @@
+import os
+import json
+import subprocess
+import urllib.parse
+import webbrowser
+import threading
+import sys
+from pathlib import Path
+from typing import Any, Dict
+from nova.actions.base import BaseAction
+from nova.core.executor import CommandExecutor
+from nova.utils import print_info, print_warning
+from nova.browser.manager import BrowserManager
+from nova.browser.helper import run_automation
+
+class BrowserAction(BaseAction):
+    @property
+    def action_name(self) -> str:
+        return "browser_action"
+
+    def execute(self, params: Dict[str, Any]) -> str:
+        url = params.get("url", "").strip()
+        if not url:
+            return "Error: No URL provided for browser action."
+
+        # Add https scheme if not present
+        if not url.startswith(("http://", "https://")):
+            url = "https://" + url
+
+        print_info(f"Opening URL in default browser: {url}")
+        
+        success = webbrowser.open(url)
+        
+        if success:
+            return f"Successfully opened default browser to: {url}"
+        else:
+            return f"Webbrowser module failed to launch url: {url}"
+
+
+class ChromiumAction(BaseAction):
+    @property
+    def action_name(self) -> str:
+        return "chromium_action"
+
+    @property
+    def is_long_running(self) -> bool:
+        return True
+
+    def execute(self, params: Dict[str, Any]) -> str:
+        # Propagate working memory to BrowserManager
+        if hasattr(self, "working_memory") and self.working_memory is not None:
+            BrowserManager._working_memory = self.working_memory
+
+        try:
+            return self._execute_inner(params)
+        finally:
+            # Sync browser state to memory at end of action
+            try:
+                if hasattr(self, "working_memory") and self.working_memory is not None:
+                    BrowserManager.trigger_memory_update()
+            except Exception as e:
+                pass
+
+    def _execute_inner(self, params: Dict[str, Any]) -> str:
+        operation = params.get("operation", "open").strip().lower()
+
+        # Format URL for open operations
+        if operation == "open":
+            url = params.get("url", "").strip()
+            if url:
+                # Append .com if TLD is missing (e.g. "chatgpt")
+                if "." not in url and not url.startswith(("http://", "https://")):
+                    url = url + ".com"
+                if not url.startswith(("http://", "https://")):
+                    url = "https://" + url
+                params["url"] = url
+
+        # Ensure Chromium is running with debugging enabled
+        if not BrowserManager.ensure_browser():
+            return f"Error: Could not launch Chromium with debugging port {BrowserManager.PORT}."
+
+        # Locate helper.py
+        current_dir = Path(__file__).resolve().parent
+        helper_path = current_dir / "helper.py"
+
+        if not helper_path.exists():
+            return f"Error: Browser automation helper script not found at {helper_path}"
+
+        from nova.voice.config import enable_debug
+        if enable_debug:
+            print_info(f"Executing web automation step: {params.get('operation', 'open')}...")
+
+        # Playwright objects are bound to the thread they were created in.
+        # If we are in a background thread (e.g. voice loop), we MUST use subprocess.
+        if threading.current_thread() is not threading.main_thread():
+            self.run_in_process = False
+
+        if getattr(self, "run_in_process", True):
+            try:
+                result = run_automation(params)
+                status = result.get("status")
+                message = result.get("message", "Web step completed successfully.")
+                return f"✅ {message}" if status == "success" else f"❌ {message}"
+            except Exception as e:
+                from nova.logger import logger
+                import traceback
+                logger.error(f"In-process browser automation failed, falling back to subprocess: {e}\n{traceback.format_exc()}")
+                # Fall through to subprocess execution
+        
+        # Subprocess execution fallback
+        cmd = [sys.executable, str(helper_path), json.dumps(params)]
+        exit_code, stdout, stderr = CommandExecutor.run_shell(cmd, require_confirmation=False)
+
+        if exit_code != 0:
+            return f"Error: Web automation script failed (exit {exit_code}). Stderr: {stderr.strip()}"
+
+        try:
+            result = json.loads(stdout.strip())
+            status = result.get("status")
+            message = result.get("message", "Web step completed successfully.")
+            return f"✅ {message}" if status == "success" else f"❌ {message}"
+        except json.JSONDecodeError:
+            if "success" in stdout.lower() or "playing" in stdout.lower():
+                return f"✅ Web step completed: {stdout.strip()[:200]}"
+            return f"Error: Failed to parse automation helper response. Output: {stdout.strip()[:300]}"

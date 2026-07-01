@@ -2,7 +2,7 @@ import json
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.config import APPS_JSON_PATH
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.logger import log_error
 from nova.utils import print_info
 
@@ -56,7 +56,7 @@ class OpenAppAction(BaseAction):
                 app_name = closest_match
         
         if executable in ("chromium", "google-chrome-stable", "chrome") or app_name in ("chromium", "chrome", "google-chrome-stable"):
-            from nova.browser_manager import BrowserManager
+            from nova.browser.manager import BrowserManager
             from nova.config import CHROMIUM_HEADLESS
             browser_running = BrowserManager.is_browser_running()
             if browser_running and BrowserManager.get_running_browser_headless_state() == CHROMIUM_HEADLESS:

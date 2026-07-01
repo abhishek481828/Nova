@@ -1,6 +1,6 @@
 from typing import Any, Dict
 from nova.actions.base import BaseAction
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.utils import COLOR_BOLD, COLOR_CYAN, COLOR_GREEN, COLOR_RED, COLOR_YELLOW, COLOR_RESET, print_info
 
 class WifiControlAction(BaseAction):

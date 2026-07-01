@@ -2,7 +2,7 @@ import os
 import re
 from typing import Any, Dict, Tuple
 from nova.actions.base import BaseAction
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.utils import print_info, print_warning, COLOR_BOLD, COLOR_CYAN, COLOR_RESET
 
 class BrightnessControlAction(BaseAction):

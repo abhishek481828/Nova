@@ -1,6 +1,6 @@
 from typing import Any, Dict
 from nova.actions.base import BaseAction
-from nova.state import StateManager
+from nova.core.state import StateManager
 
 class UpdateUserProfileAction(BaseAction):
     @property

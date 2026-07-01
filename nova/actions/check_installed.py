@@ -77,7 +77,7 @@ class CheckInstalledAction(BaseAction):
 
 def check_phone_notify_status() -> str:
     import subprocess
-    from nova.state import StateManager
+    from nova.core.state import StateManager
     from nova.utils import print_info
     
     # Check user service status
@@ -155,7 +155,7 @@ def check_phone_notify_status() -> str:
 def check_warp_status() -> str:
     import shutil
     import subprocess
-    from nova.state import StateManager
+    from nova.core.state import StateManager
     from nova.utils import print_info
     
     # 1. Check if warp-cli is installed

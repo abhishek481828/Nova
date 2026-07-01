@@ -15,7 +15,7 @@ class WebSocketManager:
         
         # Send initial status on connection
         try:
-            from nova.voice.conversation import get_voice_status_report
+            from nova.voice.pipeline import get_voice_status_report
             from datetime import datetime, timezone
             status = get_voice_status_report()
             await ws.send_json({

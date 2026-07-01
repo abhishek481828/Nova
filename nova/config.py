@@ -115,6 +115,7 @@ Actions & parameters:
 - nix_shell: {"action": "nix_shell", "packages": ["package_name"]}
 - update_user_profile: {"action": "update_user_profile", "details": {"name": "name", "email": "email", "other": "info"}}
 - system_status: {"action": "system_status"}
+- list_packages: {"action": "list_packages"}
 - volume_control: {"action": "volume_control", "operation": "set"|"increase"|"decrease"|"mute"|"unmute"|"get", "level": int}
 - brightness_control: {"action": "brightness_control", "operation": "set"|"increase"|"decrease"|"get", "level": int}
 - desktop_control: {"action": "desktop_control", "operation": "lock"|"night_light"|"media", "state": "on"|"off"|"toggle", "media_command": "play"|"pause"|"playpause"|"next"|"prev"|"stop"}
@@ -200,6 +201,9 @@ Examples:
 - "check the temperature in Paris" -> {"action": "weather", "location": "Paris"}
 - "my name is Abhishek Das" -> {"action": "update_user_profile", "details": {"name": "Abhishek Das"}}
 - "give me update about my full system software" -> {"action": "system_status"}
+- "what are the apps in my system" -> {"action": "list_packages"}
+- "what are the installed app in my system" -> {"action": "list_packages"}
+- "tell me the app names which is installed in nixos system" -> {"action": "list_packages"}
 - "set volume to 125%" -> {"action": "volume_control", "operation": "set", "level": 125}
 - "mute my laptop sound" -> {"action": "volume_control", "operation": "mute"}
 - "unmute audio" -> {"action": "volume_control", "operation": "unmute"}

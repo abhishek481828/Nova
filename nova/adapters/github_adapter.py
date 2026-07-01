@@ -1,6 +1,6 @@
 import urllib.parse
 from nova.adapters.base_adapter import BaseWebsiteAdapter
-from nova.browser_engine import BrowserActionException
+from nova.browser.engine import BrowserActionException
 
 class GitHubAdapter(BaseWebsiteAdapter):
     """Website Adapter for GitHub workflows."""

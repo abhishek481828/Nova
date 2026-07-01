@@ -1,5 +1,5 @@
 from nova.adapters.base_adapter import BaseWebsiteAdapter
-from nova.browser_engine import BrowserActionException
+from nova.browser.engine import BrowserActionException
 
 class GmailAdapter(BaseWebsiteAdapter):
     """Website Adapter for Gmail workflows."""

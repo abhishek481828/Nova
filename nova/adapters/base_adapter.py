@@ -1,4 +1,4 @@
-from nova.browser_engine import BrowserAutomationEngine, BrowserActionException
+from nova.browser.engine import BrowserAutomationEngine, BrowserActionException
 
 class BaseWebsiteAdapter:
     """Base class for all website adapters, providing unified access to BrowserAutomationEngine."""

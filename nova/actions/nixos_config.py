@@ -1,6 +1,6 @@
 from typing import Any, Dict
 from nova.actions.base import BaseAction
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 
 class NixosConfigAction(BaseAction):
     @property

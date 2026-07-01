@@ -88,7 +88,7 @@ async def system_metrics_loop() -> None:
                 disk = psutil.disk_usage('/')
                 
                 # Check browser process state
-                from nova.browser_manager import BrowserManager
+                from nova.browser.manager import BrowserManager
                 browser_active = BrowserManager.is_browser_running()
                 
                 metrics = {
@@ -112,7 +112,7 @@ async def health_check_loop() -> None:
     while True:
         try:
             if ws_manager.active_connections:
-                from nova.voice.conversation import get_voice_status_report
+                from nova.voice.pipeline import get_voice_status_report
                 report = get_voice_status_report()
                 if report != last_report:
                     last_report = report

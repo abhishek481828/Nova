@@ -15,7 +15,8 @@ DEFAULT_PROTECTED_WORDS = {
     "python", "javascript", "vscode", "sqlite", "vs code", "chrome", "firefox",
     "scrcpy", "tailscale", "vlc", "systemctl", "journalctl", "systemd",
     "warp-cli", "warp", "nix-env", "nixpkgs", "nix-shell", "pandas", "numpy",
-    "webrtcvad", "neofetch", "sudo", "sys", "import", "print", "path", "git"
+    "webrtcvad", "neofetch", "sudo", "sys", "import", "print", "path", "git",
+    "apps", "applications"
 }
 
 # Common bigrams in Nova to boost confidence score (context-awareness)
@@ -69,7 +70,9 @@ class NlpPipeline:
             pass
             
         # Load protected vocabulary directly into the spell checker so it doesn't try to correct them
-        self.spell.word_frequency.load_words(list(self.protected_vocab))
+        # Set high frequency to prioritize domain-specific terminology during correction
+        for word in self.protected_vocab:
+            self.spell.word_frequency.dictionary[word.lower()] = 100000
 
     def _load_apps_vocab(self) -> None:
         """Loads application names/aliases dynamically from apps.json."""
@@ -89,7 +92,7 @@ class NlpPipeline:
         word_clean = word.strip().lower()
         if word_clean:
             self.protected_vocab.add(word_clean)
-            self.spell.word_frequency.load_words([word_clean])
+            self.spell.word_frequency.dictionary[word_clean] = 100000
 
     def normalize(self, text: str) -> str:
         """

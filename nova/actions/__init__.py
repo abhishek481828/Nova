@@ -34,4 +34,14 @@ def get_action_dispatcher() -> Dict[str, BaseAction]:
         except Exception as e:
             log_error(f"Failed to dynamically import module {full_module_name}", e)
             
+    # Explicitly load and register browser actions from nova.browser.actions
+    try:
+        from nova.browser.actions import BrowserAction, ChromiumAction
+        b_action = BrowserAction()
+        c_action = ChromiumAction()
+        dispatcher[b_action.action_name] = b_action
+        dispatcher[c_action.action_name] = c_action
+    except Exception as e:
+        log_error("Failed to dynamically import browser actions from nova.browser.actions", e)
+
     return dispatcher

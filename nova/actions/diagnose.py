@@ -3,7 +3,7 @@ import re
 import urllib.request
 from typing import Any, Dict, List, Tuple
 from nova.actions.base import BaseAction
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.utils import (
     COLOR_BOLD,
     COLOR_CYAN,
@@ -26,7 +26,7 @@ class DiagnoseAction(BaseAction):
         report.append(f"\n{COLOR_CYAN}{COLOR_BOLD}=== NOVA CONNECTION DIAGNOSTICS REPORT ==={COLOR_RESET}\n")
 
         # ── Check 1: Tailscale Status ──
-        from nova.state import StateManager
+        from nova.core.state import StateManager
         ts_exit, ts_out, ts_err = CommandExecutor.run_shell(["tailscale", "status"])
         
         # Proactive Decision if Autonomous Mode is enabled and Tailscale is down

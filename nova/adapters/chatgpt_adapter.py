@@ -1,6 +1,6 @@
 import time
 from nova.adapters.base_adapter import BaseWebsiteAdapter
-from nova.browser_engine import BrowserActionException
+from nova.browser.engine import BrowserActionException
 
 class ChatGPTAdapter(BaseWebsiteAdapter):
     """Website Adapter for ChatGPT workflows."""

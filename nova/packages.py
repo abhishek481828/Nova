@@ -1,6 +1,6 @@
 import json
 from typing import Dict, List, Tuple
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.logger import log_error
 
 class NixPackageManager:

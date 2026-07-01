@@ -1,7 +1,7 @@
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.packages import NixPackageManager
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.utils import ask_confirmation, print_info, print_warning, COLOR_BOLD, COLOR_CYAN, COLOR_RESET
 
 class RemovePackageAction(BaseAction):

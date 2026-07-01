@@ -3,7 +3,7 @@ import os
 import difflib
 import tempfile
 from typing import List, Tuple
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.utils import print_info, print_warning
 
 CONFIG_PATH = "/etc/nixos/configuration.nix"

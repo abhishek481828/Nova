@@ -24,6 +24,7 @@ VALID_ACTIONS = {
     "nix_shell",
     "update_user_profile",
     "system_status",
+    "list_packages",
     "volume_control",
     "brightness_control",
     "desktop_control",

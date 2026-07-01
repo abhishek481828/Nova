@@ -118,8 +118,8 @@ class TelegramService:
         from nova.utils import set_capture_callback
         from nova.spelling import correct_query_spelling, correct_action_data
         from nova.parser import parse_and_validate_action
-        from nova.history import HistoryManager
-        from nova.executor import CommandExecutor
+        from nova.core.memory import HistoryManager
+        from nova.core.executor import CommandExecutor
 
         captured_output = []
         def capture_cb(msg):

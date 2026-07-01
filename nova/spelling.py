@@ -9,7 +9,7 @@ from nova.utils import print_info
 VALID_WORDS: Set[str] = {
     # Action verbs and nouns
     "open", "close", "install", "remove", "search", "update", "run", "git", "file", "browser", "system", "adb", "diagnose", "check",
-    "package", "app", "application", "project", "problem", "mirroring", "device", "phonenotify", "notify",
+    "package", "app", "apps", "application", "applications", "project", "problem", "mirroring", "device", "phonenotify", "notify",
     # Verb variations to prevent incorrect spell-corrections
     "devices", "connected", "connecting", "connection", "connections", "installed", "installing", "removed", "removing", "searching",
     "updated", "updating", "running", "checking", "mirrored", "opening", "opened", "closing", "closed",

@@ -1,7 +1,7 @@
 import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
-from nova.executor import CommandExecutor
+from nova.core.executor import CommandExecutor
 from nova.utils import print_info, print_warning
 
 class RunProjectAction(BaseAction):
