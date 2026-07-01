@@ -26,6 +26,7 @@ Logging sequence (matches specification):
 
 import re
 import time
+from typing import Optional
 import subprocess
 import collections
 import numpy as np
@@ -736,7 +737,7 @@ def _wait_for_wake(
 
 class VoiceLoopState:
     """State context container for Nova's voice loop iterations."""
-    def __init__(self, diagnostics=None):
+    def __init__(self, diagnostics=None, working_memory=None):
         self.stt_provider = None
         self.verifier = None
         self.stream = None
@@ -747,6 +748,10 @@ class VoiceLoopState:
         self.diagnostics = diagnostics if diagnostics is not None else VoiceDiagnosticsEngine()
         import nova.voice.config as _vc_cfg
         _vc_cfg.active_diagnostics = self.diagnostics
+
+        # Inject Working Memory
+        from nova.working_memory import WorkingMemory
+        self.working_memory = working_memory if working_memory is not None else WorkingMemory()
         self.use_wake_word = enable_wake_word
         self.noise_floor = VAD_THRESHOLD
         self.speech_threshold = VAD_THRESHOLD + NOISE_FLOOR_MARGIN
@@ -763,6 +768,59 @@ class VoiceLoopState:
         self.aec = None
         self.current_state = VoiceState.INACTIVE
         self.last_printed_state = None
+
+
+def infer_topic(intent: Optional[str], query: str, actions: list) -> Optional[str]:
+    if not intent:
+        return "general"
+    if actions and isinstance(actions, list):
+        action = actions[0]
+        for param in ["query", "url", "app", "package", "text"]:
+            if action.get(param):
+                return f"{intent}: {action.get(param)}"
+    return intent
+
+
+def update_working_memory_after_turn(
+    working_memory,
+    user_message: str,
+    assistant_reply: str,
+    intent: Optional[str],
+    topic: Optional[str]
+) -> None:
+    from nova.working_memory import Interaction
+    
+    # 1. Fetch previous values
+    prev_topic = working_memory.get("current_topic")
+    prev_intent = working_memory.get("current_intent")
+
+    # 2. Update memory fields
+    working_memory.set("previous_topic", prev_topic)
+    working_memory.set("previous_intent", prev_intent)
+    working_memory.set("current_topic", topic)
+    working_memory.set("current_intent", intent)
+    
+    # Store user message and assistant reply
+    working_memory.set("previous_command", user_message)
+    working_memory.set("previous_assistant_reply", assistant_reply)
+
+    # 3. Create Interaction object
+    interaction = Interaction(
+        user_prompt=user_message,
+        assistant_response=assistant_reply,
+        intent=intent,
+        timestamp=time.time()
+    )
+    
+    # Append to conversation history (to avoid duplicate updates, we append once per turn)
+    working_memory.append_history(interaction)
+    
+    # Append to session conversation list to keep them in sync
+    session_conv = list(working_memory.get("current_conversation") or [])
+    session_conv.append(interaction)
+    working_memory.set("current_conversation", session_conv)
+    
+    logger.info("Automatically updated working memory with user interaction details.")
 
 
 def process_single_iteration(
@@ -834,6 +892,7 @@ def process_single_iteration(
     quality_metrics = None
     speaker_score = None
     cmd_start = time.time()
+    assistant_reply = ""
 
     # Handle Inactive State (release microphone and sleep)
     if _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
@@ -1356,7 +1415,18 @@ def process_single_iteration(
     # exit-phrase shortcut
     if text.lower().strip().rstrip(".") in ("exit", "quit", "goodbye"):
         transition_to(VoiceState.SPEAKING)
-        speak("Goodbye!")
+        assistant_reply = "Goodbye!"
+        speak(assistant_reply)
+        try:
+            update_working_memory_after_turn(
+                working_memory=state.working_memory,
+                user_message=text,
+                assistant_reply=assistant_reply,
+                intent="exit",
+                topic="session_end"
+            )
+        except Exception as wm_err:
+            logger.debug(f"Failed to update working memory: {wm_err}")
         save_state()
         return "break"
 
@@ -1364,7 +1434,18 @@ def process_single_iteration(
     if _is_interrupt_phrase(text):
         print_info("🛑 Stop command heard — going back to listening.")
         transition_to(VoiceState.SPEAKING)
-        speak("Sure, I'm listening.")
+        assistant_reply = "Sure, I'm listening."
+        speak(assistant_reply)
+        try:
+            update_working_memory_after_turn(
+                working_memory=state.working_memory,
+                user_message=text,
+                assistant_reply=assistant_reply,
+                intent="stop",
+                topic="conversation_control"
+            )
+        except Exception as wm_err:
+            logger.debug(f"Failed to update working memory: {wm_err}")
         last_printed_state = VoiceState.VOICE_IDLE
         if confirmation_sound:
             play_confirmation_sound()
@@ -1421,7 +1502,18 @@ def process_single_iteration(
     if requires_confirm and confirm_prompt:
         confirmed = get_user_confirmation(confirm_prompt, stream, speech_threshold)
         if not confirmed:
-            speak("Cancelled.")
+            assistant_reply = "Cancelled."
+            speak(assistant_reply)
+            try:
+                update_working_memory_after_turn(
+                    working_memory=state.working_memory,
+                    user_message=text,
+                    assistant_reply=assistant_reply,
+                    intent="confirm_cancel",
+                    topic="confirmation"
+                )
+            except Exception as wm_err:
+                logger.debug(f"Failed to update working memory: {wm_err}")
             last_printed_state = VoiceState.VOICE_IDLE
             save_state()
             return "continue"
@@ -1540,12 +1632,14 @@ def process_single_iteration(
         if success_msgs:
             transition_to(VoiceState.SPEAKING)
             last_printed_state = VoiceState.SPEAKING
+            assistant_reply = success_text
             _tts_start = time.perf_counter()
             speak(success_text)
             _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
         else:
             transition_to(VoiceState.SPEAKING)
             last_printed_state = VoiceState.SPEAKING
+            assistant_reply = fail_text
             _tts_start = time.perf_counter()
             speak(fail_text)
             _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
@@ -1564,6 +1658,7 @@ def process_single_iteration(
             read_full = any(phrase in user_text_lower for phrase in read_full_phrases)
             
             if read_full:
+                assistant_reply = spoken
                 _tts_start = time.perf_counter()
                 speak(spoken)
                 _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
@@ -1573,6 +1668,7 @@ def process_single_iteration(
                 except Exception as e:
                     logger.debug(f"Failed to generate spoken summary: {e}")
                     spoken_summary = spoken
+                assistant_reply = spoken_summary
                 _tts_start = time.perf_counter()
                 speak(spoken_summary)
                 _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
@@ -1597,6 +1693,20 @@ def process_single_iteration(
         )
     except Exception as _diag_err:
         logger.debug(f"Diagnostics record_turn failed: {_diag_err}")
+
+    # ── Update Working Memory with this successful interaction ───────────
+    try:
+        intent = actions[0].get("action") if actions else None
+        topic = infer_topic(intent, corrected, actions)
+        update_working_memory_after_turn(
+            working_memory=state.working_memory,
+            user_message=text,
+            assistant_reply=assistant_reply,
+            intent=intent,
+            topic=topic
+        )
+    except Exception as wm_err:
+        logger.debug(f"Failed to update working memory: {wm_err}")
 
     # Stop background interrupt listener
     _stop_background_interrupt_listener()
@@ -1631,7 +1741,7 @@ def process_single_iteration(
     return "continue"
 
 
-def run_voice_loop(ai_client, dispatcher, interactive=False) -> str:
+def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None) -> str:
     """
     Voice Mode state machine.
 
@@ -1642,7 +1752,7 @@ def run_voice_loop(ai_client, dispatcher, interactive=False) -> str:
     """
     global _mic_healthy, _wake_healthy, _stt_healthy, _deferred_deactivate
 
-    state = VoiceLoopState()
+    state = VoiceLoopState(working_memory=working_memory)
 
     def transition_to(new_state: VoiceState, detail: str = ""):
         state.current_state = new_state
