@@ -1195,3 +1195,182 @@ class MemoryConsolidator:
                 logger.error(f"Failed to apply consolidation proposal: {e}")
                 
         return applied_count
+
+
+class BasePromotionRule(ABC):
+    """
+    Abstract interface for cognitive memory promotion filters.
+    """
+    @abstractmethod
+    def evaluate(self, text: str) -> Optional[Dict[str, Any]]:
+        """
+        Evaluates text context. Returns dictionary values if matched, else None.
+        """
+        pass
+
+
+class PreferencePromotionRule(BasePromotionRule):
+    """
+    Identifies and evaluates user preference statements.
+    """
+    def evaluate(self, text: str) -> Optional[Dict[str, Any]]:
+        text_lower = text.lower()
+        if any(kw in text_lower for kw in ("i prefer", "my favorite", "always use", "dislike", "i like to", "favorite editor", "prefer using")):
+            return {
+                "category": MemoryCategory.PREFERENCES,
+                "title": f"Preference: {text[:30].strip()}...",
+                "content": text.strip(),
+                "importance": 3,
+                "confidence": 0.9,
+                "tags": ["preferences", "promoted"]
+            }
+        return None
+
+
+class GoalPromotionRule(BasePromotionRule):
+    """
+    Identifies and evaluates user goals.
+    """
+    def evaluate(self, text: str) -> Optional[Dict[str, Any]]:
+        text_lower = text.lower()
+        if any(kw in text_lower for kw in ("my goal is", "i want to learn", "plan to build", "aim to", "target to", "long-term plan")):
+            return {
+                "category": MemoryCategory.GOALS,
+                "title": f"Goal: {text[:30].strip()}...",
+                "content": text.strip(),
+                "importance": 4,
+                "confidence": 0.95,
+                "tags": ["goals", "promoted"]
+            }
+        return None
+
+
+class UserProfilePromotionRule(BasePromotionRule):
+    """
+    Identifies and evaluates user profile data.
+    """
+    def evaluate(self, text: str) -> Optional[Dict[str, Any]]:
+        text_lower = text.lower()
+        if any(kw in text_lower for kw in ("my name is", "i live in", "i work as", "i am a", "born in")):
+            return {
+                "category": MemoryCategory.USER_PROFILE,
+                "title": f"Profile: {text[:30].strip()}...",
+                "content": text.strip(),
+                "importance": 4,
+                "confidence": 1.0,
+                "tags": ["user_profile", "promoted"]
+            }
+        return None
+
+
+class ProjectPromotionRule(BasePromotionRule):
+    """
+    Identifies and evaluates project contexts.
+    """
+    def evaluate(self, text: str) -> Optional[Dict[str, Any]]:
+        text_lower = text.lower()
+        if any(kw in text_lower for kw in ("project", "repository", "building a", "developing", "codebase", "github.com/")):
+            return {
+                "category": MemoryCategory.PROJECTS,
+                "title": f"Project: {text[:30].strip()}...",
+                "content": text.strip(),
+                "importance": 3,
+                "confidence": 0.9,
+                "tags": ["projects", "promoted"]
+            }
+        return None
+
+
+class ExclusionFilter:
+    """
+    Filters out temporary items (browser tabs, volume controls, transient commands).
+    """
+    def is_excluded(self, text: str) -> bool:
+        text_lower = text.lower()
+        
+        # 1. Volume/Sound adjustments
+        if any(kw in text_lower for kw in ("volume up", "volume down", "mute", "unmute", "set volume", "sound level")):
+            return True
+            
+        # 2. Temporary browser tabs / urls
+        if any(kw in text_lower for kw in ("http://", "https://", "chrome://", "open tab", "active tab", "browser tab", "localhost:")):
+            return True
+            
+        # 3. One-time command lines or short utility triggers
+        if any(kw in text_lower for kw in ("ls", "cd ", "pwd", "clear", "mkdir", "rm -rf", "git status", "git diff")):
+            if len(text.strip().split()) <= 4:
+                return True
+                
+        return False
+
+
+class MemoryPromoter:
+    """
+    Manages scanning, filtering, and promoting Working Memory statements to LTM storage.
+    """
+    def __init__(
+        self,
+        ltm_manager: LongTermMemoryManager,
+        rules: Optional[List[BasePromotionRule]] = None,
+        exclusion_filter: Optional[ExclusionFilter] = None
+    ) -> None:
+        self.ltm_manager = ltm_manager
+        self.rules = rules or [
+            PreferencePromotionRule(),
+            GoalPromotionRule(),
+            UserProfilePromotionRule(),
+            ProjectPromotionRule()
+        ]
+        self.exclusion_filter = exclusion_filter or ExclusionFilter()
+
+    def promote(self, wm: Any) -> int:
+        """
+        Processes conversation history and goals in WorkingMemory,
+        applying promotion filters, and committing them to LTM.
+        """
+        promoted_count = 0
+        candidates = []
+        
+        # 1. Collect from conversation history
+        conv_history = wm.get("conversation_history") or []
+        for inter in conv_history:
+            candidates.append((inter.user_prompt, inter.timestamp))
+            candidates.append((inter.assistant_response, inter.timestamp))
+            
+        # 2. Collect from session tasks and goals
+        active_task = wm.get("active_task")
+        if active_task:
+            candidates.append((f"Active task: {active_task}", time.time()))
+        active_goal = wm.get("active_goal")
+        if active_goal:
+            candidates.append((f"Active goal: {active_goal}", time.time()))
+            
+        # Run evaluations
+        for text, timestamp in candidates:
+            if not text or not text.strip():
+                continue
+                
+            # Filter transient inputs
+            if self.exclusion_filter.is_excluded(text):
+                continue
+                
+            # Match whitelist patterns
+            for rule in self.rules:
+                res = rule.evaluate(text)
+                if res:
+                    try:
+                        self.ltm_manager.create_memory(
+                            category=res["category"],
+                            title=res["title"],
+                            content=res["content"],
+                            importance=res.get("importance", 2),
+                            confidence=res.get("confidence", 0.9),
+                            tags=res.get("tags", []),
+                            meta_notes=f"Promoted from Working Memory context. Source timestamp: {timestamp}."
+                        )
+                        promoted_count += 1
+                        break  # Prevent duplicate promotion of same text block
+                    except Exception as e:
+                        logger.error(f"Failed to promote Working Memory segment to LTM: {e}")
+                        
+        return promoted_count

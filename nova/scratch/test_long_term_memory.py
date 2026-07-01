@@ -562,5 +562,72 @@ class TestLongTermMemory(unittest.TestCase):
         stale_loaded = self.storage.load(m_stale.id)
         self.assertFalse(stale_loaded.active)
 
+    def test_promotion_whitelists(self):
+        from nova.long_term_memory import PreferencePromotionRule, GoalPromotionRule, UserProfilePromotionRule, ProjectPromotionRule
+        
+        pref_rule = PreferencePromotionRule()
+        self.assertIsNotNone(pref_rule.evaluate("I prefer using Vim over Emacs."))
+        self.assertIsNone(pref_rule.evaluate("Normal interaction text."))
+
+        goal_rule = GoalPromotionRule()
+        self.assertIsNotNone(goal_rule.evaluate("My goal is to learn Rust this summer."))
+        self.assertIsNone(goal_rule.evaluate("Normal interaction text."))
+
+        profile_rule = UserProfilePromotionRule()
+        self.assertIsNotNone(profile_rule.evaluate("My name is John Doe."))
+        self.assertIsNone(profile_rule.evaluate("Normal interaction text."))
+
+        proj_rule = ProjectPromotionRule()
+        self.assertIsNotNone(proj_rule.evaluate("Working on a new python project."))
+        self.assertIsNone(proj_rule.evaluate("Normal interaction text."))
+
+    def test_promotion_exclusions(self):
+        from nova.long_term_memory import ExclusionFilter
+        
+        filter_obj = ExclusionFilter()
+        # Browser tabs/urls
+        self.assertTrue(filter_obj.is_excluded("Let's open tab: https://github.com"))
+        
+        # Volume/Sound changes
+        self.assertTrue(filter_obj.is_excluded("Increase volume up by 10%"))
+        
+        # One-time shell CLI commands
+        self.assertTrue(filter_obj.is_excluded("ls -la"))
+        self.assertTrue(filter_obj.is_excluded("cd /home"))
+        
+        # Standard valid cognitive context
+        self.assertFalse(filter_obj.is_excluded("My favorite editor is Vim."))
+
+    def test_promotion_end_to_end(self):
+        from nova.working_memory import WorkingMemory, Interaction
+        from nova.long_term_memory import MemoryPromoter
+        
+        wm = WorkingMemory()
+        
+        # Add whitelisted cognitive turns
+        wm.append_history(Interaction(user_prompt="My name is John Doe.", assistant_response="Nice to meet you John."))
+        wm.append_history(Interaction(user_prompt="I want to learn python programming next month.", assistant_response="I can guide you."))
+        wm.append_history(Interaction(user_prompt="I prefer a clean dark mode IDE.", assistant_response="Noted."))
+        
+        # Add blacklisted/transient browser/volume/utility turns
+        wm.append_history(Interaction(user_prompt="Open tab: https://youtube.com", assistant_response="Page loaded."))
+        wm.append_history(Interaction(user_prompt="Set volume to 50%", assistant_response="Volume adjusted."))
+        wm.append_history(Interaction(user_prompt="ls", assistant_response="Directory contents printed."))
+        
+        # Execute promotion
+        promoter = MemoryPromoter(self.manager)
+        promoted = promoter.promote(wm)
+        
+        # Exactly 3 memories should be promoted (profile, goal, preference)
+        self.assertEqual(promoted, 3)
+        
+        # Verify LTM contains promoted items
+        res = self.storage.list_all()
+        categories = [m.category for m in res]
+        self.assertIn("user_profile", categories)
+        self.assertIn("goals", categories)
+        self.assertIn("preferences", categories)
+        self.assertNotIn("projects", categories)
+
 if __name__ == "__main__":
     unittest.main()
