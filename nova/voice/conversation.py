@@ -283,7 +283,7 @@ def _stop_background_interrupt_listener() -> None:
 def play_confirmation_sound() -> None:
     """Short double-chime played immediately after wake detection."""
     try:
-        sr = 44100
+        sr = 16000
         t1 = np.linspace(0, 0.08, int(sr * 0.08), endpoint=False)
         t2 = np.linspace(0, 0.12, int(sr * 0.12), endpoint=False)
         tone1 = 0.15 * np.sin(2 * np.pi * 880  * t1)

@@ -104,6 +104,16 @@ class SpeakerVerifier:
         """Return True if a valid speaker profile (version 2.0) is stored on disk."""
         return self._profile_path.exists() and self._embeddings is not None and len(self._embeddings) > 0
 
+    @property
+    def total_embeddings(self) -> int:
+        """Returns the total number of embeddings in the active profile."""
+        return len(self._embeddings) if self._embeddings is not None else 0
+
+    @property
+    def max_capacity(self) -> int:
+        """Returns the maximum embeddings capacity from configuration."""
+        return getattr(cfg, "MAX_EMBEDDINGS", 50)
+
     def enroll(self, audio_list: list[np.ndarray], sr: int = 16000) -> None:
         """
         Enroll from a list of raw float32 numpy arrays (one per recording).
@@ -217,8 +227,10 @@ class SpeakerVerifier:
         except Exception as e:
             logger.debug(f"Continuous speaker verification learning error: {e}")
 
-    def _adapt_profile(self, embedding: np.ndarray, audio: np.ndarray, sr: int, max_embeddings: int = 50) -> None:
+    def _adapt_profile(self, embedding: np.ndarray, audio: np.ndarray, sr: int, max_embeddings: Optional[int] = None) -> None:
         """Dynamically add high-confidence validation utterances to adapt to noise/conditions."""
+        if max_embeddings is None:
+            max_embeddings = getattr(cfg, "MAX_EMBEDDINGS", 50)
         # 1. Reject duplicate
         if self._is_duplicate(embedding):
             return

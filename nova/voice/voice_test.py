@@ -147,7 +147,7 @@ def check_speaker_verification():
     """Report speaker verification enrollment status."""
     try:
         from nova.voice.speaker_verify import SpeakerVerifier, _RESEMBLYZER_AVAILABLE
-        from nova.voice.config import speaker_embedding_path, speaker_similarity_threshold
+        from nova.voice.config import speaker_embedding_path, speaker_similarity_threshold, ENABLE_SPEAKER_CONTINUOUS_LEARNING
 
         if not _RESEMBLYZER_AVAILABLE:
             return "WARNING", "resemblyzer not installed — speaker verification disabled."
@@ -164,11 +164,57 @@ def check_speaker_verification():
             )
 
         meta = verifier.meta() or {}
-        return "PASS", (
-            f"Speaker profile enrolled | samples={meta.get('samples','?')} | "
-            f"enrolled={meta.get('enrolled_at','?')} | "
-            f"threshold={speaker_similarity_threshold}"
+
+        # 1. Enrollment samples
+        enrollment_samples = meta.get("samples")
+        if enrollment_samples is None:
+            # Count anchors
+            anchors = [item for item in meta.get("embeddings", []) if item.get("is_anchor", False)]
+            if anchors:
+                enrollment_samples = len(anchors)
+            else:
+                enrollment_samples = "Unknown"
+
+        # 2. Total embeddings
+        total_emb = verifier.total_embeddings
+        max_cap = verifier.max_capacity
+
+        # 3. Learned embeddings
+        if isinstance(enrollment_samples, int):
+            learned_emb = max(0, total_emb - enrollment_samples)
+        else:
+            learned_emb = "Unknown"
+
+        # 4. Continuous learning
+        learning_status = "Enabled" if ENABLE_SPEAKER_CONTINUOUS_LEARNING else "Disabled"
+
+        # 5. Last updated
+        last_updated = meta.get("updated_at")
+        if not last_updated:
+            last_updated = meta.get("enrolled_at", "Unknown")
+
+        # Optional diagnostics (display if they exist in metadata)
+        optional_lines = []
+        for key, label in [
+            ("rejected_duplicates", "Rejected duplicates"),
+            ("rejected_low_quality", "Rejected low-quality samples"),
+            ("rejected_drift", "Rejected drift samples")
+        ]:
+            if key in meta:
+                optional_lines.append(f"    {label:<21} : {meta[key]}")
+
+        optional_str = "\n" + "\n".join(optional_lines) if optional_lines else ""
+
+        msg = (
+            f"    Enrollment samples   : {enrollment_samples}\n"
+            f"    Learned embeddings   : {learned_emb}\n"
+            f"    Total embeddings     : {total_emb} / {max_cap}\n"
+            f"    Threshold            : {speaker_similarity_threshold}\n"
+            f"    Continuous learning  : {learning_status}\n"
+            f"    Last updated         : {last_updated}"
+            f"{optional_str}"
         )
+        return "PASS", msg
     except Exception as e:
         return "FAIL", f"Speaker verification check error: {e}"
 
@@ -410,7 +456,8 @@ def main():
         elif sv_status == "WARNING":
             print_warning(f"  - {sv_msg}")
         else:
-            print_success(f"  - {sv_msg}")
+            print_success("Speaker profile enrolled\n")
+            print(sv_msg)
         print(f"✓ Speaker Verification: {sv_status}")
         print("=" * 50)
         

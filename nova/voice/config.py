@@ -108,6 +108,7 @@ WAKE_WORD_PHRASE = wake_word_phrase
 WAKE_WORD_MODEL_PATH = wake_word_model_path
 WAKE_WORD_THRESHOLD = wake_word_threshold
 CONFIRMATION_SOUND = confirmation_sound
+ENABLE_CONFIRMATION_CHIME = get_env("ENABLE_CONFIRMATION_CHIME", "True").lower() == "true"
 
 # Debug Mode — set NOVA_DEBUG=true to enable verbose per-chunk audio logging
 enable_debug = get_env("NOVA_DEBUG", "false").lower() == "true"
@@ -132,6 +133,7 @@ _default_speaker_path = _OLD_SPEAKER_PATH if os.path.exists(_OLD_SPEAKER_PATH) e
 speaker_embedding_path = os.path.expanduser(
     get_env("NOVA_SPEAKER_EMBEDDING", _default_speaker_path)
 )
+MAX_EMBEDDINGS = int(get_env("NOVA_SPEAKER_MAX_EMBEDDINGS", "50"))
 
 # WebRTC VAD speech padding configs (prevent cutting off start/end of commands)
 VAD_PRE_PADDING_FRAMES = 8   # number of 30ms frames (~240ms) to prepend
