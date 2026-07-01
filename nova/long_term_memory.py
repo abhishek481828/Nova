@@ -1,7 +1,7 @@
 """
 Long-Term Memory (LTM) subsystem for Nova AI Assistant.
 Manages persistent memories independent of Working Memory.
-Supports structured storage, metadata tracking, and SQLite backend with thread safety.
+Supports structured storage, metadata tracking, SQLite backend, indexes, and schema migrations.
 """
 
 from __future__ import annotations
@@ -38,6 +38,7 @@ class Memory:
     access_count: int = 0
     version: int = 1
     active: bool = True
+    meta_notes: str = ""
 
     def __post_init__(self) -> None:
         self.validate()
@@ -79,6 +80,8 @@ class Memory:
             raise ValueError("version must be a positive integer starting at 1.")
         if not isinstance(self.active, bool):
             raise TypeError("active must be a boolean.")
+        if not isinstance(self.meta_notes, str):
+            raise TypeError("meta_notes must be a string.")
 
 
 class BaseMemoryStorage(ABC):
@@ -115,7 +118,7 @@ class BaseMemoryStorage(ABC):
 class SQLiteMemoryStorage(BaseMemoryStorage):
     """
     SQLite concrete database implementation for LTM storage.
-    Uses a persistent, thread-safe connection design.
+    Uses a persistent, thread-safe connection design with schema migrations and indexing.
     """
 
     def __init__(self, db_path: str = ":memory:") -> None:
@@ -125,7 +128,46 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
         self._initialize_db()
 
     def _initialize_db(self) -> None:
+        """
+        Configures WAL journal and synchronous modes, starts schema version control table,
+        and applies sequential migrations under transaction locks.
+        """
         with self._lock:
+            # WAL mode performance optimization
+            self.conn.execute("PRAGMA journal_mode = WAL;")
+            self.conn.execute("PRAGMA synchronous = NORMAL;")
+            self.conn.execute("PRAGMA foreign_keys = ON;")
+            
+            # Setup schema meta version table
+            self.conn.execute("""
+                CREATE TABLE IF NOT EXISTS schema_info (
+                    version INTEGER PRIMARY KEY,
+                    applied_at REAL NOT NULL
+                )
+            """)
+            self.conn.commit()
+
+            # Read current schema version
+            cursor = self.conn.cursor()
+            cursor.execute("SELECT MAX(version) FROM schema_info")
+            row = cursor.fetchone()
+            current_version = row[0] if (row and row[0] is not None) else 0
+
+            # Target migration index
+            target_version = 3
+            for step in range(current_version + 1, target_version + 1):
+                try:
+                    logger.info(f"Applying schema migration step {step} for LTM Storage...")
+                    self._apply_migration_step(step)
+                    logger.info(f"Successfully migrated LTM database to version {step}.")
+                except Exception as e:
+                    self.conn.rollback()
+                    logger.error(f"Failed to apply database migration step {step}: {e}")
+                    raise e
+
+    def _apply_migration_step(self, step: int) -> None:
+        """Applies a single, isolated schema migration step."""
+        if step == 1:
             self.conn.execute("""
                 CREATE TABLE IF NOT EXISTS long_term_memories (
                     id TEXT PRIMARY KEY,
@@ -144,10 +186,19 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
                     active INTEGER NOT NULL
                 )
             """)
-            self.conn.commit()
-        logger.info(f"SQLite LTM Storage initialized at: '{self.db_path}'")
+        elif step == 2:
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_category ON long_term_memories (category);")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_created_at ON long_term_memories (created_at);")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_importance ON long_term_memories (importance);")
+            self.conn.execute("CREATE INDEX IF NOT EXISTS idx_memories_active ON long_term_memories (active);")
+        elif step == 3:
+            self.conn.execute("ALTER TABLE long_term_memories ADD COLUMN meta_notes TEXT DEFAULT ''")
+            
+        self.conn.execute("INSERT INTO schema_info (version, applied_at) VALUES (?, ?)", (step, time.time()))
+        self.conn.commit()
 
     def _row_to_memory(self, row: tuple) -> Memory:
+        meta_notes = row[14] if len(row) > 14 else ""
         return Memory(
             id=row[0],
             category=row[1],
@@ -162,35 +213,69 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
             accessed_at=row[10],
             access_count=row[11],
             version=row[12],
-            active=bool(row[13])
+            active=bool(row[13]),
+            meta_notes=meta_notes
         )
 
     def save(self, memory: Memory) -> None:
         memory.validate()
         with self._lock:
-            self.conn.execute("""
-                INSERT OR REPLACE INTO long_term_memories (
-                    id, category, title, content, importance, confidence, source, tags,
-                    created_at, updated_at, accessed_at, access_count, version, active
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """, (
-                memory.id,
-                memory.category,
-                memory.title,
-                memory.content,
-                memory.importance,
-                memory.confidence,
-                memory.source,
-                json.dumps(memory.tags),
-                memory.created_at,
-                memory.updated_at,
-                memory.accessed_at,
-                memory.access_count,
-                memory.version,
-                int(memory.active)
-            ))
-            self.conn.commit()
-        logger.debug(f"Saved memory '{memory.id}' to SQLite DB.")
+            # Check table structure to see if meta_notes column is ready
+            cursor = self.conn.cursor()
+            cursor.execute("PRAGMA table_info(long_term_memories)")
+            columns = [col[1] for col in cursor.fetchall()]
+            
+            try:
+                if "meta_notes" in columns:
+                    self.conn.execute("""
+                        INSERT OR REPLACE INTO long_term_memories (
+                            id, category, title, content, importance, confidence, source, tags,
+                            created_at, updated_at, accessed_at, access_count, version, active, meta_notes
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        memory.id,
+                        memory.category,
+                        memory.title,
+                        memory.content,
+                        memory.importance,
+                        memory.confidence,
+                        memory.source,
+                        json.dumps(memory.tags),
+                        memory.created_at,
+                        memory.updated_at,
+                        memory.accessed_at,
+                        memory.access_count,
+                        memory.version,
+                        int(memory.active),
+                        memory.meta_notes
+                    ))
+                else:
+                    self.conn.execute("""
+                        INSERT OR REPLACE INTO long_term_memories (
+                            id, category, title, content, importance, confidence, source, tags,
+                            created_at, updated_at, accessed_at, access_count, version, active
+                        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """, (
+                        memory.id,
+                        memory.category,
+                        memory.title,
+                        memory.content,
+                        memory.importance,
+                        memory.confidence,
+                        memory.source,
+                        json.dumps(memory.tags),
+                        memory.created_at,
+                        memory.updated_at,
+                        memory.accessed_at,
+                        memory.access_count,
+                        memory.version,
+                        int(memory.active)
+                    ))
+                self.conn.commit()
+            except Exception as e:
+                self.conn.rollback()
+                logger.error(f"Transaction rolled back. Failed to save LTM: {e}")
+                raise e
 
     def load(self, memory_id: str) -> Optional[Memory]:
         with self._lock:
@@ -204,9 +289,14 @@ class SQLiteMemoryStorage(BaseMemoryStorage):
     def delete(self, memory_id: str) -> bool:
         with self._lock:
             cursor = self.conn.cursor()
-            cursor.execute("DELETE FROM long_term_memories WHERE id = ?", (memory_id,))
-            self.conn.commit()
-            return cursor.rowcount > 0
+            try:
+                cursor.execute("DELETE FROM long_term_memories WHERE id = ?", (memory_id,))
+                self.conn.commit()
+                return cursor.rowcount > 0
+            except Exception as e:
+                self.conn.rollback()
+                logger.error(f"Transaction rolled back. Failed to delete memory '{memory_id}': {e}")
+                raise e
 
     def list_all(self, category: Optional[str] = None, active_only: bool = True) -> List[Memory]:
         query = "SELECT * FROM long_term_memories WHERE 1=1"
@@ -254,7 +344,8 @@ class LongTermMemoryManager:
         importance: int = 1,
         confidence: float = 1.0,
         source: str = "user",
-        tags: Optional[List[str]] = None
+        tags: Optional[List[str]] = None,
+        meta_notes: str = ""
     ) -> Memory:
         """
         Creates and stores a new Memory.
@@ -273,7 +364,8 @@ class LongTermMemoryManager:
             accessed_at=now,
             access_count=0,
             version=1,
-            active=True
+            active=True,
+            meta_notes=meta_notes
         )
         self.storage.save(memory)
         logger.info(f"Created new memory: [{category}] '{title}' (ID: {memory.id})")
@@ -359,7 +451,8 @@ class LongTermMemoryManager:
                     accessed_at=item.get("accessed_at", time.time()),
                     access_count=item.get("access_count", 0),
                     version=item.get("version", 1),
-                    active=bool(item.get("active", True))
+                    active=bool(item.get("active", True)),
+                    meta_notes=item.get("meta_notes", "")
                 )
                 self.storage.save(mem)
                 imported_count += 1

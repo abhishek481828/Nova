@@ -1,7 +1,9 @@
 import unittest
+from unittest.mock import MagicMock, patch
 import time
 import os
 import tempfile
+import sqlite3
 
 from nova.long_term_memory import Memory, SQLiteMemoryStorage, LongTermMemoryManager
 
@@ -11,6 +13,9 @@ class TestLongTermMemory(unittest.TestCase):
         self.storage = SQLiteMemoryStorage(db_path=":memory:")
         self.manager = LongTermMemoryManager(self.storage)
 
+    def tearDown(self):
+        self.storage.close()
+
     def test_memory_creation_and_fields(self):
         mem = self.manager.create_memory(
             category="facts",
@@ -19,7 +24,8 @@ class TestLongTermMemory(unittest.TestCase):
             importance=4,
             confidence=0.9,
             source="user_chat",
-            tags=["personal", "birthday"]
+            tags=["personal", "birthday"],
+            meta_notes="needs verification"
         )
 
         self.assertIsNotNone(mem.id)
@@ -30,6 +36,7 @@ class TestLongTermMemory(unittest.TestCase):
         self.assertEqual(mem.confidence, 0.9)
         self.assertEqual(mem.source, "user_chat")
         self.assertEqual(mem.tags, ["personal", "birthday"])
+        self.assertEqual(mem.meta_notes, "needs verification")
         self.assertEqual(mem.access_count, 0)
         self.assertEqual(mem.version, 1)
         self.assertTrue(mem.active)
@@ -130,11 +137,11 @@ class TestLongTermMemory(unittest.TestCase):
         imported_list = new_manager.list_memories()
         self.assertEqual(len(imported_list), 2)
         self.assertEqual(imported_list[1].title, "fact 2")
+        new_storage.close()
 
     def test_working_memory_independence(self):
         # Verify that working_memory module is not imported in long_term_memory
         import sys
-        # Clear modules dictionary to ensure clean search
         if "nova.working_memory" in sys.modules:
             orig_wm = sys.modules["nova.working_memory"]
             del sys.modules["nova.working_memory"]
@@ -147,6 +154,98 @@ class TestLongTermMemory(unittest.TestCase):
         finally:
             if orig_wm:
                 sys.modules["nova.working_memory"] = orig_wm
+
+    def test_schema_migrations_and_indexes(self):
+        fd, path = tempfile.mkstemp()
+        try:
+            # 1. Initialize a connection manually at version 1
+            conn = sqlite3.connect(path)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS schema_info (
+                    version INTEGER PRIMARY KEY,
+                    applied_at REAL NOT NULL
+                )
+            """)
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS long_term_memories (
+                    id TEXT PRIMARY KEY,
+                    category TEXT NOT NULL,
+                    title TEXT NOT NULL,
+                    content TEXT NOT NULL,
+                    importance INTEGER NOT NULL,
+                    confidence REAL NOT NULL,
+                    source TEXT NOT NULL,
+                    tags TEXT NOT NULL,
+                    created_at REAL NOT NULL,
+                    updated_at REAL NOT NULL,
+                    accessed_at REAL NOT NULL,
+                    access_count INTEGER NOT NULL,
+                    version INTEGER NOT NULL,
+                    active INTEGER NOT NULL
+                )
+            """)
+            conn.execute("INSERT INTO schema_info (version, applied_at) VALUES (1, ?)", (time.time(),))
+            conn.commit()
+            conn.close()
+
+            # 2. Open via SQLiteMemoryStorage (which runs upgrades 2 and 3)
+            storage = SQLiteMemoryStorage(db_path=path)
+            
+            # Verify columns (should contain meta_notes)
+            cursor = storage.conn.cursor()
+            cursor.execute("PRAGMA table_info(long_term_memories)")
+            columns = [col[1] for col in cursor.fetchall()]
+            self.assertIn("meta_notes", columns)
+
+            # Verify indexes exist
+            cursor.execute("SELECT name FROM sqlite_master WHERE type='index'")
+            indexes = [idx[0] for idx in cursor.fetchall()]
+            self.assertIn("idx_memories_category", indexes)
+            self.assertIn("idx_memories_active", indexes)
+
+            storage.close()
+        finally:
+            os.close(fd)
+            os.remove(path)
+
+    @patch("sqlite3.connect")
+    def test_transaction_rollback_on_failure(self, mock_connect):
+        # Create mock connection and cursor
+        mock_conn = MagicMock()
+        mock_cursor = MagicMock()
+        mock_cursor.fetchall.return_value = [("id", "TEXT"), ("category", "TEXT"), ("title", "TEXT"), ("content", "TEXT"), ("importance", "INTEGER"), ("confidence", "REAL"), ("source", "TEXT"), ("tags", "TEXT"), ("created_at", "REAL"), ("updated_at", "REAL"), ("accessed_at", "REAL"), ("access_count", "INTEGER"), ("version", "INTEGER"), ("active", "INTEGER"), ("meta_notes", "TEXT")]
+        mock_conn.cursor.return_value = mock_cursor
+        
+        # When attempting to save, cursor execute raises IntegrityError
+        def execute_side_effect(sql, *args, **kwargs):
+            if "INSERT OR REPLACE" in sql:
+                raise sqlite3.IntegrityError("Simulated DB lock")
+            return MagicMock()
+            
+        mock_conn.execute.side_effect = execute_side_effect
+        mock_connect.return_value = mock_conn
+
+        # Instantiate fresh storage and manager
+        storage = SQLiteMemoryStorage(db_path=":memory:")
+        manager = LongTermMemoryManager(storage)
+        
+        with self.assertRaises(sqlite3.IntegrityError):
+            manager.create_memory("facts", "title", "content")
+        
+        # Verify rollback is invoked
+        mock_conn.rollback.assert_called_once()
+        storage.close()
+
+    def test_index_usage_chronology_and_category(self):
+        self.manager.create_memory("facts", "fact 1", "val")
+        
+        # Run explain query plan
+        cursor = self.storage.conn.cursor()
+        cursor.execute("EXPLAIN QUERY PLAN SELECT * FROM long_term_memories WHERE category = 'facts'")
+        plan = cursor.fetchall()
+        
+        plan_str = " ".join([p[3] for p in plan])
+        self.assertIn("idx_memories_category", plan_str)
 
 if __name__ == "__main__":
     unittest.main()
