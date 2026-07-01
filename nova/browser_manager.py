@@ -864,6 +864,14 @@ class BrowserManager:
                 })
                 cls._working_memory.set("download_activity", downloads)
                 logger.info(f"Recorded download in Working Memory: {filename}")
+                try:
+                    cls._working_memory.history_manager.add_entry(
+                        "browser_event",
+                        f"Browser download initiated: {filename}",
+                        {"filename": filename, "url": url}
+                    )
+                except Exception:
+                    pass
         except Exception as e:
             logger.debug(f"Failed to record download activity in Working Memory: {e}")
 
@@ -977,6 +985,14 @@ class BrowserManager:
                     if not history or history[-1] != url:
                         history.append(url)
                         working_memory.set("navigation_history", history)
+                        try:
+                            working_memory.history_manager.add_entry(
+                                "browser_event",
+                                f"Browser navigated to: {url}",
+                                {"url": url, "title": title}
+                            )
+                        except Exception:
+                            pass
                 except Exception as hist_err:
                     logger.debug(f"History logging failed: {hist_err}")
             else:

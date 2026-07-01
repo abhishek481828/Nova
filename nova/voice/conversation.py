@@ -1217,12 +1217,20 @@ def process_single_iteration(
                     diagnostics.record_audio_quality(quality_metrics)
                     diagnostics.record_noise_sample(quality_metrics["background_noise"])
 
-                    # Update Working Memory with trigger details
                     try:
                         state.working_memory.set("wake_word_activation", True)
                         state.working_memory.set("listening_state", "listening")
                         state.working_memory.set("recognition_confidence", fused_score)
-                        state.working_memory.set("current_speaker", "verified" if (speaker_score is not None and verifier is not None and speaker_score >= verifier._threshold) else "unknown")
+                        speaker_status = "verified" if (speaker_score is not None and verifier is not None and speaker_score >= verifier._threshold) else "unknown"
+                        state.working_memory.set("current_speaker", speaker_status)
+                        try:
+                            state.working_memory.history_manager.add_entry(
+                                "voice_event",
+                                f"Wake word detected (confidence: {fused_score:.2f})",
+                                {"confidence": fused_score, "speaker": speaker_status}
+                            )
+                        except Exception:
+                            pass
                     except Exception as e:
                         logger.debug(f"Failed to update working memory after wake: {e}")
                 # ─────────────────────────────────────────────────────────────
@@ -1260,6 +1268,13 @@ def process_single_iteration(
                 state.working_memory.set("listening_state", "listening")
                 state.working_memory.set("recognition_confidence", 1.0)
                 state.working_memory.set("current_speaker", "verified")
+                try:
+                    state.working_memory.history_manager.add_entry(
+                        "voice_event",
+                        "Push-to-Talk activation triggered"
+                    )
+                except Exception:
+                    pass
             except Exception as e:
                 logger.debug(f"Failed to set PTT memory properties: {e}")
             try:
@@ -1437,6 +1452,14 @@ def process_single_iteration(
     print_success(f'Heard: "{text}"')
     try:
         state.working_memory.set("final_transcription", text)
+        try:
+            state.working_memory.history_manager.add_entry(
+                "voice_event",
+                f"Speech transcribed: '{text}'",
+                {"transcription": text}
+            )
+        except Exception:
+            pass
     except Exception as e:
         logger.debug(f"Failed to set final_transcription: {e}")
 
@@ -1783,6 +1806,10 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
     state = VoiceLoopState(working_memory=working_memory)
     try:
         state.working_memory.set("voice_session_state", "active")
+        try:
+            state.working_memory.history_manager.add_entry("voice_event", "Voice session started")
+        except Exception:
+            pass
     except Exception as e:
         logger.debug(f"Failed to set voice_session_state: {e}")
 
@@ -1875,6 +1902,10 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
     try:
         state.working_memory.set("voice_session_state", "inactive")
         state.working_memory.set("listening_state", "idle")
+        try:
+            state.working_memory.history_manager.add_entry("voice_event", "Voice session stopped")
+        except Exception:
+            pass
     except Exception as e:
         logger.debug(f"Failed to reset voice properties: {e}")
     return "menu"

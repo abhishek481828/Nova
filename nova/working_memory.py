@@ -1,7 +1,7 @@
 """
 Working Memory component for Nova AI Assistant.
 Represents the short-term cognitive state, goals, context, and current execution trace.
-Includes a dedicated Session State layer for runtime context management and a Context Manager.
+Includes a dedicated Session State layer, Context Manager, and History Manager.
 """
 
 from __future__ import annotations
@@ -161,6 +161,17 @@ class MemoryContext:
 
 
 @dataclass
+class HistoryEntry:
+    """
+    Structured short-term log entry tracking various system activities.
+    """
+    event_type: str  # user_interaction, assistant_response, action_execution, browser_event, voice_event, system_event
+    message: str
+    timestamp: float = field(default_factory=time.time)
+    metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
 class WorkingMemoryState:
     """
     The structured state container for Nova's short-term cognitive memory.
@@ -186,6 +197,9 @@ class WorkingMemoryState:
     # Nested Context Manager states
     active_contexts: List[MemoryContext] = field(default_factory=list)
     previous_context: Optional[MemoryContext] = None
+
+    # Nested History Manager states
+    history_entries: List[HistoryEntry] = field(default_factory=list)
 
 
 class TemporaryContext:
@@ -280,15 +294,49 @@ class MemoryContextManager:
         return TemporaryContext(self, name, metadata)
 
 
+class MemoryHistoryManager:
+    """
+    Maintains a sliding window of chronological short-term event records.
+    """
+    def __init__(self, wm: WorkingMemory, limit: int = 100):
+        self.wm = wm
+        self.limit = limit
+
+    def add_entry(self, event_type: str, message: str, metadata: Optional[Dict[str, Any]] = None) -> HistoryEntry:
+        """Appends a log record and keeps list within configured limits."""
+        entry = HistoryEntry(event_type=event_type, message=message, metadata=metadata or {})
+        
+        # Pull history list from State
+        history = list(self.wm.get("history_entries") or [])
+        history.append(entry)
+        
+        # Enforce capacity
+        if len(history) > self.limit:
+            history.pop(0)
+            
+        self.wm.set("history_entries", history)
+        logger.info(f"Added history entry: [{event_type}] {message}")
+        return entry
+
+    def get_entries(self, event_type: Optional[str] = None) -> List[HistoryEntry]:
+        """Retrieves history logs, optionally filtered by event type."""
+        entries = list(self.wm.get("history_entries") or [])
+        if event_type is not None:
+            return [e for e in entries if e.event_type == event_type]
+        return entries
+
+
 class WorkingMemory:
     """
     WorkingMemory manager. Provides object-oriented APIs to store, retrieve,
     clear, and restore short-term cognitive states and runtime sessions.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, history_limit: int = 100) -> None:
         self.state = WorkingMemoryState()
         self.context_manager = MemoryContextManager(self)
+        self.history_manager = MemoryHistoryManager(self, limit=history_limit)
+        
         # Register the default memory instance onto BaseAction class
         try:
             from nova.actions.base import BaseAction
@@ -296,6 +344,10 @@ class WorkingMemory:
         except Exception:
             pass
         logger.info("Working memory system initialized.")
+
+    def log_system_event(self, message: str, metadata: Optional[Dict[str, Any]] = None) -> HistoryEntry:
+        """Utility wrapper to log generic system events."""
+        return self.history_manager.add_entry("system_event", message, metadata)
 
     def set(self, key: str, value: Any) -> None:
         """
@@ -330,6 +382,12 @@ class WorkingMemory:
             elif key == "previous_context":
                 if value is not None and not isinstance(value, MemoryContext):
                     raise TypeError("previous_context must be a MemoryContext object or None.")
+            elif key == "history_entries":
+                if not isinstance(value, list):
+                    raise TypeError("history_entries must be a list.")
+                for item in value:
+                    if not isinstance(item, HistoryEntry):
+                        raise TypeError("All items in history_entries must be HistoryEntry objects.")
             setattr(self.state, key, value)
             logger.debug(f"State attribute updated: '{key}'", extra={"key": key, "value": value})
         else:
@@ -391,6 +449,8 @@ class WorkingMemory:
                 default_val = []
             elif key == "previous_context":
                 default_val = None
+            elif key == "history_entries":
+                default_val = []
             setattr(self.state, key, default_val)
             logger.debug(f"State attribute reset: '{key}'", extra={"key": key})
         elif key in self.state.additional_properties:
@@ -529,6 +589,17 @@ class WorkingMemory:
                 timestamp=prev_c.get("timestamp", time.time())
             )
 
+        # Reconstruct history_entries
+        new_state.history_entries = [
+            HistoryEntry(
+                event_type=h.get("event_type", "system_event"),
+                message=h.get("message", ""),
+                timestamp=h.get("timestamp", time.time()),
+                metadata=dict(h.get("metadata", {}))
+            )
+            for h in snapshot_data.get("history_entries", [])
+        ]
+
         new_state.additional_properties = dict(snapshot_data.get("additional_properties", {}))
         self.state = new_state
         logger.info("Working memory and session successfully restored from snapshot.")
@@ -540,6 +611,9 @@ class WorkingMemory:
         """
         if isinstance(interaction, Interaction):
             self.state.conversation_history.append(interaction)
+            user_prompt = interaction.user_prompt
+            assistant_response = interaction.assistant_response
+            intent = interaction.intent
         elif isinstance(interaction, dict):
             user_prompt = interaction.get("user_prompt", "")
             assistant_response = interaction.get("assistant_response", "")
@@ -558,6 +632,10 @@ class WorkingMemory:
         else:
             logger.error("Failed to append history: Invalid type.")
             raise TypeError("History record must be an Interaction or a dictionary.")
+
+        # Log to Unified History Manager
+        self.history_manager.add_entry("user_interaction", f"User: {user_prompt}", {"intent": intent})
+        self.history_manager.add_entry("assistant_response", f"Assistant: {assistant_response}", {"intent": intent})
 
         logger.info("Appended interaction to conversation history.")
 

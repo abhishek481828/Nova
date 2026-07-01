@@ -63,6 +63,16 @@ class BaseAction(ABC):
                             except Exception as sync_err:
                                 import logging
                                 logging.getLogger("nova").debug(f"Failed to record action execution trace: {sync_err}")
+                                
+                            # Log to History Manager
+                            try:
+                                wm.history_manager.add_entry(
+                                    "action_execution",
+                                    f"Executed action '{action_name}' (success: {success})",
+                                    {"action_name": action_name, "success": success, "execution_time": elapsed}
+                                )
+                            except Exception:
+                                pass
                 
                 wrapped_execute._is_wrapped = True
                 cls.execute = wrapped_execute
