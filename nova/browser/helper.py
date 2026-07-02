@@ -13,7 +13,7 @@ except ImportError:
     sync_playwright = Page = BrowserContext = None  # type: ignore[assignment,misc]
 
 
-from nova.browser.manager import BrowserManager
+from nova.browser.manager import BrowserManager, find_active_page
 
 YOUTUBE_DOMAIN = "youtube.com"
 YOUTUBE_SEARCH_BOX_SELECTOR = 'input[name="search_query"]'
@@ -26,12 +26,6 @@ YOUTUBE_WATCH_URL_PATTERN = "**/watch*"
 # Low-level safety helpers
 # ---------------------------------------------------------------------------
 
-def _safe_eval(page: Page, expression: str, default: bool = False) -> bool:
-    """Evaluate a JS expression on a page, swallowing errors (e.g. closed page)."""
-    try:
-        return bool(page.evaluate(expression))
-    except Exception:
-        return default
 
 
 def focus_page(page: Page) -> None:
@@ -72,33 +66,6 @@ def wait_for_page_ready(page: Page, timeout: int = 15000) -> None:
 # lookup (find_page_by_domain), so there is exactly one place that encodes
 # "never randomly choose a page".
 
-def _visible_page(pages):
-    for page in pages:
-        if _safe_eval(page, "document.visibilityState === 'visible'"):
-            return page
-    return None
-
-
-def _focused_page(pages):
-    for page in pages:
-        if _safe_eval(page, "document.hasFocus()"):
-            return page
-    return None
-
-
-def find_active_page(context: BrowserContext) -> Page:
-    """
-    Find the page the user is most likely looking at right now.
-    Priority: visible -> focused -> first open page -> new blank page.
-    """
-    pages = context.pages
-    safe_pages = [p for p in pages if not (p.url or "").startswith("chrome-extension://")]
-    return (
-        _visible_page(safe_pages)
-        or _focused_page(safe_pages)
-        or (safe_pages[0] if safe_pages else None)
-        or context.new_page()
-    )
 
 
 def find_page_by_domain(context: BrowserContext, domain: str):
@@ -139,7 +106,6 @@ def get_or_open_domain_page(context: BrowserContext, domain: str, url: str):
     if existing:
         focus_page(existing)
         try:
-            from nova.browser.manager import BrowserManager
             BrowserManager.focus_active_window()
         except Exception:
             pass
@@ -148,7 +114,6 @@ def get_or_open_domain_page(context: BrowserContext, domain: str, url: str):
     page = find_blank_page(context) or context.new_page()
     focus_page(page)
     try:
-        from nova.browser.manager import BrowserManager
         BrowserManager.focus_active_window()
     except Exception:
         pass

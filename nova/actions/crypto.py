@@ -1,10 +1,9 @@
 import os
-import urllib.request
-import json
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.coingecko import CoinGeckoService
 from nova.logger import logger
+from nova.services.nebius import call_nebius_llm
 
 COIN_MAPPING = {
     "btc": "bitcoin",
@@ -58,7 +57,6 @@ class CryptoPriceAction(BaseAction):
             # 3. Call LLM (Nebius) to summarize naturally
             nebius_key = os.environ.get("NEBIUS_API_KEY")
             if nebius_key:
-                nebius_url = "https://api.studio.nebius.ai/v1/chat/completions"
                 system_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's cryptocurrency price question naturally based on the provided price data.\n"
                     "Rules:\n"
@@ -66,35 +64,15 @@ class CryptoPriceAction(BaseAction):
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Express the price naturally (e.g. say 'Bitcoin is currently sixty-eight thousand five hundred dollars' or 'Bitcoin is currently 68,500 dollars' instead of listing raw text)."
                 )
-                payload = {
-                    "model": "meta-llama/Llama-3.3-70B-Instruct",
-                    "messages": [
+                summary = call_nebius_llm(
+                    messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Price data:\n{price_string}"}
                     ],
-                    "temperature": 0.3
-                }
-                
-                try:
-                    req = urllib.request.Request(
-                        nebius_url,
-                        data=json.dumps(payload).encode("utf-8"),
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {nebius_key}"
-                        },
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(req, timeout=15) as resp:
-                        if resp.status == 200:
-                            resp_data = json.loads(resp.read().decode("utf-8"))
-                            choices = resp_data.get("choices", [])
-                            if choices:
-                                summary = choices[0].get("message", {}).get("content", "").strip()
-                                if summary:
-                                    return summary
-                except Exception as e:
-                    logger.error(f"Failed to generate Nebius summary for crypto price data: {e}")
+                    temperature=0.3
+                )
+                if summary:
+                    return summary
 
             # Fallback if Nebius is unavailable
             return f"Current price details:\n\n" + price_string

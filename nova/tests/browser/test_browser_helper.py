@@ -124,8 +124,10 @@ class TestDedicatedBrowserActions(NovaBrowserTestCase):
     @patch("nova.browser.manager.sync_playwright")
     @patch("nova.browser.manager.BrowserManager.connect_browser")
     @patch("nova.browser.manager.BrowserManager.focus_browser")
-    def test_focus_active_window_success(self, mock_focus_browser, mock_connect_browser, mock_sync_playwright):
+    @patch("nova.browser.manager.BrowserManager.is_cdp_ready")
+    def test_focus_active_window_success(self, mock_is_cdp_ready, mock_focus_browser, mock_connect_browser, mock_sync_playwright):
         # Setup mocks
+        mock_is_cdp_ready.return_value = True
         mock_playwright_instance = MagicMock()
         mock_sync_playwright.return_value.__enter__.return_value = mock_playwright_instance
         

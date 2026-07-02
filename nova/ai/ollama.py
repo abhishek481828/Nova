@@ -4,6 +4,7 @@ import urllib.error
 from typing import Optional
 from nova.config import OLLAMA_API_URL, OLLAMA_MODEL, SYSTEM_PROMPT, DISABLE_OLLAMA
 from nova.logger import log_error, log_request
+from nova.services.nebius import call_nebius_llm
 
 class OllamaClient:
     def __init__(self, api_url: str = OLLAMA_API_URL, model: str = OLLAMA_MODEL) -> None:
@@ -70,43 +71,15 @@ class OllamaClient:
         messages.append({"role": "user", "content": current_content})
 
         # --- Nebius AI Cloud Check ---
-        import os
-        import time
         nebius_key = os.environ.get("NEBIUS_API_KEY")
         if nebius_key:
-            nebius_url = "https://api.studio.nebius.ai/v1/chat/completions"
-            nebius_payload = {
-                "model": "meta-llama/Llama-3.3-70B-Instruct",
-                "messages": messages,
-                "temperature": 0.0
-            }
-            retries = 3
-            backoff = 1.0
-            for attempt in range(retries):
-                try:
-                    nebius_req = urllib.request.Request(
-                        nebius_url,
-                        data=json.dumps(nebius_payload).encode("utf-8"),
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {nebius_key}"
-                        },
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(nebius_req, timeout=15) as nebius_resp:
-                        if nebius_resp.status == 200:
-                            resp_data = json.loads(nebius_resp.read().decode("utf-8"))
-                            choices = resp_data.get("choices", [])
-                            if choices:
-                                message = choices[0].get("message", {})
-                                content = message.get("content", "")
-                                if content:
-                                    return content
-                except Exception as e:
-                    log_error(f"Nebius API call failed (attempt {attempt + 1}/{retries})", e)
-                    if attempt < retries - 1:
-                        time.sleep(backoff)
-                        backoff *= 2.0
+            content = call_nebius_llm(
+                messages=messages,
+                temperature=0.0,
+                retries=3
+            )
+            if content:
+                return content
 
         # --- Gemini API Fallback ---
         gemini_key = os.environ.get("GEMINI_API_KEY")
@@ -229,30 +202,13 @@ class OllamaClient:
         content = ""
         nebius_key = os.environ.get("NEBIUS_API_KEY")
         if nebius_key:
-            nebius_url = "https://api.studio.nebius.ai/v1/chat/completions"
-            nebius_payload = {
-                "model": "meta-llama/Llama-3.3-70B-Instruct",
-                "messages": messages,
-                "temperature": 0.0
-            }
-            try:
-                nebius_req = urllib.request.Request(
-                    nebius_url,
-                    data=json.dumps(nebius_payload).encode("utf-8"),
-                    headers={
-                        "Content-Type": "application/json",
-                        "Authorization": f"Bearer {nebius_key}"
-                    },
-                    method="POST"
-                )
-                with urllib.request.urlopen(nebius_req, timeout=8) as nebius_resp:
-                    if nebius_resp.status == 200:
-                        resp_data = json.loads(nebius_resp.read().decode("utf-8"))
-                        choices = resp_data.get("choices", [])
-                        if choices:
-                            content = choices[0].get("message", {}).get("content", "").strip()
-            except Exception as e:
-                log_error("Nebius summary generation failed, falling back to local Ollama", e)
+            nebius_content = call_nebius_llm(
+                messages=messages,
+                temperature=0.0,
+                timeout=8.0
+            )
+            if nebius_content:
+                content = nebius_content
 
         # Fallback to local Ollama if not explicitly disabled (Critical fix)
         if DISABLE_OLLAMA:

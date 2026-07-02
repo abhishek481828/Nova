@@ -10,6 +10,10 @@ try:
 except ImportError:
     Page = BrowserContext = Locator = Browser = None  # type: ignore[assignment,misc]
 
+from nova.browser.manager import BrowserManager
+from nova.browser.interaction import BrowserInteractionHelper
+
+
 
 class BrowserActionException(Exception):
     """Custom exception raised when a browser action fails."""
@@ -196,12 +200,7 @@ class IntelligentElementDetectionEngine:
     """Intelligent Element Detection Engine using semantic element ranking."""
     
     def is_raw_selector(self, query: str) -> bool:
-        s = query.strip()
-        if s.startswith(("/", "xpath=", "./", "(")):
-            return True
-        if any(c in s for c in ("#", ".", "[", "]", ">", ":", "=")):
-            return True
-        return False
+        return BrowserInteractionHelper.is_raw_selector(query)
         
     def detect_element(self, page: Page, query: str, action_type: str) -> Locator:
         if not query:
@@ -927,7 +926,6 @@ class BrowserAutomationEngine:
         
     def resolve_locator(self, page: Page, selector_or_query: str, action_type: str) -> Locator:
         """Resolves raw CSS/XPath or uses semantic Element Detection Engine."""
-        from nova.browser.interaction import BrowserInteractionHelper
         locs = BrowserInteractionHelper.get_alternative_locators(page, selector_or_query, action_type)
         if locs:
             active = BrowserInteractionHelper.select_active_element(locs)
@@ -938,7 +936,6 @@ class BrowserAutomationEngine:
         
     def recover_browser(self) -> None:
         """Attempts to recover/reconnect the browser and active context/page."""
-        from nova.browser.manager import BrowserManager
         from nova.logger import logger
         logger.warning("Browser disconnect or target closed detected! Re-initializing Chromium session...")
         try:
@@ -962,7 +959,6 @@ class BrowserAutomationEngine:
         max_retries: int = 3
     ) -> Any:
         """Runs the interaction function with automatic load waiting, checks, and retries."""
-        from nova.browser.interaction import BrowserInteractionHelper
         page = self.get_active_page()
         
         # Recover browser if closed/disconnected
@@ -1100,7 +1096,6 @@ class BrowserAutomationEngine:
 
     def get_browser_instance(self) -> Browser:
         """Helper to safely retrieve the Playwright browser instance."""
-        from nova.browser.manager import BrowserManager
         return BrowserManager.get_browser()
         
     def get_active_context(self) -> BrowserContext:
@@ -1113,7 +1108,6 @@ class BrowserAutomationEngine:
                 self._active_context = None
                 
         browser = self.get_browser_instance()
-        from nova.browser.manager import BrowserManager
         ctx = BrowserManager.get_persistent_context(browser)
         self._active_context = ctx
         return ctx
@@ -1165,7 +1159,6 @@ class BrowserAutomationEngine:
         self._active_page = target_page
         
         if not silent:
-            from nova.browser.manager import BrowserManager
             BrowserManager.focus_browser(target_page)
             
         return target_page

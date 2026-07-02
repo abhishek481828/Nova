@@ -8,7 +8,7 @@ from typing import Any, Optional, Dict, List, TYPE_CHECKING
 from nova.logger import logger
 
 if TYPE_CHECKING:
-    from nova.core.memory import WorkingMemory, MemoryContext
+    from nova.core.memory import WorkingMemory
 
 
 @dataclass

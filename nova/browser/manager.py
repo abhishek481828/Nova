@@ -20,11 +20,10 @@ if not os.path.exists(_new_profile) and os.path.exists(_old_profile):
     except Exception:
         pass
 
-# Import playwright sync API helper
 try:
-    from playwright.sync_api import sync_playwright
+    from playwright.sync_api import sync_playwright, Page, BrowserContext
 except ImportError:
-    sync_playwright = None
+    sync_playwright = Page = BrowserContext = None
 
 class BrowserManager:
     PORT = CHROMIUM_DEVTOOLS_PORT
@@ -923,7 +922,6 @@ class BrowserManager:
 
         # Get active page
         try:
-            from nova.browser.helper import find_active_page
             active_page = find_active_page(context)
         except Exception:
             active_page = pages[0] if pages else None
@@ -1012,5 +1010,43 @@ class BrowserManager:
             working_memory.set("search_engine", None)
             working_memory.set("current_search_query", None)
 
+def _safe_eval(page: Page, expression: str, default: bool = False) -> bool:
+    """Evaluate a JS expression on a page, swallowing errors (e.g. closed page)."""
+    try:
+        return bool(page.evaluate(expression))
+    except Exception:
+        return default
+
+
+def _visible_page(pages):
+    for page in pages:
+        if _safe_eval(page, "document.visibilityState === 'visible'"):
+            return page
+    return None
+
+
+def _focused_page(pages):
+    for page in pages:
+        if _safe_eval(page, "document.hasFocus()"):
+            return page
+    return None
+
+
+def find_active_page(context: BrowserContext) -> Page:
+    """
+    Find the page the user is most likely looking at right now.
+    Priority: visible -> focused -> first open page -> new blank page.
+    """
+    pages = context.pages
+    safe_pages = [p for p in pages if not (p.url or "").startswith("chrome-extension://")]
+    return (
+        _visible_page(safe_pages)
+        or _focused_page(safe_pages)
+        or (safe_pages[0] if safe_pages else None)
+        or context.new_page()
+    )
+
+
 # Register the atexit hook to cleanly close the persistent Playwright CDP connection on exit
 atexit.register(BrowserManager.close_connection)
+

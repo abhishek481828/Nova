@@ -1,10 +1,9 @@
 import os
-import urllib.request
-import json
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.fmp import FmpService
 from nova.logger import logger
+from nova.services.nebius import call_nebius_llm
 
 class FinanceAction(BaseAction):
     @property
@@ -41,7 +40,6 @@ class FinanceAction(BaseAction):
             # 2. Call LLM (Nebius) to summarize naturally
             nebius_key = os.environ.get("NEBIUS_API_KEY")
             if nebius_key:
-                nebius_url = "https://api.studio.nebius.ai/v1/chat/completions"
                 system_prompt = (
                     "You are Nova, a helpful stock market assistant. Answer the user's stock price or financial market question naturally based on the provided FMP quote details.\n"
                     "Rules:\n"
@@ -49,35 +47,15 @@ class FinanceAction(BaseAction):
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Summarize the price, daily changes, and trends naturally (e.g. say 'Apple Inc. is currently trading at 281 dollars and 76 cents, down 0.71 percent today' instead of listing raw text)."
                 )
-                payload = {
-                    "model": "meta-llama/Llama-3.3-70B-Instruct",
-                    "messages": [
+                summary = call_nebius_llm(
+                    messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"FMP Stock Quote data:\n{result_context}"}
                     ],
-                    "temperature": 0.3
-                }
-                
-                try:
-                    req = urllib.request.Request(
-                        nebius_url,
-                        data=json.dumps(payload).encode("utf-8"),
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {nebius_key}"
-                        },
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(req, timeout=15) as resp:
-                        if resp.status == 200:
-                            resp_data = json.loads(resp.read().decode("utf-8"))
-                            choices = resp_data.get("choices", [])
-                            if choices:
-                                summary = choices[0].get("message", {}).get("content", "").strip()
-                                if summary:
-                                    return summary
-                except Exception as e:
-                    logger.error(f"Failed to generate Nebius summary for FMP data: {e}")
+                    temperature=0.3
+                )
+                if summary:
+                    return summary
 
             # Fallback if Nebius is unavailable: return raw formatted string
             return f"FMP stock quote details:\n\n" + result_context

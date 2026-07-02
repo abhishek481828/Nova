@@ -62,12 +62,9 @@ class NlpPipeline:
         self.protected_vocab: Set[str] = set(DEFAULT_PROTECTED_WORDS)
         self._load_apps_vocab()
         
-        # Load valid words from spelling.py dynamically to prevent circular imports
-        try:
-            from nova.spelling import VALID_WORDS
-            self.protected_vocab.update(VALID_WORDS)
-        except Exception:
-            pass
+        # Load valid words from vocabulary module
+        from nova.vocabulary import VALID_WORDS
+        self.protected_vocab.update(VALID_WORDS)
             
         # Load protected vocabulary directly into the spell checker so it doesn't try to correct them
         # Set high frequency to prioritize domain-specific terminology during correction

@@ -9,6 +9,8 @@ import threading
 from nova.voice.config import WAKE_WORD_THRESHOLD, WAKE_WORD_MODEL_PATH
 import nova.voice.config as cfg
 from nova.logger import logger
+from nova.voice.async_log import async_log
+
 
 class WakeWordDetectorInterface:
     def __init__(self, wake_word: str = "hey nova", confidence_threshold: float = WAKE_WORD_THRESHOLD):
@@ -316,7 +318,6 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
         self.diagnostics_history.append(diag)
         self.diagnostics_history = self.diagnostics_history[-500:]
         
-        from nova.voice.pipeline import async_log
         async_log(self.diagnostics_path, diag, 500)
 
     def log_false_wake(self, model_name: str, score: float, rms: float):
@@ -333,7 +334,6 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
         self.diagnostics_history.append(diag)
         self.diagnostics_history = self.diagnostics_history[-500:]
         
-        from nova.voice.pipeline import async_log
         async_log(self.diagnostics_path, diag, 500)
         
         self.confidence_threshold = min(0.85, self.confidence_threshold + 0.02)
@@ -353,7 +353,6 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
         self.diagnostics_history.append(diag)
         self.diagnostics_history = self.diagnostics_history[-500:]
         
-        from nova.voice.pipeline import async_log
         async_log(self.diagnostics_path, diag, 500)
         
         self.confidence_threshold = max(0.30, self.confidence_threshold - 0.01)
@@ -499,5 +498,4 @@ class AdaptiveWakeController:
             "new_thresholds": new_v,
             "reasons": reasons
         }
-        from nova.voice.pipeline import async_log
         async_log(self.logs_path, event, 300)

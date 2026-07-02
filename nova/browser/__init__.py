@@ -1,7 +1,7 @@
 try:
-    from nova.browser.manager import BrowserManager
+    from nova.browser.manager import BrowserManager, find_active_page
     from nova.browser.engine import BrowserAutomationEngine, BrowserActionException
-    from nova.browser.helper import find_active_page, run_automation
+    from nova.browser.helper import run_automation
     from nova.browser.interaction import BrowserInteractionHelper
     from nova.browser.actions import BrowserAction, ChromiumAction
 except ImportError:

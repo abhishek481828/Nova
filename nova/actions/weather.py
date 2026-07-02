@@ -1,10 +1,9 @@
 import os
-import urllib.request
-import json
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.weather import WeatherService
 from nova.logger import logger
+from nova.services.nebius import call_nebius_llm
 
 class WeatherAction(BaseAction):
     @property
@@ -33,7 +32,6 @@ class WeatherAction(BaseAction):
             # 3. Call LLM (Nebius) to summarize naturally
             nebius_key = os.environ.get("NEBIUS_API_KEY")
             if nebius_key:
-                nebius_url = "https://api.studio.nebius.ai/v1/chat/completions"
                 system_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's weather question naturally based on the provided weather data.\n"
                     "Rules:\n"
@@ -41,35 +39,15 @@ class WeatherAction(BaseAction):
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Summarize the temperature, condition, and any other notable details naturally (e.g. say 'It is currently sunny and 22 degrees in London' instead of listing it as a block)."
                 )
-                payload = {
-                    "model": "meta-llama/Llama-3.3-70B-Instruct",
-                    "messages": [
+                summary = call_nebius_llm(
+                    messages=[
                         {"role": "system", "content": system_prompt},
                         {"role": "user", "content": f"Weather data:\n{weather_string}"}
                     ],
-                    "temperature": 0.3
-                }
-                
-                try:
-                    req = urllib.request.Request(
-                        nebius_url,
-                        data=json.dumps(payload).encode("utf-8"),
-                        headers={
-                            "Content-Type": "application/json",
-                            "Authorization": f"Bearer {nebius_key}"
-                        },
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(req, timeout=15) as resp:
-                        if resp.status == 200:
-                            resp_data = json.loads(resp.read().decode("utf-8"))
-                            choices = resp_data.get("choices", [])
-                            if choices:
-                                summary = choices[0].get("message", {}).get("content", "").strip()
-                                if summary:
-                                    return summary
-                except Exception as e:
-                    logger.error(f"Failed to generate Nebius summary for weather data: {e}")
+                    temperature=0.3
+                )
+                if summary:
+                    return summary
 
             # Fallback if Nebius is unavailable: return raw formatted weather conditions
             return f"Current weather conditions:\n\n" + weather_string
