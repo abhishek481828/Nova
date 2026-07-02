@@ -109,9 +109,11 @@ class TestDedicatedBrowserActions(NovaBrowserTestCase):
         mock_launch_browser.assert_called_once()
         mock_run_background.assert_not_called()
 
+    @patch("shutil.which")
     @patch("nova.browser.manager.BrowserManager.is_browser_running")
     @patch("nova.core.executor.CommandExecutor.run_background")
-    def test_open_app_action_launches_other_apps_normally(self, mock_run_background, mock_is_browser_running):
+    def test_open_app_action_launches_other_apps_normally(self, mock_run_background, mock_is_browser_running, mock_which):
+        mock_which.return_value = "/usr/bin/vlc"
         mock_run_background.return_value = (0, "Success")
         
         action = OpenAppAction()

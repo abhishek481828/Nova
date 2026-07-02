@@ -30,7 +30,7 @@ class TestSpeakerContinuousLearning(unittest.TestCase):
         self.tmp_dir.cleanup()
 
     @patch("nova.voice.speaker._RESEMBLYZER_AVAILABLE", True)
-    @patch("nova.voice.speaker.preprocess_wav", side_effect=lambda x, **kw: x)
+    @patch("nova.voice.speaker.preprocess_wav", create=True, side_effect=lambda x, **kw: x)
     def test_staged_pending_adaptation(self, mock_prep):
         """Verify that verify() stages candidates as pending adaptation instead of writing directly."""
         verifier = SpeakerVerifier(embedding_path=self.emb_path)
