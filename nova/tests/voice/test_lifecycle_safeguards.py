@@ -57,18 +57,26 @@ class TestLifecycleSafeguards(unittest.TestCase):
     @patch("openwakeword.model.Model")
     def test_wake_detection_rolling_buffer(self, mock_oww_model):
         """Verify rolling buffer model and predictions execute cleanly."""
-        detector = LocalWakeWordDetector(model_path="dummy.onnx", confidence_threshold=0.5)
-        # Verify prediction lock exists
-        self.assertTrue(hasattr(detector, "predict_lock"))
-        
-        # Mock predict to return sample score
-        detector.model.predict = MagicMock(return_value={"dummy": 0.85})
-        detector.model_name = "dummy"
-        
-        # Verify predict works under lock
-        with detector.predict_lock:
-            preds = detector.model.predict(np.zeros(1280, dtype=np.int16))
-        self.assertEqual(preds["dummy"], 0.85)
+        import tempfile
+        with tempfile.TemporaryDirectory() as tmp_dir:
+            dummy_model_path = os.path.join(tmp_dir, "dummy.onnx")
+            with open(dummy_model_path, "wb") as f:
+                f.write(b"mock onnx content")
+
+            detector = LocalWakeWordDetector(model_path=dummy_model_path, confidence_threshold=0.5)
+            detector.model_name = "dummy"
+            detector.model_names = ["dummy"]
+
+            # Verify prediction lock exists
+            self.assertTrue(hasattr(detector, "predict_lock"))
+
+            # Mock predict to return sample score
+            detector.model.predict = MagicMock(return_value={"dummy": 0.85})
+
+            # Verify predict works under lock
+            with detector.predict_lock:
+                preds = detector.model.predict(np.zeros(1280, dtype=np.int16))
+            self.assertEqual(preds["dummy"], 0.85)
 
     @patch("nova.voice.pipeline.get_stt_provider")
     @patch("nova.voice.pipeline.LocalWakeWordDetector")

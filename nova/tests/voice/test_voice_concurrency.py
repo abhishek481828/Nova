@@ -50,27 +50,32 @@ class TestVoiceConcurrencyAndSafety(unittest.TestCase):
 
         self.assertEqual(len(errors), 0, f"Thread-safety errors in state machine: {errors}")
 
-    @patch("faster_whisper.WhisperModel")
-    def test_whisper_loader_thread_safety(self, mock_whisper_model):
+    def test_whisper_loader_thread_safety(self):
         """Verify that double-checked locking works on the Whisper loader and loads it exactly once."""
-        mock_instance = MagicMock()
-        mock_whisper_model.return_value = mock_instance
+        try:
+            import faster_whisper
+        except ImportError:
+            self.skipTest("faster_whisper not installed")
 
-        # Reset cached model
-        WhisperSTTProvider._cached_model = None
+        with patch("faster_whisper.WhisperModel") as mock_whisper_model:
+            mock_instance = MagicMock()
+            mock_whisper_model.return_value = mock_instance
 
-        provider = WhisperSTTProvider(model_size="tiny")
-        
-        # Load concurrently across multiple threads
-        threads = [threading.Thread(target=provider._load) for _ in range(20)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join()
+            # Reset cached model
+            WhisperSTTProvider._cached_model = None
 
-        # WhisperModel should have been instantiated exactly once
-        mock_whisper_model.assert_called_once()
-        self.assertIsNotNone(WhisperSTTProvider._cached_model)
+            provider = WhisperSTTProvider(model_size="tiny")
+            
+            # Load concurrently across multiple threads
+            threads = [threading.Thread(target=provider._load) for _ in range(20)]
+            for t in threads:
+                t.start()
+            for t in threads:
+                t.join()
+
+            # WhisperModel should have been instantiated exactly once
+            mock_whisper_model.assert_called_once()
+            self.assertIsNotNone(WhisperSTTProvider._cached_model)
 
     @patch("openwakeword.model.Model")
     def test_wakeword_detect_dtype_conversion(self, mock_oww_model):
