@@ -65,640 +65,25 @@ from nova.voice.pipeline.processors import (
 )
 
 # ---------------------------------------------------------------------------
-# Dynamic Greetings Builder
+# Re-exports and imports from sub-modules for backwards compatibility
 # ---------------------------------------------------------------------------
-
-_recent_greetings: collections.deque[str] = collections.deque(maxlen=5)
-
-def _get_user_name() -> str:
-    try:
-        from nova.core.state import StateManager
-        StateManager.load_state()
-        profile = StateManager.get_user_profile()
-        if profile and isinstance(profile, dict) and profile.get("name"):
-            name = profile["name"]
-            return name.split()[0] if " " in name else name
-    except Exception:
-        pass
-    return "Boss"
-
-
-_MORNING_GREETINGS = [
-    "Good morning, {name}. I hope you're having a great start to your day.",
-    "Good morning, {name}. I'm ready whenever you need me.",
-    "Morning, {name}. What would you like to work on today?",
-    "Good morning, {name}. Everything is ready whenever you are.",
-    "Good morning, {name}. Let me know how I can help today.",
-    "Morning, {name}. I hope you slept well. I'm all set.",
-    "Good morning, {name}. Ready to get started whenever you are.",
-    "Hello, {name}. Good morning. What can I do for you today?",
-    "Morning, {name}. It's good to have you back. How can I help?",
-    "Good morning, {name}. Just let me know what you'd like to do.",
-]
-
-_AFTERNOON_GREETINGS = [
-    "Good afternoon, {name}. It's great to have you back.",
-    "Welcome back, {name}. How can I help you today?",
-    "Good afternoon, {name}. What would you like to work on?",
-    "Hello, {name}. I'm ready for your next task.",
-    "Good afternoon, {name}. Everything is ready whenever you are.",
-    "Welcome back, {name}. What would you like to accomplish today?",
-    "Afternoon, {name}. I'm here and ready whenever you need me.",
-    "Hello, {name}. Good to see you again. How can I help?",
-    "Good afternoon, {name}. Just let me know what you'd like to do.",
-    "Welcome back, {name}. I'm all set whenever you're ready.",
-]
-
-_EVENING_GREETINGS = [
-    "Good evening, {name}. I hope your day has been going well.",
-    "Welcome back, {name}. What can I help you with this evening?",
-    "Good evening, {name}. I'm ready whenever you are.",
-    "Hello again, {name}. What would you like to do tonight?",
-    "Good evening, {name}. It's great to have you back.",
-    "Evening, {name}. I'm here and ready whenever you need me.",
-    "Welcome back, {name}. Let's get started whenever you're ready.",
-    "Good evening, {name}. What would you like to work on tonight?",
-    "Hello, {name}. I hope your evening is going well. How can I help?",
-    "Good evening, {name}. Just let me know what you need.",
-]
-
-_NIGHT_GREETINGS = [
-    "Good evening, {name}. Working late today? I'm here whenever you need me.",
-    "Welcome back, {name}. Let's get started whenever you're ready.",
-    "Hello, {name}. What can I help you finish tonight?",
-    "Good evening, {name}. I'm ready whenever you are.",
-    "Hello, {name}. Burning the midnight oil? I'm right here with you.",
-    "Welcome back, {name}. I'm all set whenever you need me.",
-    "Good evening, {name}. Let me know what you'd like to work on.",
-    "Hello again, {name}. I'm here to help whenever you're ready.",
-    "Evening, {name}. I hope you're doing well. What can I help with?",
-    "Welcome back, {name}. Just let me know how I can help tonight.",
-]
-
-_ADDRESS_FORMS = ["name", "Boss", "Sir"]
-
-def get_activation_greeting() -> str:
-    user_name = _get_user_name()
-    hour = datetime.now().hour
-
-    if 5 <= hour < 12:
-        pool = _MORNING_GREETINGS
-    elif 12 <= hour < 17:
-        pool = _AFTERNOON_GREETINGS
-    elif 17 <= hour < 22:
-        pool = _EVENING_GREETINGS
-    else:
-        pool = _NIGHT_GREETINGS
-
-    address = random.choice(_ADDRESS_FORMS)
-    if address == "name":
-        address = user_name
-
-    candidates = [g.format(name=address) for g in pool]
-    available = [g for g in candidates if g not in _recent_greetings]
-    if not available:
-        available = candidates
-
-    greeting = random.choice(available)
-    _recent_greetings.append(greeting)
-    return greeting
-
-
-# ---------------------------------------------------------------------------
-# Audio Recording Routines
-# ---------------------------------------------------------------------------
-
-def calculate_rms(audio_chunk: np.ndarray) -> float:
-    if len(audio_chunk) == 0:
-        return 0.0
-    return float(np.sqrt(np.mean(np.square(audio_chunk))))
-
-
-def record_audio(output_file: str | None = None, calibrated_threshold: float | None = None) -> bytes | str:
-    try:
-        import sounddevice as sd
-    except ImportError as e:
-        logger.debug(f"Failed to import sounddevice: {e}")
-        raise RuntimeError("Microphone or audio system not available.")
-
-    print_info("🎤 Listening...")
-    rms_threshold = calibrated_threshold if calibrated_threshold is not None else VAD_THRESHOLD
-    
-    from nova.voice.config import ENABLE_ECHO_CANCEL
-    aec = AecProcessor() if ENABLE_ECHO_CANCEL else None
-    hp_filter = HighPassFilter(cutoff=HIGHPASS_CUTOFF, fs=SAMPLE_RATE) if ENABLE_HIGHPASS_FILTER else None
-    rnnoise = RNNoiseWrapper() if ENABLE_NOISE_SUPPRESSION else None
-    agc = AutomaticGainControl() if ENABLE_AGC else None
-    vad = WebRTCVoiceActivityDetector(aggressiveness=VAD_AGGRESSIVENESS, default_threshold=rms_threshold) if ENABLE_VAD else None
-
-    if rnnoise and not rnnoise.is_available() and ENABLE_NOISE_SUPPRESSION:
-        print_warning("🧹 RNNoise native library not available. Continuing with filters and VAD only.")
-
-    block_samples = BLOCK_SIZE
-    audio_data = []
-    start_time = time.time()
-    last_sound_time = time.time()
-    has_speech_started = False
-    
-    def callback(indata, frames, callback_time, status):
-        if status:
-            logger.debug(f"Sounddevice status warning: {status}")
-        chunk = indata.copy().flatten()
-        if ENABLE_DC_OFFSET_REMOVAL:
-            chunk = chunk - chunk.mean()
-        if aec:
-            chunk = aec.process(chunk)
-        if agc:
-            chunk = agc.process(chunk)
-        if hp_filter:
-            chunk = hp_filter.process(chunk)
-        if rnnoise and rnnoise.is_available():
-            chunk = rnnoise.denoise_chunk(chunk)
-        chunk = chunk.reshape(-1, 1)
-        is_speech = True
-        if vad:
-            is_speech = vad.is_speech(chunk, SAMPLE_RATE)
-        audio_data.append((chunk, is_speech))
-
-    try:
-        consecutive_silent_frames = 0
-        with sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, callback=callback, blocksize=block_samples):
-            while True:
-                elapsed = time.time() - start_time
-                if elapsed >= RECORDING_TIMEOUT:
-                    logger.debug(f"Recording reached maximum timeout of {RECORDING_TIMEOUT} seconds.")
-                    break
-                
-                if len(audio_data) > 0:
-                    last_is_speech = audio_data[-1][1]
-                    if last_is_speech:
-                        last_sound_time = time.time()
-                        has_speech_started = True
-                        consecutive_silent_frames = 0
-                    else:
-                        if has_speech_started:
-                            consecutive_silent_frames += 1
-                            
-                    max_silent_frames = int(0.8 / (block_samples / SAMPLE_RATE))
-                    silence_duration = time.time() - last_sound_time
-                    
-                    if has_speech_started and (consecutive_silent_frames >= max_silent_frames or silence_duration >= SILENCE_TIMEOUT):
-                        if enable_debug:
-                            print_info("🛑 Silence detected (fast endpoint)")
-                        break
-                    elif not has_speech_started and silence_duration >= 5.0:
-                        logger.debug("No speech detected at the start. Stopping.")
-                        break
-                time.sleep(0.05)
-    except Exception as e:
-        raise RuntimeError(f"Microphone error: {e}")
-    finally:
-        if rnnoise:
-            rnnoise.destroy()
-
-    first_speech_idx = None
-    last_speech_idx = None
-    for idx, (_, is_speech) in enumerate(audio_data):
-        if is_speech:
-            if first_speech_idx is None:
-                first_speech_idx = idx
-            last_speech_idx = idx
-            
-    if first_speech_idx is not None and last_speech_idx is not None:
-        start_idx = max(0, first_speech_idx - VAD_PRE_PADDING_FRAMES)
-        end_idx = min(len(audio_data), last_speech_idx + VAD_POST_PADDING_FRAMES)
-        filtered_chunks = [audio_data[i][0] for i in range(start_idx, end_idx)]
-    else:
-        filtered_chunks = [item[0] for item in audio_data]
-
-    if filtered_chunks:
-        recording = np.concatenate(filtered_chunks, axis=0)
-    else:
-        recording = np.zeros((0, CHANNELS))
-
-    audio_int16 = (recording * 32767).astype(np.int16)
-    wav_io = io.BytesIO()
-    try:
-        with wave.open(wav_io, "wb") as wf:
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(2)
-            wf.setframerate(SAMPLE_RATE)
-            wf.writeframes(audio_int16.tobytes())
-        wav_bytes = wav_io.getvalue()
-    except Exception as e:
-        raise RuntimeError(f"Failed to format in-memory WAV data: {e}")
-
-    if output_file is not None:
-        try:
-            with open(output_file, "wb") as f:
-                f.write(wav_bytes)
-            return output_file
-        except Exception as e:
-            raise RuntimeError(f"Failed to write physical WAV file: {e}")
-    return wav_bytes
-
-
-def record_audio_from_stream(
-    stream, 
-    output_file: str | None = None, 
-    calibrated_threshold: float | None = None,
-    hp_filter=None,
-    rnnoise=None,
-    agc=None,
-    vad=None,
-    aec=None
-) -> bytes | str:
-    try:
-        from nova.dashboard.event_bus import emit
-        emit("mic_active", module="voice", status="success", metadata={"samplerate": SAMPLE_RATE, "channels": CHANNELS})
-    except Exception:
-        pass
-
-    rms_threshold = calibrated_threshold if calibrated_threshold is not None else VAD_THRESHOLD
-    from nova.voice.config import ENABLE_ECHO_CANCEL
-
-    local_aec = False
-    if aec is None and ENABLE_ECHO_CANCEL:
-        aec = AecProcessor()
-        local_aec = True
-
-    local_rnnoise = False
-    if hp_filter is None:
-        hp_filter = HighPassFilter(cutoff=HIGHPASS_CUTOFF, fs=SAMPLE_RATE) if ENABLE_HIGHPASS_FILTER else None
-    if rnnoise is None:
-        rnnoise = RNNoiseWrapper() if ENABLE_NOISE_SUPPRESSION else None
-        local_rnnoise = True
-    if agc is None:
-        agc = AutomaticGainControl() if ENABLE_AGC else None
-    if vad is None:
-        vad = WebRTCVoiceActivityDetector(aggressiveness=VAD_AGGRESSIVENESS, default_threshold=rms_threshold) if ENABLE_VAD else None
-
-    if rnnoise and rnnoise.is_available():
-        try:
-            from nova.dashboard.event_bus import emit
-            emit("denoising_start", module="voice", status="success", metadata={"library": "librnnoise"})
-        except Exception:
-            pass
-
-    if rnnoise and not rnnoise.is_available() and ENABLE_NOISE_SUPPRESSION:
-        print_warning("🧹 RNNoise native library not available. Continuing with filters and VAD only.")
-
-    block_samples = BLOCK_SIZE
-    audio_data = []
-    start_time = time.time()
-    last_sound_time = time.time()
-    has_speech_started = False
-    consecutive_silent_frames = 0
-    
-    try:
-        with voice_config.stream_lock:
-            if stream.read_available > 0:
-                stream.read(stream.read_available)
-            
-        while True:
-            try:
-                if shutdown_event.is_set():
-                    break
-                if get_current_state() == VoiceState.INACTIVE:
-                    logger.debug("Recording interrupted: voice deactivated by user.")
-                    break
-            except Exception:
-                pass
-                
-            elapsed = time.time() - start_time
-            if elapsed >= RECORDING_TIMEOUT:
-                logger.debug(f"Recording reached maximum timeout of {RECORDING_TIMEOUT} seconds.")
-                break
-                
-            try:
-                with voice_config.stream_lock:
-                    indata, overflow = stream.read(block_samples)
-            except Exception as e:
-                logger.debug(f"Audio stream read error during record: {e}")
-                break
-                
-            chunk = indata.copy().flatten()
-            if ENABLE_DC_OFFSET_REMOVAL:
-                chunk = chunk - chunk.mean()
-            if aec:
-                chunk = aec.process(chunk)
-            if agc:
-                chunk = agc.process(chunk)
-            if hp_filter:
-                chunk = hp_filter.process(chunk)
-            if rnnoise and rnnoise.is_available():
-                chunk = rnnoise.denoise_chunk(chunk)
-            chunk = chunk.reshape(-1, 1)
-            is_speech = True
-            if vad:
-                is_speech = vad.is_speech(chunk, SAMPLE_RATE)
-            audio_data.append((chunk, is_speech))
-
-            if is_speech:
-                last_sound_time = time.time()
-                consecutive_silent_frames = 0
-                if not has_speech_started:
-                    try:
-                        from nova.dashboard.event_bus import emit
-                        emit("speech_detected", module="voice", status="success")
-                    except Exception:
-                        pass
-                has_speech_started = True
-            else:
-                if has_speech_started:
-                    consecutive_silent_frames += 1
-
-            max_silent_frames = int(0.8 / (block_samples / SAMPLE_RATE))
-            silence_duration = time.time() - last_sound_time
-            
-            if has_speech_started and (consecutive_silent_frames >= max_silent_frames or silence_duration >= SILENCE_TIMEOUT):
-                if enable_debug:
-                    print_info("🛑 Silence detected (fast endpoint)")
-                break
-            elif not has_speech_started and silence_duration >= 8.0:
-                logger.debug("No speech detected within 8 seconds. Stopping.")
-                break
-                    
-    except Exception as e:
-        raise RuntimeError(f"Microphone read error: {e}")
-    finally:
-        if local_rnnoise and rnnoise:
-            rnnoise.destroy()
-        if local_aec and aec:
-            aec.destroy()
-
-    first_speech_idx = None
-    last_speech_idx = None
-    for idx, (_, is_speech) in enumerate(audio_data):
-        if is_speech:
-            if first_speech_idx is None:
-                first_speech_idx = idx
-            last_speech_idx = idx
-            
-    if first_speech_idx is not None and last_speech_idx is not None:
-        start_idx = max(0, first_speech_idx - VAD_PRE_PADDING_FRAMES)
-        end_idx = min(len(audio_data), last_speech_idx + VAD_POST_PADDING_FRAMES)
-        filtered_chunks = [audio_data[i][0] for i in range(start_idx, end_idx)]
-    else:
-        filtered_chunks = [item[0] for item in audio_data]
-
-    if filtered_chunks:
-        recording = np.concatenate(filtered_chunks, axis=0)
-    else:
-        recording = np.zeros((0, CHANNELS))
-
-    audio_int16 = (recording * 32767).astype(np.int16)
-    wav_io = io.BytesIO()
-    try:
-        with wave.open(wav_io, "wb") as wf:
-            wf.setnchannels(CHANNELS)
-            wf.setsampwidth(2)
-            wf.setframerate(SAMPLE_RATE)
-            wf.writeframes(audio_int16.tobytes())
-        wav_bytes = wav_io.getvalue()
-    except Exception as e:
-        raise RuntimeError(f"Failed to format in-memory WAV data: {e}")
-
-    try:
-        from nova.dashboard.event_bus import emit
-        emit("mic_inactive", module="voice", status="success")
-    except Exception:
-        pass
-
-    if output_file is not None:
-        try:
-            with open(output_file, "wb") as f:
-                f.write(wav_bytes)
-            return output_file
-        except Exception as e:
-            raise RuntimeError(f"Failed to write physical WAV file: {e}")
-    return wav_bytes
-
-
-# ---------------------------------------------------------------------------
-# State Machine & Conversation Loop
-# ---------------------------------------------------------------------------
-
-class VoiceState(Enum):
-    TEXT_MODE = auto()
-    VOICE_IDLE = auto()
-    WAKE_DETECTED = auto()
-    LISTENING = auto()
-    TRANSCRIBING = auto()
-    EXECUTING = auto()
-    SPEAKING = auto()
-    PUSH_TO_TALK = auto()
-    SHUTDOWN = auto()
-    INACTIVE = auto()
-
-
-voice_active_event = threading.Event()
-shutdown_event = threading.Event()
-_current_state = VoiceState.INACTIVE
-
-_mic_healthy = False
-_wake_healthy = False
-_stt_healthy = False
-_deferred_deactivate = False
-_state_lock = threading.Lock()
-
-def set_deferred_deactivate(val: bool) -> None:
-    global _deferred_deactivate
-    _deferred_deactivate = val
-
-def transition_state(new_state: VoiceState) -> None:
-    global _current_state
-    with _state_lock:
-        _current_state = new_state
-    logger.debug(f"[STATE] Transitioned to {new_state.name}")
-
-def get_current_state() -> VoiceState:
-    global _current_state
-    with _state_lock:
-        return _current_state
-
-def get_voice_status_report() -> dict:
-    from nova.browser.manager import BrowserManager
-    from nova.voice.config import ENABLE_TTS
-    
-    with _state_lock:
-        state_name = _current_state.name if _current_state else "UNKNOWN"
-    browser_running = BrowserManager.is_browser_running()
-    browser_status = "Healthy (Active)" if browser_running else "Inactive"
-    
-    mic_status = "Healthy (Open)" if _mic_healthy else "Unavailable"
-    wake_status = "Healthy (Ready)" if _wake_healthy else "Unavailable"
-    stt_status = "Healthy (Ready)" if _stt_healthy else "Unavailable"
-    tts_status = "Healthy (Ready)" if ENABLE_TTS else "Disabled"
-    health = "Healthy" if (_mic_healthy and _wake_healthy) else "Degraded"
-    
-    return {
-        "running": True,
-        "state": state_name,
-        "wake_word": wake_status,
-        "whisper": stt_status,
-        "elevenlabs": tts_status,
-        "browser": browser_status,
-        "microphone": mic_status,
-        "health": health
-    }
-
-def recover_microphone(old_stream):
-    logger.warning("Microphone error or disconnect detected. Attempting to recover...")
-    global _mic_healthy
-    _mic_healthy = False
-    if old_stream is not None:
-        try:
-            old_stream.stop()
-            old_stream.close()
-        except Exception:
-            pass
-    while not shutdown_event.is_set():
-        try:
-            if not sd.query_devices(kind="input"):
-                raise RuntimeError("No input device available.")
-            new_stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="float32")
-            new_stream.start()
-            logger.info("Microphone successfully recovered.")
-            _mic_healthy = True
-            voice_config.active_stream = new_stream
-            return new_stream
-        except Exception as e:
-            logger.debug(f"Microphone recovery failed: {e}. Retrying in 2 seconds...")
-            time.sleep(2)
-    return None
-
-def recover_wake_detector(old_detector):
-    logger.warning("Wake-word engine issue detected. Attempting to recover...")
-    global _wake_healthy
-    _wake_healthy = False
-    while not shutdown_event.is_set():
-        try:
-            new_detector = LocalWakeWordDetector(
-                model_path=wake_word_model_path,
-                confidence_threshold=wake_word_threshold,
-            )
-            logger.info("Wake-word engine successfully recovered.")
-            _wake_healthy = True
-            return new_detector
-        except Exception as e:
-            logger.debug(f"Wake-word recovery failed: {e}. Retrying in 2 seconds...")
-            time.sleep(2)
-    return None
-
-
-def clean_ansi(text: str) -> str:
-    return re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", text)
-
-
-_STOP_PHRASES = frozenset([
-    "stop nova", "stop", "cancel", "never mind", "nevermind", "that's enough",
-    "thats enough", "be quiet", "shut up", "pause", "wait", "hold on",
-    "nova stop", "nova cancel",
-])
-
-_PREFIX_STOP_PHRASES = frozenset([
-    "stop nova", "cancel", "never mind", "nevermind", "be quiet", "shut up",
-    "nova stop", "nova cancel",
-])
-
-def _is_interrupt_phrase(text: str) -> bool:
-    t = text.lower().strip().rstrip(".").rstrip(",")
-    if t in _STOP_PHRASES:
-        return True
-    for phrase in _PREFIX_STOP_PHRASES:
-        if t.startswith(phrase):
-            return True
-    return False
-
-
-_interrupt_listener_active = threading.Event()
-
-def _start_background_interrupt_listener(stream, stt_provider, calibrated_threshold: float) -> None:
-    _interrupt_listener_active.set()
-
-    def _listener():
-        LISTEN_SECS = 2.0
-        SILENCE_GATE = calibrated_threshold * 1.5
-
-        while _interrupt_listener_active.is_set():
-            try:
-                n_samples = int(SAMPLE_RATE * LISTEN_SECS)
-                with voice_config.stream_lock:
-                    if stream is None or not stream.active:
-                        break
-                    try:
-                        raw, _ = stream.read(n_samples)
-                    except Exception:
-                        break
-
-                flat = raw.flatten()
-                rms = float(np.sqrt(np.mean(flat * flat)))
-                if rms < SILENCE_GATE:
-                    continue
-
-                audio_int16 = (np.clip(flat, -1.0, 1.0) * 32767).astype(np.int16)
-                wav_io = io.BytesIO()
-                with wave.open(wav_io, "wb") as wf:
-                    wf.setnchannels(1)
-                    wf.setsampwidth(2)
-                    wf.setframerate(SAMPLE_RATE)
-                    wf.writeframes(audio_int16.tobytes())
-                wav_bytes = wav_io.getvalue()
-
-                try:
-                    heard = stt_provider.transcribe(wav_bytes, silent=True).strip()
-                except Exception:
-                    continue
-
-                if heard and _is_interrupt_phrase(heard):
-                    logger.debug(f"Background interrupt detected: '{heard}'")
-                    voice_config.interrupt_speaking = True
-                    _interrupt_listener_active.clear()
-                    break
-            except Exception as e:
-                logger.debug(f"Background interrupt listener error: {e}")
-                break
-
-    t = threading.Thread(target=_listener, daemon=True)
-    t.start()
-
-
-def _stop_background_interrupt_listener() -> None:
-    _interrupt_listener_active.clear()
-
-
-def play_confirmation_sound() -> None:
-    try:
-        sr = 16000
-        t1 = np.linspace(0, 0.08, int(sr * 0.08), endpoint=False)
-        t2 = np.linspace(0, 0.12, int(sr * 0.12), endpoint=False)
-        tone1 = 0.15 * np.sin(2 * np.pi * 880  * t1)
-        tone2 = 0.15 * np.sin(2 * np.pi * 1320 * t2)
-        pause = np.zeros(int(sr * 0.02))
-        audio = np.concatenate([tone1, pause, tone2])
-        fade_len = int(sr * 0.02)
-        audio[-fade_len:] *= np.linspace(1.0, 0.0, fade_len)
-        sd.play(audio, sr)
-        sd.wait()
-    except Exception as e:
-        logger.debug(f"Confirmation sound failed: {e}")
-
-
-def get_user_confirmation(prompt: str, stream, speech_threshold) -> bool:
-    speak(prompt)
-    try:
-        time.sleep(0.2)
-        response_audio = record_audio_from_stream(stream, calibrated_threshold=speech_threshold)
-        stt_provider = get_stt_provider()
-        response_text = stt_provider.transcribe(response_audio, silent=True).strip().lower()
-        logger.debug(f"User confirmation response: '{response_text}'")
-        positives = ("yes", "yeah", "yep", "sure", "correct", "do it", "play", "open", "go ahead")
-        if any(p in response_text for p in positives):
-            return True
-    except Exception as e:
-        logger.debug(f"Confirmation failed: {e}")
-    return False
+import nova.voice.pipeline.state_machine as sm
+from nova.voice.pipeline.greetings import (
+    _recent_greetings, _get_user_name, get_activation_greeting
+)
+from nova.voice.pipeline.recorder import (
+    calculate_rms, CircularAudioBuffer, record_audio, record_audio_from_stream
+)
+from nova.voice.pipeline.state_machine import (
+    VoiceState, voice_active_event, shutdown_event, transition_state,
+    get_current_state, get_voice_status_report, set_deferred_deactivate,
+    recover_microphone, recover_wake_detector
+)
+from nova.voice.pipeline.interrupts import (
+    clean_ansi, _is_interrupt_phrase, _start_background_interrupt_listener,
+    _stop_background_interrupt_listener, play_confirmation_sound,
+    get_user_confirmation
+)
 
 
 def check_long_running_action(dispatcher, actions: list, user_query: str) -> tuple[bool, str, str, str]:
@@ -1111,7 +496,6 @@ def process_single_iteration(
     dispatcher,
     transition_to
 ) -> str:
-    global _mic_healthy, _wake_healthy, _stt_healthy, _deferred_deactivate
 
     stt_provider = state.stt_provider
     verifier = state.verifier
@@ -1162,7 +546,7 @@ def process_single_iteration(
     cmd_start = time.time()
     assistant_reply = ""
 
-    if _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
+    if sm._current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
         if stream is not None:
             try:
                 stream.stop()
@@ -1171,11 +555,11 @@ def process_single_iteration(
                 pass
             stream = None
             voice_config.active_stream = None
-            _mic_healthy = False
+            sm._mic_healthy = False
         _greeted_this_activation = False
         _first_ptt_since_activation = True
         
-        while _current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE) and not shutdown_event.is_set():
+        while sm._current_state in (VoiceState.INACTIVE, VoiceState.TEXT_MODE) and not shutdown_event.is_set():
             if voice_active_event.is_set():
                 voice_active_event.clear()
                 transition_to(VoiceState.VOICE_IDLE)
@@ -1193,14 +577,14 @@ def process_single_iteration(
     except Exception as e:
         logger.debug(f"Failed to reset turn memory: {e}")
 
-    if _current_state == VoiceState.VOICE_IDLE:
+    if sm._current_state == VoiceState.VOICE_IDLE:
         if stt_provider is None:
             try:
                 stt_provider = get_stt_provider()
-                _stt_healthy = True
+                sm._stt_healthy = True
             except Exception as e:
                 logger.error(f"Failed to initialize STT provider: {e}")
-                _stt_healthy = False
+                sm._stt_healthy = False
                 stt_provider = None
 
         if verifier is None and enable_speaker_verification:
@@ -1221,11 +605,11 @@ def process_single_iteration(
                     raise RuntimeError("No input device found.")
                 stream = sd.InputStream(samplerate=SAMPLE_RATE, channels=CHANNELS, dtype="float32")
                 stream.start()
-                _mic_healthy = True
+                sm._mic_healthy = True
                 voice_config.active_stream = stream
             except Exception as e:
                 print_error(f"Failed to open microphone: {e}")
-                _mic_healthy = False
+                sm._mic_healthy = False
                 transition_to(VoiceState.INACTIVE)
                 save_state()
                 return "continue"
@@ -1265,11 +649,11 @@ def process_single_iteration(
                     model_path=wake_word_model_path,
                     confidence_threshold=wake_word_threshold,
                 )
-                _wake_healthy = True
+                sm._wake_healthy = True
                 voice_config.active_wake_detector = wake_detector
             except Exception as e:
                 logger.debug(f"Wake-engine load error: {e}")
-                _wake_healthy = False
+                sm._wake_healthy = False
                 use_wake_word = False
 
         if not _greeted_this_activation:
@@ -1587,7 +971,7 @@ def process_single_iteration(
     t0 = time.time()
     try:
         text = stt_provider.transcribe(command_wav, silent=True)
-        _stt_healthy = True
+        sm._stt_healthy = True
     except Exception as e:
         print_error(f"Transcription failed: {e}")
         try:
@@ -1599,10 +983,10 @@ def process_single_iteration(
         logger.warning(f"STT failed: {e}. Re-initializing STT provider...")
         try:
             stt_provider = get_stt_provider()
-            _stt_healthy = True
+            sm._stt_healthy = True
         except Exception as stt_err:
             logger.error(f"Failed to re-initialize STT provider: {stt_err}")
-            _stt_healthy = False
+            sm._stt_healthy = False
         save_state()
         return "continue"
     transcribe_dur = time.time() - t0
@@ -1905,8 +1289,8 @@ def process_single_iteration(
     except Exception:
         pass
 
-    if _deferred_deactivate:
-        _deferred_deactivate = False
+    if sm._deferred_deactivate:
+        sm._deferred_deactivate = False
         print_info("Nova has stopped listening.")
         transition_to(VoiceState.INACTIVE)
 
@@ -1915,8 +1299,6 @@ def process_single_iteration(
 
 
 def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None) -> str:
-    global _mic_healthy, _wake_healthy, _stt_healthy, _deferred_deactivate
-
     state = VoiceLoopState(working_memory=working_memory)
     try:
         state.working_memory.set("voice_session_state", "active")
@@ -1942,8 +1324,7 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
 
     def transition_to(new_state: VoiceState, detail: str = ""):
         state.current_state = new_state
-        global _current_state
-        _current_state = new_state
+        sm._current_state = new_state
         logger.debug(f"[STATE] Transitioned to {new_state.name}{f' ({detail})' if detail else ''}")
         try:
             from nova.dashboard.event_bus import emit
@@ -1972,7 +1353,7 @@ def run_voice_loop(ai_client, dispatcher, interactive=False, working_memory=None
         print()
 
     transition_to(VoiceState.SHUTDOWN)
-    _mic_healthy = False
+    sm._mic_healthy = False
 
     try:
         state.diagnostics.flush_to_disk()
