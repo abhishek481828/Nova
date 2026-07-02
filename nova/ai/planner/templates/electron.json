@@ -1,0 +1,198 @@
+{
+    "name": "electron",
+    "goal_type": "Desktop Application",
+    "deliverables": [
+        "package.json",
+        "main.js",
+        "index.html"
+    ],
+    "preconditions": [
+        "node",
+        "npm"
+    ],
+    "required_files": [
+        "{project_dir}/package.json",
+        "{project_dir}/main.js",
+        "{project_dir}/index.html"
+    ],
+    "required_directories": [
+        "{project_dir}"
+    ],
+    "required_dependencies": [
+        "electron"
+    ],
+    "risk_analysis": {},
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize npm package.json",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/package.json",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "init",
+                            "-y"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Install Electron package",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/node_modules/electron",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "install",
+                            "electron"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [],
+        "Source Code Generation": [
+            {
+                "description": "Generate Electron main.js app entrypoint",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/main.js",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/main.js",
+                        "content": "const { app, BrowserWindow } = require('electron');\napp.whenReady().then(() => { new BrowserWindow().loadFile('index.html'); });\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate Electron index.html template",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/index.html",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/index.html",
+                        "content": "<html><body><h1>Hello from Electron!</h1></body></html>"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Electron App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify Electron structure",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Electron app",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify application launch",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "echo",
+                            "electron launched"
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+}

@@ -1,0 +1,200 @@
+{
+    "name": "python cli",
+    "goal_type": "CLI Tool",
+    "deliverables": [
+        "main.py",
+        "setup.py",
+        "README.md"
+    ],
+    "preconditions": [
+        "python"
+    ],
+    "required_files": [
+        "{project_dir}/main.py",
+        "{project_dir}/setup.py"
+    ],
+    "required_directories": [
+        "{project_dir}"
+    ],
+    "required_dependencies": [],
+    "risk_analysis": {
+        "Interpreter failure": "Run python main.py check"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Setup virtual environment",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "-m",
+                            "venv",
+                            "{project_dir}/.venv"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Verify Python standard libraries",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_libs",
+                "required_artifacts": [
+                    "{project_dir}/.venv"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "--version"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Project Structure": [],
+        "Source Code Generation": [
+            {
+                "description": "Generate Python main.py script",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/main.py",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/main.py",
+                        "content": "import sys\ndef main():\n    print('Hello from Python CLI!')\nif __name__ == '__main__':\n    main()\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate setup.py installation script",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/setup.py",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/setup.py",
+                        "content": "from setuptools import setup\nsetup(name='cli-app', version='1.0', entry_points={'console_scripts':['cli-app=main:main']})\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# CLI Tool\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify Python main.py syntax",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/main.py"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "-m",
+                            "py_compile",
+                            "main.py"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Python CLI tool",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify CLI tool execution",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "main.py"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ]
+    }
+}

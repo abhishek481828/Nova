@@ -1,0 +1,217 @@
+{
+    "name": "java",
+    "goal_type": "Enterprise Application",
+    "deliverables": [
+        "src/main/java/Main.java",
+        "pom.xml",
+        "README.md"
+    ],
+    "preconditions": [
+        "javac",
+        "java"
+    ],
+    "required_files": [
+        "{project_dir}/src/main/java/Main.java",
+        "{project_dir}/pom.xml"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/src/main/java"
+    ],
+    "required_dependencies": [],
+    "risk_analysis": {
+        "Java compiler mismatch": "Verify javac path or install openjdk"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize build environment",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_java_env",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "java",
+                            "-version"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Check javac compiler",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_javac_env",
+                "required_artifacts": [
+                    "{project_dir}_java_env"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "javac",
+                            "-version"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create src/main/java directories",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/main/java",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/src/main/java"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate Java Main class source file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/main/java/Main.java",
+                "required_artifacts": [
+                    "{project_dir}/src/main/java"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/src/main/java/Main.java",
+                        "content": "public class Main {\n    public static void main(String[] args) {\n        System.out.println(\"Hello from Java!\");\n    }\n}\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate maven pom.xml file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/pom.xml",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/pom.xml",
+                        "content": "<project><modelVersion>4.0.0</modelVersion><groupId>com.app</groupId><artifactId>java-app</artifactId><version>1.0</version></project>"
+                    }
+                }
+            },
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Java App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Compile Java project",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/src/main/java/Main.class",
+                "required_artifacts": [
+                    "{project_dir}/src/main/java/Main.java"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "javac",
+                            "src/main/java/Main.java"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Java project",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}/src/main/java/Main.class"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify execution output",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "java",
+                            "-cp",
+                            "src/main/java",
+                            "Main"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ]
+    }
+}

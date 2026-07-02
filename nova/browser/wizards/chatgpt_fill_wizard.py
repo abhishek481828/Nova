@@ -7,6 +7,9 @@ except ImportError:
 
 
 def test_fill():
+    if not _PLAYWRIGHT_AVAILABLE:
+        print("Playwright is not available!")
+        return
     with sync_playwright() as p:
         browser = p.chromium.connect_over_cdp("http://127.0.0.1:9222")
         context = browser.contexts[0]

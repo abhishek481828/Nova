@@ -89,7 +89,8 @@ async def system_metrics_loop() -> None:
                 
                 # Check browser process state
                 from nova.browser.manager import BrowserManager
-                browser_active = BrowserManager.is_browser_running()
+                loop = asyncio.get_running_loop()
+                browser_active = await loop.run_in_executor(None, BrowserManager.is_browser_running)
                 
                 metrics = {
                     "cpu": cpu,

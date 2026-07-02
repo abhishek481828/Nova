@@ -1,3 +1,30 @@
+import os
+import sys
+import time
+import numpy as np
+import sounddevice as sd
+
+# Include project root
+try:
+    project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), "../../.."))
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
+except Exception:
+    pass
+
+from nova.logger import logger
+from nova.voice.config import (
+    SAMPLE_RATE, CHANNELS, enable_wake_word, wake_word_model_path,
+    wake_word_threshold, confirmation_sound, VAD_THRESHOLD, NOISE_FLOOR_MARGIN
+)
+from nova.voice.speaker import SpeakerVerifier
+from nova.voice.whisper import get_stt_provider
+from nova.voice.tts import speak
+from nova.voice.wakeword import LocalWakeWordDetector
+from nova.voice.pipeline.processors import WebRTCVoiceActivityDetector
+from nova.voice.pipeline.core import play_confirmation_sound, record_audio_from_stream, clean_ansi
+from nova.utils import print_info, print_success, print_warning, print_error
+
 def run_voice_loop(ai_client, dispatcher) -> str:
     """
     Runs the Voice Mode interaction loop in a production-quality architecture.
@@ -7,8 +34,7 @@ def run_voice_loop(ai_client, dispatcher) -> str:
     stt_provider = get_stt_provider()
     
     # Import optional libraries lazily
-    from nova.voice.audio_processor import AmbientCalibrator
-    from nova.voice.config import AMBIENT_CALIBRATION_DURATION, NOISE_FLOOR_MARGIN
+    from nova.voice.pipeline.processors import AmbientCalibrator
     
     # Check input device availability and specs
     try:
@@ -33,7 +59,7 @@ def run_voice_loop(ai_client, dispatcher) -> str:
     # Run dynamic microphone calibration using the shared stream
     print_info("🔇 Calibrating microphone...")
     try:
-        calib_samples = int(SAMPLE_RATE * AMBIENT_CALIBRATION_DURATION)
+        calib_samples = int(SAMPLE_RATE * 1.5)
         calib_recording, overflow = stream.read(calib_samples)
         
         calibrator = AmbientCalibrator()
@@ -114,23 +140,15 @@ def run_voice_loop(ai_client, dispatcher) -> str:
                                 chunk_norm = chunk * (target_rms / chunk_rms)
                             else:
                                 chunk_norm = chunk
-
+                            
                             pcm_chunk = (np.clip(chunk_norm, -1.0, 1.0) * 32767).astype(np.int16)
                             
-                            t_start = time.perf_counter()
                             predictions = wake_detector.model.predict(pcm_chunk)
-                            t_end = time.perf_counter()
-                            
                             score = predictions.get(wake_detector.model_name, 0.0)
                             
-                            if enable_debug:
-                                print(f"📊 Wake score: {score:.4f} (threshold: {wake_word_threshold})")
-                                
                             if score >= wake_word_threshold:
                                 now = time.time()
                                 if now - _last_trigger_time < WAKE_COOLDOWN:
-                                    if enable_debug:
-                                        print_info(f"⏳ Wake cooldown active ({now - _last_trigger_time:.1f}s < {WAKE_COOLDOWN}s)")
                                     continue
                                 _last_trigger_time = now
                                 wake_word_triggered = True
@@ -163,7 +181,6 @@ def run_voice_loop(ai_client, dispatcher) -> str:
                 record_start = time.time()
                 
                 # Temporarily mute system audio to ensure clean microphone capture
-                import subprocess
                 muted = False
                 try:
                     subprocess.run(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"], check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
@@ -205,7 +222,6 @@ def run_voice_loop(ai_client, dispatcher) -> str:
                 
                 # Check for exit commands
                 if text.lower().strip().rstrip(".") in ("exit", "quit", "goodbye"):
-                    print_info("🔊 Speaking: Goodbye!")
                     speak("Goodbye!")
                     print_info("Goodbye!")
                     return "exit"

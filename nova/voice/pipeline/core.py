@@ -9,8 +9,6 @@ import time
 import json
 import queue
 import atexit
-import ctypes
-import ctypes.util
 import threading
 import collections
 import random
@@ -23,17 +21,6 @@ from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
-import sounddevice as sd
-
-try:
-    from scipy.signal import resample_poly, butter, sosfilt, sosfilt_zi, welch, spectrogram
-except ImportError:
-    resample_poly = None
-    butter = None
-    sosfilt = None
-    sosfilt_zi = None
-    welch = None
-    spectrogram = None
 
 import nova.voice.config as voice_config
 from nova.voice.config import (
@@ -59,7 +46,7 @@ from nova.voice.tts import speak
 from nova.voice.wakeword import LocalWakeWordDetector, AdaptiveWakeController
 
 
-from nova.voice.async_log import async_log, _async_logger
+from nova.voice.async_log import async_log
 from nova.voice.pipeline.processors import (
     RNNoiseWrapper,
     HighPassFilter,
@@ -67,8 +54,6 @@ from nova.voice.pipeline.processors import (
     WebRTCVoiceActivityDetector,
     AmbientCalibrator,
     AudioDiagnostics,
-    SpeexEchoCanceller,
-    NLMSEchoCanceller,
     AecProcessor,
     AudioQualityAnalyzer,
     ConfidenceFusionEngine,

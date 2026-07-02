@@ -4,26 +4,12 @@ Consolidated audio pipeline and state machine orchestration for the Nova Voice s
 from __future__ import annotations
 
 import os
-import re
 import time
-import json
-import queue
-import atexit
 import ctypes
 import ctypes.util
-import threading
-import collections
-import random
-import subprocess
-import wave
-import io
-from enum import Enum, auto
-from pathlib import Path
-from datetime import datetime
 from typing import Dict, List, Tuple, Optional
 
 import numpy as np
-import sounddevice as sd
 
 try:
     from scipy.signal import resample_poly, butter, sosfilt, sosfilt_zi, welch, spectrogram
@@ -35,31 +21,13 @@ except ImportError:
     welch = None
     spectrogram = None
 
-import nova.voice.config as voice_config
 from nova.voice.config import (
-    SAMPLE_RATE, CHANNELS, RECORDING_TIMEOUT, SILENCE_TIMEOUT, TEMP_AUDIO_DIR,
-    VAD_THRESHOLD, NOISE_FLOOR_MARGIN, HIGHPASS_CUTOFF, VAD_AGGRESSIVENESS,
-    ENABLE_NOISE_SUPPRESSION, ENABLE_HIGHPASS_FILTER, ENABLE_AGC, ENABLE_VAD,
-    ENABLE_DC_OFFSET_REMOVAL, BLOCK_SIZE,
-    VAD_PRE_PADDING_FRAMES, VAD_POST_PADDING_FRAMES, enable_debug,
-    enable_wake_word, wake_word_phrase, wake_word_model_path,
-    wake_word_threshold, confirmation_sound, enable_speaker_verification,
-    speaker_similarity_threshold, speaker_embedding_path,
-    AGC_TARGET_RMS, AGC_MAX_GAIN, AGC_RATE, AMBIENT_CALIBRATION_DURATION,
+    SAMPLE_RATE, VAD_THRESHOLD, NOISE_FLOOR_MARGIN, HIGHPASS_CUTOFF,
+    VAD_AGGRESSIVENESS, AGC_TARGET_RMS, AGC_MAX_GAIN, AGC_RATE
 )
 from nova.logger import logger
-from nova.utils import (
-    print_info, print_warning, print_error, print_success,
-    COLOR_BOLD, COLOR_RESET, COLOR_CYAN, COLOR_RED
-)
-
-from nova.voice.speaker import SpeakerVerifier
-from nova.voice.whisper import get_stt_provider
-from nova.voice.tts import speak
-from nova.voice.wakeword import LocalWakeWordDetector, AdaptiveWakeController
-
-
-from nova.voice.async_log import async_log, _async_logger
+from nova.utils import print_warning
+from nova.voice.async_log import async_log
 
 def resample_16k_to_48k(data_16k: np.ndarray) -> np.ndarray:
     flat = data_16k.flatten().astype(np.float32)

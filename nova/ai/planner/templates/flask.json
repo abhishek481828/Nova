@@ -1,0 +1,268 @@
+{
+    "name": "flask",
+    "goal_type": "Web Application",
+    "deliverables": [
+        "app.py",
+        "templates/index.html",
+        "static/style.css",
+        "requirements.txt",
+        "README.md"
+    ],
+    "preconditions": [
+        "python",
+        "pip"
+    ],
+    "required_files": [
+        "{project_dir}/app.py",
+        "{project_dir}/templates/index.html",
+        "{project_dir}/static/style.css",
+        "{project_dir}/requirements.txt",
+        "{project_dir}/README.md"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/templates",
+        "{project_dir}/static"
+    ],
+    "required_dependencies": [
+        "flask"
+    ],
+    "risk_analysis": {
+        "Missing Python runtime": "Verify python path or install python3",
+        "Dependency install failure": "Verify internet connectivity or use local wheel cache"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Create Python virtual environment",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "-m",
+                            "venv",
+                            "{project_dir}/.venv"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Install Flask package",
+                "action_type": "install_package",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv/bin/flask",
+                "required_artifacts": [
+                    "{project_dir}/.venv"
+                ],
+                "metadata": {
+                    "action": "install_package",
+                    "params": {
+                        "package": "flask"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create templates directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/templates",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/templates"
+                    }
+                }
+            },
+            {
+                "description": "Create static directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/static",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/static"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate Flask application file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/app.py",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/app.py",
+                        "content": "from flask import Flask, render_template\napp = Flask(__name__)\n@app.route('/')\ndef home(): return render_template('index.html')\nif __name__ == '__main__': app.run(port=5000)\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate index.html template",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/templates/index.html",
+                "required_artifacts": [
+                    "{project_dir}/templates"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/templates/index.html",
+                        "content": "<!DOCTYPE html><html><head><title>Flask Website</title><link rel='stylesheet' href='/static/style.css'></head><body><h1>Hello from Flask!</h1></body></html>"
+                    }
+                }
+            },
+            {
+                "description": "Generate style.css stylesheet",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/static/style.css",
+                "required_artifacts": [
+                    "{project_dir}/static"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/static/style.css",
+                        "content": "body { font-family: Arial; text-align: center; margin-top: 50px; background: #fafafa; }"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate requirements.txt file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/requirements.txt",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/requirements.txt",
+                        "content": "flask\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Flask App\nRun python app.py\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify Flask files structure",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/app.py",
+                    "{project_dir}/templates/index.html"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Flask development server",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify server is responding",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "http://127.0.0.1:5000"
+                    }
+                }
+            }
+        ]
+    }
+}

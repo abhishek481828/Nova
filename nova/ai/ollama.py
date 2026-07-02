@@ -1,7 +1,6 @@
 import os
 import json
-import urllib.request
-import urllib.error
+import httpx
 from typing import Optional
 from nova.config import OLLAMA_API_URL, OLLAMA_MODEL, SYSTEM_PROMPT, DISABLE_OLLAMA
 from nova.logger import log_error, log_request
@@ -108,15 +107,14 @@ class OllamaClient:
                     "contents": gemini_contents,
                     "generationConfig": {"temperature": 0.0}
                 }
-                gemini_req = urllib.request.Request(
-                    gemini_url,
-                    data=json.dumps(gemini_payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
-                )
-                with urllib.request.urlopen(gemini_req, timeout=15) as gemini_resp:
-                    if gemini_resp.status == 200:
-                        resp_data = json.loads(gemini_resp.read().decode("utf-8"))
+                with httpx.Client() as client:
+                    gemini_resp = client.post(
+                        gemini_url,
+                        json=gemini_payload,
+                        timeout=15.0
+                    )
+                    if gemini_resp.status_code == 200:
+                        resp_data = gemini_resp.json()
                         candidates = resp_data.get("candidates", [])
                         if candidates:
                             parts = candidates[0].get("content", {}).get("parts", [])
@@ -146,25 +144,22 @@ class OllamaClient:
         }
         
         try:
-            req = urllib.request.Request(
-                url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={"Content-Type": "application/json"},
-                method="POST"
-            )
-            
-            # 60 second timeout for local LLM requests
-            with urllib.request.urlopen(req, timeout=60) as response:
-                if response.status != 200:
-                    log_error(f"Ollama API returned non-200 status code: {response.status}")
+            with httpx.Client() as client:
+                response = client.post(
+                    url,
+                    json=payload,
+                    timeout=60.0
+                )
+                if response.status_code != 200:
+                    log_error(f"Ollama API returned non-200 status code: {response.status_code}")
                     return None
                 
-                resp_data = json.loads(response.read().decode("utf-8"))
+                resp_data = response.json()
                 message = resp_data.get("message", {})
                 content = message.get("content", "")
                 return content
                 
-        except urllib.error.URLError as e:
+        except httpx.RequestError as e:
             log_error("Failed to connect to Ollama. Is it running? Try: systemctl start ollama", e)
             return None
         except Exception as e:
@@ -182,19 +177,21 @@ class OllamaClient:
         def clean_ansi(text: str) -> str:
             return re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", text)
 
-        system_prompt = (
+        from nova.config import load_prompt
+        fallback_prompt = (
             "You are a text-to-speech summary generator for the virtual assistant Nova.\n"
             "Given the user's request and the execution result, write a short, 1-2 sentence spoken summary of the result.\n"
             "Spoken Summary Rules:\n"
             "1. Must be under 20 words.\n"
             "2. State only what was completed, not how it was done (e.g. say 'Done. YouTube is open.' instead of 'Launched Chromium browser and connected to youtube.com').\n"
             "3. Sound natural and conversational, as if spoken by a voice assistant.\n"
-            "4. NEVER include markdown, bullets, code blocks, URLs, file paths, JSON, logs, or stack traces.\n"
+            "4. NEVER include markdown, bullets, code blocks, URLs, file traces.\n"
             "5. Never repeat information or include filler.\n"
             "6. Never claim success if the task failed. Do NOT start with 'Done' or 'Completed' for failures. Briefly state the failure reason.\n"
             "7. Output ONLY the raw spoken text. Do not wrap in quotes. Do not include introductory text like 'Here is your summary:'."
         )
-        
+        system_prompt = load_prompt("tts_summary_prompt.txt", fallback_prompt)
+
         messages = [
             {"role": "system", "content": system_prompt},
             {"role": "user", "content": f"User Request: {user_query}\nExecution Result: {full_response}"}
@@ -226,15 +223,14 @@ class OllamaClient:
                         "contents": [{"role": "user", "parts": [{"text": combined_text}]}],
                         "generationConfig": {"temperature": 0.0, "maxOutputTokens": 60}
                     }
-                    gemini_req = urllib.request.Request(
-                        gemini_url,
-                        data=json.dumps(gemini_payload).encode("utf-8"),
-                        headers={"Content-Type": "application/json"},
-                        method="POST"
-                    )
-                    with urllib.request.urlopen(gemini_req, timeout=8) as gemini_resp:
-                        if gemini_resp.status == 200:
-                            resp_data = json.loads(gemini_resp.read().decode("utf-8"))
+                    with httpx.Client() as client:
+                        gemini_resp = client.post(
+                            gemini_url,
+                            json=gemini_payload,
+                            timeout=8.0
+                        )
+                        if gemini_resp.status_code == 200:
+                            resp_data = gemini_resp.json()
                             candidates = resp_data.get("candidates", [])
                             if candidates:
                                 parts = candidates[0].get("content", {}).get("parts", [])
@@ -256,15 +252,14 @@ class OllamaClient:
                 }
             }
             try:
-                req = urllib.request.Request(
-                    url,
-                    data=json.dumps(payload).encode("utf-8"),
-                    headers={"Content-Type": "application/json"},
-                    method="POST"
-                )
-                with urllib.request.urlopen(req, timeout=12) as response:
-                    if response.status == 200:
-                        resp_data = json.loads(response.read().decode("utf-8"))
+                with httpx.Client() as client:
+                    response = client.post(
+                        url,
+                        json=payload,
+                        timeout=12.0
+                    )
+                    if response.status_code == 200:
+                        resp_data = response.json()
                         content = resp_data.get("message", {}).get("content", "").strip()
             except Exception as e:
                 log_error("Ollama summary generation failed", e)

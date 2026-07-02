@@ -1,0 +1,157 @@
+{
+    "name": "node.js",
+    "goal_type": "Backend Application",
+    "deliverables": [
+        "package.json",
+        "index.js"
+    ],
+    "preconditions": [
+        "node",
+        "npm"
+    ],
+    "required_files": [
+        "{project_dir}/package.json",
+        "{project_dir}/index.js"
+    ],
+    "required_directories": [
+        "{project_dir}"
+    ],
+    "required_dependencies": [],
+    "risk_analysis": {},
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize npm package.json",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/package.json",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "init",
+                            "-y"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [],
+        "Project Structure": [],
+        "Source Code Generation": [
+            {
+                "description": "Generate Node index.js application file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/index.js",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/index.js",
+                        "content": "console.log('Hello from Node.js!');\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Node.js App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify Node.js structure",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Node.js script",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify execution status",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "node",
+                            "index.js"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ]
+    }
+}

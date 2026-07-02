@@ -1,7 +1,6 @@
 import os
 import re
 import socket
-import urllib.request
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.core.executor import CommandExecutor
@@ -147,11 +146,11 @@ class RichSystemInfoAction(BaseAction):
             except Exception:
                 pass
 
-        public_ip = "Offline"
         try:
-            req = urllib.request.Request("https://api.ipify.org", headers={'User-Agent': 'Nova-Terminal-Agent'})
-            with urllib.request.urlopen(req, timeout=1.0) as response:
-                public_ip = response.read().decode('utf-8').strip()
+            import httpx
+            resp = httpx.get("https://api.ipify.org", headers={'User-Agent': 'Nova-Terminal-Agent'}, timeout=1.0)
+            if resp.status_code == 200:
+                public_ip = resp.text.strip()
         except Exception:
             pass
 

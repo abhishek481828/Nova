@@ -9,10 +9,7 @@ LOG_FILE_PATH.parent.mkdir(parents=True, exist_ok=True)
 # Configure logger
 logger = logging.getLogger("nova")
 
-debug_mode = (
-    os.environ.get("NOVA_DEBUG", "false").lower() == "true" or
-    os.environ.get("NOVA_DEBUG", "false").lower() == "true"
-)
+debug_mode = os.environ.get("NOVA_DEBUG", "false").lower() == "true"
 
 if debug_mode:
     logger.setLevel(logging.DEBUG)

@@ -1,6 +1,5 @@
 import os
 import json
-import urllib.request
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.core.executor import CommandExecutor
@@ -164,13 +163,14 @@ class SystemStatusAction(BaseAction):
         phones_connected = 0
         extensions_connected = 0
         try:
-            with urllib.request.urlopen("http://localhost:8080/status", timeout=1.5) as response:
-                if response.status == 200:
-                    server_running = True
-                    data = json.loads(response.read().decode("utf-8"))
-                    conns = data.get("connections", {})
-                    phones_connected = conns.get("phones", 0)
-                    extensions_connected = conns.get("extensions", 0)
+            import httpx
+            resp = httpx.get("http://localhost:8080/status", timeout=1.5)
+            if resp.status_code == 200:
+                server_running = True
+                data = resp.json()
+                conns = data.get("connections", {})
+                phones_connected = conns.get("phones", 0)
+                extensions_connected = conns.get("extensions", 0)
         except Exception:
             pass
 
