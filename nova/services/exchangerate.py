@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import EXCHANGERATE_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 3600  # 1 hour
 
 class ExchangeRateService:
     def __init__(self):
-        self.api_key = os.environ.get("EXCHANGERATE_API_KEY")
+        self.api_key = EXCHANGERATE_API_KEY
         self.base_url = "https://api.exchangerate.host"
 
     def convert(self, from_curr: str, to_curr: str, amount: float = 1.0) -> dict:

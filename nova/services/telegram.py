@@ -5,11 +5,12 @@ import threading
 import re
 from nova.logger import logger
 from nova.utils import print_info, print_error
+from nova.config import TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 
 class TelegramService:
     def __init__(self):
-        self.bot_token = os.environ.get("TELEGRAM_BOT_TOKEN")
-        self.chat_id = os.environ.get("TELEGRAM_CHAT_ID")
+        self.bot_token = TELEGRAM_BOT_TOKEN
+        self.chat_id = TELEGRAM_CHAT_ID
         self.base_url = f"https://api.telegram.org/bot{self.bot_token}" if self.bot_token else None
 
     def send_message(self, text: str) -> bool:

@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.tmdb import TmdbService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class MovieAction(BaseAction):
     @property
@@ -85,15 +86,15 @@ class MovieAction(BaseAction):
                 return f"Unsupported TMDB operation: {operation}"
 
             # 2. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful movie and entertainment assistant. Present the movie/TV show details naturally based on the provided TMDB data.\n"
                     "Rules:\n"
                     "1. Keep it conversational, engaging, and direct.\n"
                     "2. Avoid lists or markdown bold formatting if possible (for clear voice synthesis).\n"
                     "3. Summarize the description or overview concisely without spoiling the ending."
                 )
+                system_prompt = load_prompt("movie_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -108,4 +109,5 @@ class MovieAction(BaseAction):
             return f"TMDB Search Results:\n\n" + result_context
 
         except Exception as e:
+            log_error("TMDB details lookup failed", e)
             return f"TMDB details lookup failed: {e}"

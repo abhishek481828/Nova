@@ -1,7 +1,6 @@
 import os
 import json
 import time
-import urllib.request
 from typing import List, Dict, Any, Optional
 from nova.logger import logger
 
@@ -17,7 +16,8 @@ def call_nebius_llm(
     Consolidated helper to call the Nebius chat completion API.
     Provides standard retry mechanism, error logging, and payload mapping.
     """
-    nebius_key = os.environ.get("NEBIUS_API_KEY")
+    from nova.config import NEBIUS_API_KEY
+    nebius_key = NEBIUS_API_KEY
     if not nebius_key:
         return None
 
@@ -28,20 +28,20 @@ def call_nebius_llm(
         "temperature": temperature
     }
 
+    import httpx
     for attempt in range(retries):
         try:
-            req = urllib.request.Request(
-                nebius_url,
-                data=json.dumps(payload).encode("utf-8"),
-                headers={
-                    "Content-Type": "application/json",
-                    "Authorization": f"Bearer {nebius_key}"
-                },
-                method="POST"
-            )
-            with urllib.request.urlopen(req, timeout=timeout) as resp:
-                if resp.status == 200:
-                    resp_data = json.loads(resp.read().decode("utf-8"))
+            with httpx.Client() as client:
+                resp = client.post(
+                    nebius_url,
+                    json=payload,
+                    headers={
+                        "Authorization": f"Bearer {nebius_key}"
+                    },
+                    timeout=timeout
+                )
+                if resp.status_code == 200:
+                    resp_data = resp.json()
                     choices = resp_data.get("choices", [])
                     if choices:
                         content = choices[0].get("message", {}).get("content", "")

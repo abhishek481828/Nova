@@ -30,9 +30,13 @@ class TestBrowserResilience(unittest.TestCase):
             cls.cdp = True
         except Exception:
             cls.playwright = sync_playwright().start()
+            import os
+            exec_path = "/run/current-system/sw/bin/chromium"
+            if not os.path.exists(exec_path):
+                exec_path = None
             cls.browser = cls.playwright.chromium.launch(
                 headless=True,
-                executable_path="/run/current-system/sw/bin/chromium",
+                executable_path=exec_path,
                 args=["--no-sandbox"]
             )
             cls.cdp = False

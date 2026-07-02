@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.fmp import FmpService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class FinanceAction(BaseAction):
     @property
@@ -38,15 +39,15 @@ class FinanceAction(BaseAction):
             )
 
             # 2. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful stock market assistant. Answer the user's stock price or financial market question naturally based on the provided FMP quote details.\n"
                     "Rules:\n"
                     "1. Keep it concise, conversational, and direct.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Summarize the price, daily changes, and trends naturally (e.g. say 'Apple Inc. is currently trading at 281 dollars and 76 cents, down 0.71 percent today' instead of listing raw text)."
                 )
+                system_prompt = load_prompt("finance_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -61,4 +62,5 @@ class FinanceAction(BaseAction):
             return f"FMP stock quote details:\n\n" + result_context
 
         except Exception as e:
+            log_error("FMP stock details lookup failed", e)
             return f"FMP stock details lookup failed: {e}"

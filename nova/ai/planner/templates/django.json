@@ -1,0 +1,220 @@
+{
+    "name": "django",
+    "goal_type": "Web Application",
+    "deliverables": [
+        "manage.py",
+        "requirements.txt",
+        "README.md"
+    ],
+    "preconditions": [
+        "python",
+        "pip"
+    ],
+    "required_files": [
+        "{project_dir}/manage.py",
+        "{project_dir}/requirements.txt"
+    ],
+    "required_directories": [
+        "{project_dir}"
+    ],
+    "required_dependencies": [
+        "django"
+    ],
+    "risk_analysis": {
+        "Database configuration error": "Run database migrations check"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Create Python virtual environment",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "-m",
+                            "venv",
+                            "{project_dir}/.venv"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Install Django package",
+                "action_type": "install_package",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv/bin/django-admin",
+                "required_artifacts": [
+                    "{project_dir}/.venv"
+                ],
+                "metadata": {
+                    "action": "install_package",
+                    "params": {
+                        "package": "django"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create Django default app structures",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/manage.py",
+                "required_artifacts": [
+                    "{project_dir}/.venv/bin/django-admin"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "-m",
+                            "django",
+                            "startproject",
+                            "config",
+                            "."
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate Django sample view script",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/config/views.py",
+                "required_artifacts": [
+                    "{project_dir}/manage.py"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/config/views.py",
+                        "content": "from django.http import HttpResponse\ndef index(request):\n    return HttpResponse('Hello from Django!')\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate requirements.txt file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/requirements.txt",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/requirements.txt",
+                        "content": "django\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Django App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Run Django system checks",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/manage.py"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "manage.py",
+                            "check"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Django development server",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify site is responding",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "http://127.0.0.1:8000"
+                    }
+                }
+            }
+        ]
+    }
+}

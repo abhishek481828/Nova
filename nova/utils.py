@@ -74,12 +74,15 @@ def print_error(message: str) -> None:
     _write(f"{COLOR_RED}{COLOR_BOLD}✘{COLOR_RESET} {message}\n", is_error=True)
 
 def print_banner() -> None:
+    from nova.version import __version__
     banner = f"""
 {COLOR_CYAN}{COLOR_BOLD}   __                         
   / /  ___ _  ______  _______ 
  / _ \\/ _ `/ / __/\\ \\/ (_-<_-<
-/_//_/\\_,_/_/_/    \\_/_/___/___/  v0.1 (NixOS Edition)
+/_//_/\\_,_/_/_/    \\_/_/___/___/
 {COLOR_RESET}
+Nova AI Assistant
+Version: {__version__}
     """
     _write(banner)
 

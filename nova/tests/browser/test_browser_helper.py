@@ -109,9 +109,11 @@ class TestDedicatedBrowserActions(NovaBrowserTestCase):
         mock_launch_browser.assert_called_once()
         mock_run_background.assert_not_called()
 
+    @patch("shutil.which")
     @patch("nova.browser.manager.BrowserManager.is_browser_running")
     @patch("nova.core.executor.CommandExecutor.run_background")
-    def test_open_app_action_launches_other_apps_normally(self, mock_run_background, mock_is_browser_running):
+    def test_open_app_action_launches_other_apps_normally(self, mock_run_background, mock_is_browser_running, mock_which):
+        mock_which.return_value = "/usr/bin/vlc"
         mock_run_background.return_value = (0, "Success")
         
         action = OpenAppAction()
@@ -413,47 +415,47 @@ class TestBrowserManagerVerification(NovaBrowserTestCase):
         res = BrowserManager.is_process_alive()
         self.assertTrue(res)
 
-    @patch("urllib.request.urlopen")
-    def test_is_devtools_http_ready_success(self, mock_urlopen):
+    @patch("httpx.get")
+    def test_is_devtools_http_ready_success(self, mock_get):
         mock_response = MagicMock()
-        mock_response.getcode.return_value = 200
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+        mock_response.status_code = 200
+        mock_get.return_value = mock_response
         
         res = BrowserManager.is_devtools_http_ready()
         self.assertTrue(res)
 
-    @patch("urllib.request.urlopen")
-    def test_is_devtools_http_ready_failure(self, mock_urlopen):
-        mock_urlopen.side_effect = Exception("Connection refused")
+    @patch("httpx.get")
+    def test_is_devtools_http_ready_failure(self, mock_get):
+        mock_get.side_effect = Exception("Connection refused")
         res = BrowserManager.is_devtools_http_ready()
         self.assertFalse(res)
 
-    @patch("urllib.request.urlopen")
-    def test_is_cdp_ready_success(self, mock_urlopen):
+    @patch("httpx.get")
+    def test_is_cdp_ready_success(self, mock_get):
         mock_response = MagicMock()
-        mock_response.getcode.return_value = 200
-        mock_response.read.return_value = b'{"webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser"}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"webSocketDebuggerUrl": "ws://127.0.0.1:9222/devtools/browser"}
+        mock_get.return_value = mock_response
         
         res = BrowserManager.is_cdp_ready()
         self.assertTrue(res)
 
-    @patch("urllib.request.urlopen")
-    def test_is_cdp_ready_empty_url(self, mock_urlopen):
+    @patch("httpx.get")
+    def test_is_cdp_ready_empty_url(self, mock_get):
         mock_response = MagicMock()
-        mock_response.getcode.return_value = 200
-        mock_response.read.return_value = b'{"webSocketDebuggerUrl": ""}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+        mock_response.status_code = 200
+        mock_response.json.return_value = {"webSocketDebuggerUrl": ""}
+        mock_get.return_value = mock_response
         
         res = BrowserManager.is_cdp_ready()
         self.assertFalse(res)
 
-    @patch("urllib.request.urlopen")
-    def test_is_cdp_ready_missing_key(self, mock_urlopen):
+    @patch("httpx.get")
+    def test_is_cdp_ready_missing_key(self, mock_get):
         mock_response = MagicMock()
-        mock_response.getcode.return_value = 200
-        mock_response.read.return_value = b'{}'
-        mock_urlopen.return_value.__enter__.return_value = mock_response
+        mock_response.status_code = 200
+        mock_response.json.return_value = {}
+        mock_get.return_value = mock_response
         
         res = BrowserManager.is_cdp_ready()
         self.assertFalse(res)

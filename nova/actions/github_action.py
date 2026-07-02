@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.github import GitHubService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class GitHubAction(BaseAction):
     @property
@@ -73,15 +74,15 @@ class GitHubAction(BaseAction):
                 return f"Unsupported GitHub operation: {operation}"
 
             # 2. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's GitHub question naturally based on the provided data context.\n"
                     "Rules:\n"
                     "1. Express the GitHub info conversationally, direct, and concisely.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Summarize the major notifications, repositories, or user profile statistics naturally (e.g. say 'You have two notifications on GitHub: a pull request review on the Nova project and a comment' instead of listing metadata block)."
                 )
+                system_prompt = load_prompt("github_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -96,4 +97,5 @@ class GitHubAction(BaseAction):
             return f"GitHub data details for {operation}:\n\n" + result_context
 
         except Exception as e:
+            log_error("GitHub action execution failed", e)
             return f"GitHub action execution failed: {e}"

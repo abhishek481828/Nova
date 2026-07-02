@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import COINGECKO_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 60  # 1 minute
 
 class CoinGeckoService:
     def __init__(self):
-        self.api_key = os.environ.get("COINGECKO_API_KEY")
+        self.api_key = COINGECKO_API_KEY
         self.base_url = "https://api.coingecko.com/api/v3/simple/price"
 
     def get_price(self, coin_id: str, vs_currency: str = "usd") -> float:

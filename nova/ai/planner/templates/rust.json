@@ -1,0 +1,202 @@
+{
+    "name": "rust",
+    "goal_type": "Systems Programming",
+    "deliverables": [
+        "Cargo.toml",
+        "src/main.rs",
+        "README.md"
+    ],
+    "preconditions": [
+        "cargo",
+        "rustc"
+    ],
+    "required_files": [
+        "{project_dir}/Cargo.toml",
+        "{project_dir}/src/main.rs",
+        "{project_dir}/README.md"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/src"
+    ],
+    "required_dependencies": [],
+    "risk_analysis": {
+        "Rust toolchain mismatch": "Verify rustc --version or cargo build path"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize Cargo workspace",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/Cargo.toml",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "cargo",
+                            "init",
+                            "--bin",
+                            "{project_dir}"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Build empty package dependencies",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/target",
+                "required_artifacts": [
+                    "{project_dir}/Cargo.toml"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "cargo",
+                            "check"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create src directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/src"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate main.rs source file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/main.rs",
+                "required_artifacts": [
+                    "{project_dir}/src"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/src/main.rs",
+                        "content": "fn main() {\n    println!(\"Hello from Rust!\");\n}\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Rust CLI\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Build Rust project",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/src/main.rs"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "cargo",
+                            "build"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Cargo project",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify binary output",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "cargo",
+                            "run"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ]
+    }
+}

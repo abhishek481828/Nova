@@ -1,0 +1,241 @@
+{
+    "name": "static website",
+    "goal_type": "Static Website",
+    "deliverables": [
+        "index.html",
+        "css/style.css",
+        "js/script.js",
+        "README.md"
+    ],
+    "preconditions": [],
+    "required_files": [
+        "{project_dir}/index.html",
+        "{project_dir}/css/style.css",
+        "{project_dir}/js/script.js"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/css",
+        "{project_dir}/js"
+    ],
+    "required_dependencies": [],
+    "risk_analysis": {
+        "Browser render failure": "Inspect developer console"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize website metadata",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_initialized",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "echo",
+                            "web initialized"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Check browser tools",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_env",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "echo",
+                            "browser ready"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create css directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/css",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/css"
+                    }
+                }
+            },
+            {
+                "description": "Create js directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/js",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/js"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate index.html homepage",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/index.html",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/index.html",
+                        "content": "<!DOCTYPE html><html><head><link rel='stylesheet' href='css/style.css'></head><body><h1>Hello from static site!</h1><script src='js/script.js'></script></body></html>"
+                    }
+                }
+            },
+            {
+                "description": "Generate style.css stylesheet",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/css/style.css",
+                "required_artifacts": [
+                    "{project_dir}/css"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/css/style.css",
+                        "content": "body { font-family: monospace; background: #eee; text-align: center; }"
+                    }
+                }
+            },
+            {
+                "description": "Generate script.js script",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/js/script.js",
+                "required_artifacts": [
+                    "{project_dir}/js"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/js/script.js",
+                        "content": "console.log('Static website script active.');\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Static site\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify HTML/CSS files exist",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/index.html"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Open static index.html file",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "file:///home/nixos/Projects/Nova/{project_dir}/index.html"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify page loading",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "file:///home/nixos/Projects/Nova/{project_dir}/index.html"
+                    }
+                }
+            }
+        ]
+    }
+}

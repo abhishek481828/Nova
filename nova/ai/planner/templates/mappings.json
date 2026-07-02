@@ -1,0 +1,74 @@
+{
+  "exclude_keywords": ["dummy", "legacy"],
+  "mappings": [
+    {
+      "template": "flask",
+      "rules": [["flask"]]
+    },
+    {
+      "template": "fastapi",
+      "rules": [["fastapi"]]
+    },
+    {
+      "template": "django",
+      "rules": [["django"]]
+    },
+    {
+      "template": "react",
+      "rules": [["react"]]
+    },
+    {
+      "template": "vue",
+      "rules": [["vue"]]
+    },
+    {
+      "template": "angular",
+      "rules": [["angular"]]
+    },
+    {
+      "template": "express",
+      "rules": [["express"]]
+    },
+    {
+      "template": "electron",
+      "rules": [["electron"]]
+    },
+    {
+      "template": "node.js",
+      "rules": [["node"]]
+    },
+    {
+      "template": "rust",
+      "rules": [["rust"], ["cargo"]]
+    },
+    {
+      "template": "c++",
+      "rules": [["c++"], ["cpp"], ["g++"]]
+    },
+    {
+      "template": "qt",
+      "rules": [["qt"]]
+    },
+    {
+      "template": "java",
+      "rules": [["java"]]
+    },
+    {
+      "template": "python cli",
+      "rules": [
+        ["python cli"],
+        ["python", "calculator"],
+        ["python", "cli"]
+      ]
+    },
+    {
+      "template": "static website",
+      "rules": [
+        ["static website"],
+        ["portfolio"],
+        ["html website"],
+        ["html"]
+      ]
+    }
+  ]
+}

@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import TMDB_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 43200  # 12 hours (movie metadata and trending lists change slowly)
 
 class TmdbService:
     def __init__(self):
-        self.api_key = os.environ.get("TMDB_API_KEY")
+        self.api_key = TMDB_API_KEY
         self.base_url = "https://api.tmdb.org/3"
 
     def _query(self, endpoint: str, params: dict = None) -> dict:

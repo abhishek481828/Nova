@@ -1,0 +1,220 @@
+{
+    "name": "qt",
+    "goal_type": "Desktop Application",
+    "deliverables": [
+        "main.cpp",
+        "mainwindow.h",
+        "mainwindow.cpp",
+        "mainwindow.ui",
+        "CMakeLists.txt",
+        "README.md"
+    ],
+    "preconditions": [
+        "g++",
+        "cmake",
+        "qt"
+    ],
+    "required_files": [
+        "{project_dir}/main.cpp",
+        "{project_dir}/CMakeLists.txt"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/src"
+    ],
+    "required_dependencies": [],
+    "risk_analysis": {
+        "Missing Qt libraries": "Verify qtbase installation"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize build environment",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_qt_env",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "cmake",
+                            "--version"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Check Qt framework tools",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_qt_libs",
+                "required_artifacts": [
+                    "{project_dir}_qt_env"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "echo",
+                            "Qt framework verified"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create src directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/src"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate Qt main.cpp source file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/main.cpp",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/main.cpp",
+                        "content": "#include <QApplication>\n#include <QLabel>\nint main(int argc, char *argv[]) {\n    QApplication app(argc, argv);\n    QLabel label(\"Hello from Qt!\");\n    label.show();\n    return app.exec();\n}\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate CMakeLists.txt build file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/CMakeLists.txt",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/CMakeLists.txt",
+                        "content": "cmake_minimum_required(VERSION 3.10)\nproject(QtProject)\nset(CMAKE_AUTOMOC ON)\nfind_package(Qt5 REQUIRED COMPONENTS Widgets)\nadd_executable(main main.cpp)\ntarget_link_libraries(main Qt5::Widgets)\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Qt App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Compile Qt project",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/main",
+                "required_artifacts": [
+                    "{project_dir}/main.cpp"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "g++",
+                            "main.cpp",
+                            "-o",
+                            "main"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Qt GUI application",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}/main"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify window initialization",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "echo",
+                            "Qt app ran"
+                        ]
+                    }
+                }
+            }
+        ]
+    }
+}

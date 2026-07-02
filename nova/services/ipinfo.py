@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import IPINFO_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 86400  # 24 hours (IP locations change very rarely)
 
 class IpInfoService:
     def __init__(self):
-        self.api_key = os.environ.get("IPINFO_API_KEY")
+        self.api_key = IPINFO_API_KEY
         self.base_url = "https://ipinfo.io"
 
     def get_ip_info(self, ip_address: str = "") -> dict:

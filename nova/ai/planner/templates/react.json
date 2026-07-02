@@ -1,0 +1,252 @@
+{
+    "name": "react",
+    "goal_type": "Web Frontend Application",
+    "deliverables": [
+        "package.json",
+        "src/App.js",
+        "src/index.js",
+        "public/index.html"
+    ],
+    "preconditions": [
+        "node",
+        "npm"
+    ],
+    "required_files": [
+        "{project_dir}/package.json",
+        "{project_dir}/src/App.js",
+        "{project_dir}/src/index.js",
+        "{project_dir}/public/index.html"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/src",
+        "{project_dir}/public"
+    ],
+    "required_dependencies": [
+        "react",
+        "react-dom"
+    ],
+    "risk_analysis": {},
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize npm package.json",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/package.json",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "init",
+                            "-y"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Install React packages",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/node_modules/react",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "install",
+                            "react",
+                            "react-dom"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create src directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/src"
+                    }
+                }
+            },
+            {
+                "description": "Create public directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/public",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/public"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate React index.js entrypoint",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/index.js",
+                "required_artifacts": [
+                    "{project_dir}/src"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/src/index.js",
+                        "content": "import React from 'react';\nimport ReactDOM from 'react-dom';\nimport App from './App';\nReactDOM.render(<App />, document.getElementById('root'));\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate React App component",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/App.js",
+                "required_artifacts": [
+                    "{project_dir}/src"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/src/App.js",
+                        "content": "import React from 'react';\nfunction App() { return <div><h1>Hello from React!</h1></div>; }\nexport default App;\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate public index.html template",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/public/index.html",
+                "required_artifacts": [
+                    "{project_dir}/public"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/public/index.html",
+                        "content": "<!DOCTYPE html><html><head><title>React App</title></head><body><div id='root'></div></body></html>"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# React App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify React structure",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run React development server",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify frontend is responding",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "http://127.0.0.1:3000"
+                    }
+                }
+            }
+        ]
+    }
+}

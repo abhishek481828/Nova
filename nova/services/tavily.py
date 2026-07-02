@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import TAVILY_API_KEY
 
 # Simple in-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 300  # 5 minutes
 
 class TavilyService:
     def __init__(self):
-        self.api_key = os.environ.get("TAVILY_API_KEY")
+        self.api_key = TAVILY_API_KEY
         self.base_url = "https://api.tavily.com/search"
 
     def search(self, query: str) -> list:

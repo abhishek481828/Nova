@@ -2,7 +2,6 @@ import os
 import time
 import socket
 import subprocess
-import urllib.request
 import json
 import atexit
 import errno
@@ -95,63 +94,28 @@ class BrowserManager:
     @classmethod
     def is_devtools_http_ready(cls) -> bool:
         """Verify that http://localhost:<PORT>/json/version responds with HTTP 200 (IPv4 and IPv6)."""
-        # Try localhost (resolver-dependent)
-        try:
-            req = urllib.request.Request(f"http://localhost:{cls.PORT}/json/version")
-            with urllib.request.urlopen(req, timeout=0.5) as response:
-                return response.getcode() == 200
-        except Exception:
-            pass
-
-        # Try 127.0.0.1 (IPv4 loopback)
-        try:
-            req = urllib.request.Request(f"http://127.0.0.1:{cls.PORT}/json/version")
-            with urllib.request.urlopen(req, timeout=0.5) as response:
-                return response.getcode() == 200
-        except Exception:
-            pass
-
-        # Try [::1] (IPv6 loopback)
-        try:
-            req = urllib.request.Request(f"http://[::1]:{cls.PORT}/json/version")
-            with urllib.request.urlopen(req, timeout=0.5) as response:
-                return response.getcode() == 200
-        except Exception:
-            return False
+        import httpx
+        for host in ("localhost", "127.0.0.1", "[::1]"):
+            try:
+                resp = httpx.get(f"http://{host}:{cls.PORT}/json/version", timeout=0.5)
+                if resp.status_code == 200:
+                    return True
+            except Exception:
+                pass
+        return False
 
     @classmethod
     def is_cdp_ready(cls) -> bool:
         """Parse /json/version and verify that webSocketDebuggerUrl exists and is non-empty."""
-        # Try localhost (resolver-dependent)
-        try:
-            req = urllib.request.Request(f"http://localhost:{cls.PORT}/json/version")
-            with urllib.request.urlopen(req, timeout=0.5) as response:
-                if response.getcode() == 200:
-                    data = json.loads(response.read().decode('utf-8'))
+        import httpx
+        for host in ("localhost", "127.0.0.1", "[::1]"):
+            try:
+                resp = httpx.get(f"http://{host}:{cls.PORT}/json/version", timeout=0.5)
+                if resp.status_code == 200:
+                    data = resp.json()
                     return bool(data.get("webSocketDebuggerUrl"))
-        except Exception:
-            pass
-
-        # Try 127.0.0.1 (IPv4 loopback)
-        try:
-            req = urllib.request.Request(f"http://127.0.0.1:{cls.PORT}/json/version")
-            with urllib.request.urlopen(req, timeout=0.5) as response:
-                if response.getcode() == 200:
-                    data = json.loads(response.read().decode('utf-8'))
-                    return bool(data.get("webSocketDebuggerUrl"))
-        except Exception:
-            pass
-
-        # Try [::1] (IPv6 loopback)
-        try:
-            req = urllib.request.Request(f"http://[::1]:{cls.PORT}/json/version")
-            with urllib.request.urlopen(req, timeout=0.5) as response:
-                if response.getcode() == 200:
-                    data = json.loads(response.read().decode('utf-8'))
-                    return bool(data.get("webSocketDebuggerUrl"))
-        except Exception:
-            pass
-
+            except Exception:
+                pass
         return False
 
     @classmethod
@@ -582,13 +546,13 @@ class BrowserManager:
     @classmethod
     def get_cdp_url(cls) -> str:
         """Find the responsive CDP URL (preferring localhost, fallback to [::1] or 127.0.0.1)."""
+        import httpx
         for host in ["localhost", "127.0.0.1", "[::1]"]:
             url = f"http://{host}:{cls.PORT}"
             try:
-                req = urllib.request.Request(f"{url}/json/version")
-                with urllib.request.urlopen(req, timeout=0.3) as response:
-                    if response.getcode() == 200:
-                        return url
+                resp = httpx.get(f"{url}/json/version", timeout=0.3)
+                if resp.status_code == 200:
+                    return url
             except Exception:
                 pass
         return f"http://127.0.0.1:{cls.PORT}"

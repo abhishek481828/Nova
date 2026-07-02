@@ -1,0 +1,232 @@
+{
+    "name": "angular",
+    "goal_type": "Web Frontend Application",
+    "deliverables": [
+        "package.json",
+        "angular.json",
+        "src/main.ts",
+        "src/index.html"
+    ],
+    "preconditions": [
+        "node",
+        "npm"
+    ],
+    "required_files": [
+        "{project_dir}/package.json",
+        "{project_dir}/angular.json",
+        "{project_dir}/src/main.ts"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/src",
+        "{project_dir}/src/app"
+    ],
+    "required_dependencies": [
+        "@angular/core"
+    ],
+    "risk_analysis": {},
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Initialize npm package.json",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/package.json",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "init",
+                            "-y"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Install Angular package",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/node_modules/@angular/core",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "npm",
+                            "install",
+                            "@angular/core"
+                        ],
+                        "cwd": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create src directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/src"
+                    }
+                }
+            },
+            {
+                "description": "Create app directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/app",
+                "required_artifacts": [
+                    "{project_dir}/src"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/src/app"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate Angular main.ts file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/main.ts",
+                "required_artifacts": [
+                    "{project_dir}/src"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/src/main.ts",
+                        "content": "import { platformBrowserDynamic } from '@angular/platform-browser-dynamic';\nimport { AppModule } from './app/app.module';\nplatformBrowserDynamic().bootstrapModule(AppModule);\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate index.html template",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/src/index.html",
+                "required_artifacts": [
+                    "{project_dir}/src"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/src/index.html",
+                        "content": "<!DOCTYPE html><html><body><app-root></app-root></body></html>"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# Angular App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify Angular structure",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/package.json"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run Angular development server",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify frontend is responding",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "http://127.0.0.1:4200"
+                    }
+                }
+            }
+        ]
+    }
+}

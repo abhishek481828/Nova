@@ -3,8 +3,9 @@ import subprocess
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.ocr import OcrService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class OcrAction(BaseAction):
     @property
@@ -51,15 +52,15 @@ class OcrAction(BaseAction):
                 return "OCR completed successfully, but no visible text was detected in the image."
 
             # 3. Call LLM (Nebius) to summarize or present text naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's question by summarizing or presenting the extracted OCR text naturally.\n"
                     "Rules:\n"
                     "1. If the text is short or is a code/log block, repeat it exactly or present it clearly.\n"
                     "2. If it's a long article or document, give a brief, conversational summary first, then print the text.\n"
                     "3. Express the response naturally so it can be spoken aloud easily, avoiding code block markup if just talking."
                 )
+                system_prompt = load_prompt("ocr_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -74,4 +75,5 @@ class OcrAction(BaseAction):
             return f"Extracted text details:\n\n{extracted_text}"
 
         except Exception as e:
+            log_error("OCR execution failed", e)
             return f"OCR execution failed: {e}"

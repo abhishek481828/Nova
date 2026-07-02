@@ -67,17 +67,15 @@ def _get_best_local_model(api_url: str) -> str:
     if "OLLAMA_MODEL" in os.environ:
         return os.environ["OLLAMA_MODEL"]
     try:
-        import urllib.request
-        import json
+        import httpx
         url = f"{api_url.rstrip('/')}/api/tags"
-        req = urllib.request.Request(url, method="GET")
-        with urllib.request.urlopen(req, timeout=0.8) as response:
-            if response.status == 200:
-                data = json.loads(response.read().decode('utf-8'))
-                models = [m['name'] for m in data.get('models', [])]
-                for preferred in ["llama3.2:3b", "llama3.2:1b", "qwen2.5:0.5b"]:
-                    if preferred in models or preferred + ":latest" in models:
-                        return preferred
+        resp = httpx.get(url, timeout=0.8)
+        if resp.status_code == 200:
+            data = resp.json()
+            models = [m['name'] for m in data.get('models', [])]
+            for preferred in ["llama3.2:3b", "llama3.2:1b", "qwen2.5:0.5b"]:
+                if preferred in models or preferred + ":latest" in models:
+                    return preferred
     except Exception:
         pass
     return "llama3.2:1b"
@@ -90,8 +88,34 @@ DISABLE_OLLAMA = os.environ.get("NOVA_DISABLE_OLLAMA", "false").lower() == "true
 CHROMIUM_DEVTOOLS_PORT = int(os.environ.get("CHROMIUM_DEVTOOLS_PORT", 9222))
 CHROMIUM_HEADLESS = os.environ.get("CHROMIUM_HEADLESS", "false").lower() in ("true", "1", "yes")
 
+# Centralized API Keys & Tokens from Environment
+NEBIUS_API_KEY = os.environ.get("NEBIUS_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
+OCR_API_KEY = os.environ.get("OCR_API_KEY")
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+IPINFO_API_KEY = os.environ.get("IPINFO_API_KEY")
+GITHUB_API_KEY = os.environ.get("GITHUB_API_KEY")
+FMP_API_KEY = os.environ.get("FMP_API_KEY")
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
+COINGECKO_API_KEY = os.environ.get("COINGECKO_API_KEY")
+EXCHANGERATE_API_KEY = os.environ.get("EXCHANGERATE_API_KEY")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
+def load_prompt(filename: str, default_val: str) -> str:
+    from pathlib import Path
+    try:
+        prompt_path = Path(__file__).resolve().parent / "prompts" / filename
+        if prompt_path.exists():
+            return prompt_path.read_text(encoding="utf-8").strip()
+    except Exception:
+        pass
+    return default_val
+
 # AI System Prompt
-SYSTEM_PROMPT = """You are an AI intent parser. Return valid JSON only. Never explain.
+FALLBACK_SYSTEM_PROMPT = """You are an AI intent parser. Return valid JSON only. Never explain.
 Multiple actions -> {"actions": [...]}
 
 Actions & parameters:
@@ -229,3 +253,6 @@ Examples:
 - "play lofi hip hop on youtube" -> {"action": "chromium_action", "operation": "search_youtube", "query": "lofi hip hop"}
 - "type standard_user into the username input" -> {"action": "chromium_action", "operation": "fill_form", "selector": "input#username", "value": "standard_user"}
 - "click submit button" -> {"action": "chromium_action", "operation": "click", "selector": "button[type='submit']"}"""
+
+SYSTEM_PROMPT = load_prompt("system_prompt.txt", FALLBACK_SYSTEM_PROMPT)
+

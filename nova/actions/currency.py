@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.exchangerate import ExchangeRateService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class CurrencyAction(BaseAction):
     @property
@@ -55,15 +56,15 @@ class CurrencyAction(BaseAction):
                 return f"Unsupported currency operation: {operation}"
 
             # 2. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's currency conversion or exchange rate question naturally based on the provided data.\n"
                     "Rules:\n"
                     "1. Keep it concise, conversational, and direct.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Express the converted amount or rates naturally (e.g. say 'One hundred US dollars is currently ninety-three euros and forty-five cents' or '100 USD is currently 93.45 EUR' instead of listing raw text)."
                 )
+                system_prompt = load_prompt("currency_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -78,4 +79,5 @@ class CurrencyAction(BaseAction):
             return f"Current conversion details:\n\n" + result_context
 
         except Exception as e:
+            log_error("Currency exchange execution failed", e)
             return f"Currency exchange execution failed: {e}"

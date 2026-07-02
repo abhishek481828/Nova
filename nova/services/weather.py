@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import WEATHER_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 600  # 10 minutes
 
 class WeatherService:
     def __init__(self):
-        self.api_key = os.environ.get("WEATHER_API_KEY")
+        self.api_key = WEATHER_API_KEY
         self.base_url = "https://api.weatherapi.com/v1/current.json"
 
     def get_current_weather(self, location: str = "") -> dict:

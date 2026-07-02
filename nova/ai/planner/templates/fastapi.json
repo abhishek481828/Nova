@@ -1,0 +1,227 @@
+{
+    "name": "fastapi",
+    "goal_type": "REST API",
+    "deliverables": [
+        "app/main.py",
+        "requirements.txt",
+        "README.md"
+    ],
+    "preconditions": [
+        "python",
+        "pip"
+    ],
+    "required_files": [
+        "{project_dir}/app/main.py",
+        "{project_dir}/requirements.txt",
+        "{project_dir}/README.md"
+    ],
+    "required_directories": [
+        "{project_dir}",
+        "{project_dir}/app"
+    ],
+    "required_dependencies": [
+        "fastapi",
+        "uvicorn"
+    ],
+    "risk_analysis": {
+        "Port 8000 in use": "Kill process using port 8000 or configure alternative port"
+    },
+    "phases": {
+        "Project Setup": [
+            {
+                "description": "Create project directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}",
+                "required_artifacts": [],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Environment Setup": [
+            {
+                "description": "Create Python virtual environment",
+                "action_type": "command_execution",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "command_execution",
+                    "params": {
+                        "command": [
+                            "python",
+                            "-m",
+                            "venv",
+                            "{project_dir}/.venv"
+                        ]
+                    }
+                }
+            }
+        ],
+        "Dependency Installation": [
+            {
+                "description": "Install FastAPI package",
+                "action_type": "install_package",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv/bin/fastapi",
+                "required_artifacts": [
+                    "{project_dir}/.venv"
+                ],
+                "metadata": {
+                    "action": "install_package",
+                    "params": {
+                        "package": "fastapi"
+                    }
+                }
+            },
+            {
+                "description": "Install Uvicorn server package",
+                "action_type": "install_package",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}/.venv/bin/uvicorn",
+                "required_artifacts": [
+                    "{project_dir}/.venv"
+                ],
+                "metadata": {
+                    "action": "install_package",
+                    "params": {
+                        "package": "uvicorn"
+                    }
+                }
+            }
+        ],
+        "Project Structure": [
+            {
+                "description": "Create app directory",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/app",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create_directory",
+                        "path": "{project_dir}/app"
+                    }
+                }
+            }
+        ],
+        "Source Code Generation": [
+            {
+                "description": "Generate FastAPI main.py file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/app/main.py",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/app/main.py",
+                        "content": "from fastapi import FastAPI\napp = FastAPI()\n@app.get('/')\ndef index(): return {'message': 'Hello from FastAPI!'}\n"
+                    }
+                }
+            }
+        ],
+        "Configuration": [
+            {
+                "description": "Generate requirements.txt file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/requirements.txt",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/requirements.txt",
+                        "content": "fastapi\nuvicorn\n"
+                    }
+                }
+            },
+            {
+                "description": "Generate README.md file",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}/README.md",
+                "required_artifacts": [
+                    "{project_dir}"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "create",
+                        "path": "{project_dir}/README.md",
+                        "content": "# FastAPI App\n"
+                    }
+                }
+            }
+        ],
+        "Validation": [
+            {
+                "description": "Verify FastAPI files structure",
+                "action_type": "file_action",
+                "required_skill": "files",
+                "expected_artifact": "{project_dir}_validated",
+                "required_artifacts": [
+                    "{project_dir}/app/main.py"
+                ],
+                "metadata": {
+                    "action": "file_action",
+                    "params": {
+                        "operation": "list",
+                        "path": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Execution": [
+            {
+                "description": "Run FastAPI server",
+                "action_type": "run_project",
+                "required_skill": "system",
+                "expected_artifact": "{project_dir}_running",
+                "required_artifacts": [
+                    "{project_dir}_validated"
+                ],
+                "metadata": {
+                    "action": "run_project",
+                    "params": {
+                        "project": "{project_dir}"
+                    }
+                }
+            }
+        ],
+        "Verification": [
+            {
+                "description": "Verify API is responding",
+                "action_type": "chromium_action",
+                "required_skill": "browser",
+                "expected_artifact": "{project_dir}_verified",
+                "required_artifacts": [
+                    "{project_dir}_running"
+                ],
+                "metadata": {
+                    "action": "chromium_action",
+                    "params": {
+                        "operation": "open",
+                        "url": "http://127.0.0.1:8000/docs"
+                    }
+                }
+            }
+        ]
+    }
+}

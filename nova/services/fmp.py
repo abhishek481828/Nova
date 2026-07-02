@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import FMP_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 600  # 10 minutes (stock quotes change throughout the day)
 
 class FmpService:
     def __init__(self):
-        self.api_key = os.environ.get("FMP_API_KEY")
+        self.api_key = FMP_API_KEY
         self.base_url = "https://financialmodelingprep.com/stable"
 
     def get_stock_quote(self, symbol: str) -> dict:
