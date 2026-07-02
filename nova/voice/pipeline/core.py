@@ -329,7 +329,7 @@ def process_single_iteration(
                 print_info(f'👂 Waiting for "{wake_word_phrase}"')
                 last_printed_state = VoiceState.VOICE_IDLE
             detected, wake_audio, wake_score = _wait_for_wake(stream, wake_detector, noise_floor)
-            if _current_state == VoiceState.INACTIVE:
+            if sm._current_state == VoiceState.INACTIVE:
                 save_state()
                 return "continue"
             if not detected:
@@ -512,7 +512,7 @@ def process_single_iteration(
                 if _first_ptt_since_activation:
                     _first_ptt_since_activation = False
                 else:
-                    while not shutdown_event.is_set() and _current_state not in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
+                    while not shutdown_event.is_set() and sm._current_state not in (VoiceState.INACTIVE, VoiceState.TEXT_MODE):
                         if voice_active_event.is_set():
                             voice_active_event.clear()
                             break
