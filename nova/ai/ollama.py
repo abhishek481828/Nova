@@ -185,7 +185,7 @@ class OllamaClient:
             "1. Must be under 20 words.\n"
             "2. State only what was completed, not how it was done (e.g. say 'Done. YouTube is open.' instead of 'Launched Chromium browser and connected to youtube.com').\n"
             "3. Sound natural and conversational, as if spoken by a voice assistant.\n"
-            "4. NEVER include markdown, bullets, code blocks, URLs, file traces.\n"
+            "4. NEVER include markdown, bullets, code blocks, URLs, file paths, JSON, logs, or stack traces.\n"
             "5. Never repeat information or include filler.\n"
             "6. Never claim success if the task failed. Do NOT start with 'Done' or 'Completed' for failures. Briefly state the failure reason.\n"
             "7. Output ONLY the raw spoken text. Do not wrap in quotes. Do not include introductory text like 'Here is your summary:'."

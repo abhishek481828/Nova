@@ -13,4 +13,4 @@ Create `.env` using `.env.example`:
 ---
 
 ## 🛠️ Framework Template Configurations
-Templates keyword matching resides under [mappings.json](file:///home/nixos/Projects/Nova/nova/ai/planner/templates/mappings.json). Edit mappings rules to customize matching filters without editing python code.
+Templates keyword matching resides under [mappings.json](../nova/ai/planner/templates/mappings.json). Edit mappings rules to customize matching filters without editing python code.

@@ -21,7 +21,6 @@ _WAKE_CAPTURE_SECS = 2.0
 def _wait_for_wake(
     stream: sd.InputStream,
     wake_detector,
-    noise_floor: float,
 ) -> tuple[bool, np.ndarray | None, float]:
     try:
         with voice_config.stream_lock:

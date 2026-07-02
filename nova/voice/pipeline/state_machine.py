@@ -74,7 +74,7 @@ def get_voice_status_report() -> dict:
         "health": health
     }
 
-def set_health_states(mic: bool = None, wake: bool = None, stt: bool = None):
+def set_health_states(mic: bool | None = None, wake: bool | None = None, stt: bool | None = None) -> None:
     global _mic_healthy, _wake_healthy, _stt_healthy
     if mic is not None:
         _mic_healthy = mic

@@ -328,7 +328,7 @@ def process_single_iteration(
             if last_printed_state != VoiceState.VOICE_IDLE:
                 print_info(f'👂 Waiting for "{wake_word_phrase}"')
                 last_printed_state = VoiceState.VOICE_IDLE
-            detected, wake_audio, wake_score = _wait_for_wake(stream, wake_detector, noise_floor)
+            detected, wake_audio, wake_score = _wait_for_wake(stream, wake_detector)
             if sm._current_state == VoiceState.INACTIVE:
                 save_state()
                 return "continue"
