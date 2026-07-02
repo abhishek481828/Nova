@@ -23,8 +23,26 @@ class TestVoiceMemoryIntegration(unittest.TestCase):
         self.patcher = patch("nova.core.state.StateManager.is_autonomous", return_value=True)
         self.mock_is_autonomous = self.patcher.start()
 
+        # Mock BrowserManager to bypass browser check in tests
+        self.browser_patcher = patch("nova.browser.manager.BrowserManager")
+        self.mock_browser_manager = self.browser_patcher.start()
+        self.mock_browser_manager.is_browser_running.return_value = True
+        self.mock_browser = MagicMock()
+        self.mock_browser_manager.get_browser.return_value = self.mock_browser
+        self.mock_context = MagicMock()
+        self.mock_browser_manager.get_persistent_context.return_value = self.mock_context
+        self.mock_page = MagicMock()
+        self.mock_page.url = "https://youtube.com"
+        self.mock_context.pages = [self.mock_page]
+
+        # Patch find_active_page
+        self.find_page_patcher = patch("nova.browser.helper.find_active_page", return_value=self.mock_page)
+        self.mock_find_active_page = self.find_page_patcher.start()
+
     def tearDown(self):
         self.patcher.stop()
+        self.browser_patcher.stop()
+        self.find_page_patcher.stop()
 
     @patch("nova.voice.pipeline.get_stt_provider")
     @patch("nova.voice.pipeline.LocalWakeWordDetector")
