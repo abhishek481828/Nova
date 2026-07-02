@@ -19,6 +19,13 @@ from nova.core.memory import WorkingMemory, Interaction
 @unittest.skipUnless(_NUMPY_AVAILABLE, "numpy not installed - skipping voice tests")
 class TestVoiceMemoryIntegration(unittest.TestCase):
 
+    def setUp(self):
+        self.patcher = patch("nova.core.state.StateManager.is_autonomous", return_value=True)
+        self.mock_is_autonomous = self.patcher.start()
+
+    def tearDown(self):
+        self.patcher.stop()
+
     @patch("nova.voice.pipeline.get_stt_provider")
     @patch("nova.voice.pipeline.LocalWakeWordDetector")
     @patch("nova.voice.pipeline.SpeakerVerifier")
