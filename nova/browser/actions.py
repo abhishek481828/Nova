@@ -1,7 +1,4 @@
-import os
 import json
-import subprocess
-import urllib.parse
 import webbrowser
 import threading
 import sys
@@ -9,7 +6,7 @@ from pathlib import Path
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.core.executor import CommandExecutor
-from nova.utils import print_info, print_warning
+from nova.utils import print_info
 from nova.browser.manager import BrowserManager
 from nova.browser.helper import run_automation
 

@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.news import NewsService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class NewsAction(BaseAction):
     @property
@@ -34,15 +35,15 @@ class NewsAction(BaseAction):
             news_context = "\n".join(formatted_articles)
 
             # 3. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's news inquiry naturally based on the provided articles.\n"
                     "Rules:\n"
                     "1. Summarize the major top headlines and details conversational, direct, and concisely.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Mention 2 to 3 main topics/stories and summarize what is happening, rather than listing out the search metadata directly."
                 )
+                system_prompt = load_prompt("news_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -57,4 +58,5 @@ class NewsAction(BaseAction):
             return f"Top breaking stories found:\n\n" + news_context
 
         except Exception as e:
+            log_error("News retrieval execution failed", e)
             return f"News retrieval execution failed: {e}"

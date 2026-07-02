@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import NEWS_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 900  # 15 minutes
 
 class NewsService:
     def __init__(self):
-        self.api_key = os.environ.get("NEWS_API_KEY")
+        self.api_key = NEWS_API_KEY
         self.headlines_url = "https://newsapi.org/v2/top-headlines"
         self.everything_url = "https://newsapi.org/v2/everything"
 

@@ -16,7 +16,8 @@ def call_nebius_llm(
     Consolidated helper to call the Nebius chat completion API.
     Provides standard retry mechanism, error logging, and payload mapping.
     """
-    nebius_key = os.environ.get("NEBIUS_API_KEY")
+    from nova.config import NEBIUS_API_KEY
+    nebius_key = NEBIUS_API_KEY
     if not nebius_key:
         return None
 

@@ -146,6 +146,7 @@ class RichSystemInfoAction(BaseAction):
             except Exception:
                 pass
 
+        public_ip = "Unknown"
         try:
             import httpx
             resp = httpx.get("https://api.ipify.org", headers={'User-Agent': 'Nova-Terminal-Agent'}, timeout=1.0)

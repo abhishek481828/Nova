@@ -2,7 +2,7 @@ import os
 import json
 import httpx
 from typing import Optional
-from nova.config import OLLAMA_API_URL, OLLAMA_MODEL, SYSTEM_PROMPT, DISABLE_OLLAMA
+from nova.config import OLLAMA_API_URL, OLLAMA_MODEL, SYSTEM_PROMPT, DISABLE_OLLAMA, NEBIUS_API_KEY, GEMINI_API_KEY
 from nova.logger import log_error, log_request
 from nova.services.nebius import call_nebius_llm
 
@@ -71,7 +71,7 @@ class OllamaClient:
         messages.append({"role": "user", "content": current_content})
 
         # --- Nebius AI Cloud Check ---
-        nebius_key = os.environ.get("NEBIUS_API_KEY")
+        nebius_key = NEBIUS_API_KEY
         if nebius_key:
             content = call_nebius_llm(
                 messages=messages,
@@ -82,7 +82,7 @@ class OllamaClient:
                 return content
 
         # --- Gemini API Fallback ---
-        gemini_key = os.environ.get("GEMINI_API_KEY")
+        gemini_key = GEMINI_API_KEY
         if gemini_key:
             try:
                 gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
@@ -198,7 +198,7 @@ class OllamaClient:
         ]
 
         content = ""
-        nebius_key = os.environ.get("NEBIUS_API_KEY")
+        nebius_key = NEBIUS_API_KEY
         if nebius_key:
             nebius_content = call_nebius_llm(
                 messages=messages,
@@ -214,7 +214,7 @@ class OllamaClient:
 
         # --- Gemini TTS Summary Fallback ---
         elif not content:
-            gemini_key = os.environ.get("GEMINI_API_KEY")
+            gemini_key = GEMINI_API_KEY
             if gemini_key:
                 try:
                     gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"

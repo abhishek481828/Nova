@@ -2,10 +2,11 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import OCR_API_KEY
 
 class OcrService:
     def __init__(self):
-        self.api_key = os.environ.get("OCR_API_KEY")
+        self.api_key = OCR_API_KEY
         self.base_url = "https://api.ocr.space/parse/image"
 
     def ocr_image_file(self, file_path: str, language: str = "eng") -> str:

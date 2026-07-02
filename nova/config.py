@@ -88,6 +88,22 @@ DISABLE_OLLAMA = os.environ.get("NOVA_DISABLE_OLLAMA", "false").lower() == "true
 CHROMIUM_DEVTOOLS_PORT = int(os.environ.get("CHROMIUM_DEVTOOLS_PORT", 9222))
 CHROMIUM_HEADLESS = os.environ.get("CHROMIUM_HEADLESS", "false").lower() in ("true", "1", "yes")
 
+# Centralized API Keys & Tokens from Environment
+NEBIUS_API_KEY = os.environ.get("NEBIUS_API_KEY")
+GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
+TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
+WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
+OCR_API_KEY = os.environ.get("OCR_API_KEY")
+TMDB_API_KEY = os.environ.get("TMDB_API_KEY")
+IPINFO_API_KEY = os.environ.get("IPINFO_API_KEY")
+GITHUB_API_KEY = os.environ.get("GITHUB_API_KEY")
+FMP_API_KEY = os.environ.get("FMP_API_KEY")
+NEWS_API_KEY = os.environ.get("NEWS_API_KEY")
+COINGECKO_API_KEY = os.environ.get("COINGECKO_API_KEY")
+EXCHANGERATE_API_KEY = os.environ.get("EXCHANGERATE_API_KEY")
+TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
+TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
+
 def load_prompt(filename: str, default_val: str) -> str:
     from pathlib import Path
     try:

@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.weather import WeatherService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class WeatherAction(BaseAction):
     @property
@@ -30,15 +31,15 @@ class WeatherAction(BaseAction):
             )
 
             # 3. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's weather question naturally based on the provided weather data.\n"
                     "Rules:\n"
                     "1. Keep it concise, conversational, and direct.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Summarize the temperature, condition, and any other notable details naturally (e.g. say 'It is currently sunny and 22 degrees in London' instead of listing it as a block)."
                 )
+                system_prompt = load_prompt("weather_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -53,4 +54,5 @@ class WeatherAction(BaseAction):
             return f"Current weather conditions:\n\n" + weather_string
 
         except Exception as e:
+            log_error("Weather execution failed", e)
             return f"Weather execution failed: {e}"

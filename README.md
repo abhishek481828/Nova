@@ -1,100 +1,168 @@
-# Nova AI Desktop Assistant
+# 🧠 Nova AI Desktop Assistant
 
-Nova is an advanced, voice- and text-activated AI Desktop Assistant designed for NixOS. It features automated browser command execution (CDP remote debugging), system integration (volume, brightness, power control), custom package management (Nix), and a real-time web-based Mission Control Dashboard.
-
----
-
-## 🚀 How to Start the Project
-
-You can run Nova in **Interactive CLI mode** or as a **Background Daemon** with the web dashboard.
-
-### 1. Start the Background Daemon & Dashboard (Recommended)
-To run Nova in the background and start the web dashboard, use the launcher script:
-```bash
-nova start
-```
-*Alternatively, you can start the systemd user service directly:*
-```bash
-systemctl --user start nova.service
-```
-
-Once started:
-* **Nova Mission Control Dashboard**: Open **[http://127.0.0.1:11436](http://127.0.0.1:11436)** in your browser to view system telemetry, events log, active voice state, and the Dialogue Stream panel.
-* The daemon listens for TCP input triggers on port `11435`.
-
-### 2. Run Interactive CLI Mode
-To start Nova in your terminal interactively:
-* **Voice Mode (Default)**:
-  ```bash
-  nova
-  ```
-* **Text Mode (REPL)**:
-  ```bash
-  nova --text
-  ```
+Nova is a highly modular, next-generation cognitive desktop assistant built with local and cloud-based AI capabilities. Featuring an advanced real-time voice pipeline with speaker verification, resilient browser automation, a modular plan reasoning engine, and a live web telemetry dashboard, Nova acts as a powerful orchestrator for your local workflows.
 
 ---
 
-## 🛠️ Command Launcher Usage (`nova`)
+## 📸 Screenshots & Demos
 
-The custom launcher script `nova` supports several commands:
+### Telemetry Dashboard
+![Dashboard Screenshot Placeholder](docs/images/dashboard_screenshot.png)
 
-| Command | Action |
-|---|---|
-| `nova start` | Starts the background daemon service |
-| `nova stop` | Stops the background daemon service |
-| `nova restart` | Restarts the background daemon service |
-| `nova status` | Prints the status of all daemon modules |
-| `nova` | Launches interactive voice loops |
-| `nova --text` | Launches interactive text REPL |
-| `nova <query>` | Sends a single command to the running daemon |
-| `nova voice-test` | Runs audio and speaker verification diagnostics |
-| `nova voice-setup` | Enrolls/re-enrolls your voice speaker profile |
-| `nova voice-reset` | Resets/deletes the speaker profile |
+### Voice Pipeline Flow
+![Voice Flow Screenshot Placeholder](docs/images/voice_flow.png)
+
+### Video Demonstration
+[Watch Nova in Action (Demo Video Placeholder)](https://youtube.com/demo-placeholder)
 
 ---
 
-## 📦 Project Setup & Installation
+## ✨ Features
 
-If you are setting up the project on a new system or environment, follow these steps:
+*   **🎙️ Real-time Voice Loop**: Low-latency stream handling with built-in voice activity detection (VAD), high-pass filtering, and automatic gain control.
+*   **🧑 Speaker Verification**: Integrated speaker verification via Resemblyzer to ensure only authorized voices trigger actions.
+*   **🌐 Resilient Browser Automation**: Playwright-based browser execution that automatically handles tab recovery, element interactions, and credentials.
+*   **🧩 Cognitive Planning & Reasoning**: Modular task breakdown planner that translates queries into structured steps instead of unsafe shell strings.
+*   **📊 Telemetry Dashboard**: Live monitoring web page showing device health, status reports, and execution events via WebSockets.
+*   **🔌 Extensible Plugin System**: Dynamic action loader for custom skill integrations.
+*   **🛡️ Robust Error Recovery**: Automated recovery drivers for device drops and network timeouts.
 
-### Prerequisites
-* NixOS with `nix-shell`
-* Python 3.12+ (loaded via `shell.nix`)
+---
 
-### Setup Environment
-1. Enter the Nix development shell:
+## 🛠️ Requirements
+
+*   **Operating System**: Linux (NixOS highly recommended and supported out of the box via `shell.nix`).
+*   **Python**: Version `3.12` or higher.
+*   **System Libraries**: `ffmpeg`, `libstdc++.so.6` (handled automatically inside the `nix-shell`).
+
+---
+
+## 🚀 Quick Start
+
+### NixOS (Recommended)
+1. Clone the repository:
    ```bash
-   nix-shell shell.nix
+   git clone https://github.com/your-username/Nova.git
+   cd Nova
    ```
-2. Initialize and activate the virtual environment:
+2. Drop into the pre-configured nix shell:
+   ```bash
+   nix-shell
+   ```
+3. Initialize the environment:
+   ```bash
+   cp .env.example .env
+   # Edit .env and supply your API keys (Ollama, Gemini, ElevenLabs, etc.)
+   ```
+4. Start the interactive assistant:
+   ```bash
+   nova --text
+   ```
+
+### Non-Nix Linux Systems
+1. Ensure dependencies like `ffmpeg` are installed via your package manager.
+2. Initialize virtual environment:
    ```bash
    python -m venv .venv
    source .venv/bin/activate
+   pip install -r requirements.txt -r requirements-voice.txt
    ```
-3. Install dependencies:
-   ```bash
-   pip install -r requirements-voice.txt
-   ```
-4. Copy the environment template and set up your API keys (e.g. Ollama, Tavily, etc.):
+3. Copy and configure env file:
    ```bash
    cp .env.example .env
    ```
-5. Build the Dashboard Frontend:
-   Navigate to the frontend folder, install dependencies, and compile the UI static files:
+4. Run:
    ```bash
-   cd nova/dashboard/frontend
-   npm install
-   npm run build
-   cd ../../..
+   python -m nova.main --text
    ```
 
 ---
 
-## ⚙️ Configuration (.env)
+## 🎙️ Subsystem Setup
 
-Nova is configured using the `.env` file at the root of the project directory. Make sure to define:
-* `NEBIUS_API_KEY`: API key for LLM intent parsing
-* `TAVILY_API_KEY`: For web searching
-* `OLLAMA_API_URL`: Ollama local endpoint (defaults to `http://localhost:11434`)
-* `CHROMIUM_DEVTOOLS_PORT`: CDP remote debugging port (defaults to `9222`)
+### Voice Setup & Enrollment
+To train the speaker verification model to recognize your specific voice:
+```bash
+nova voice-setup
+```
+To reset your voice profile:
+```bash
+nova voice-reset
+```
+To run the automated voice subsystem self-test:
+```bash
+nova voice-test
+```
+
+### Browser Automation Setup
+To run browser tasks, play music, or scrape content, configure Chromium using playbooks:
+```bash
+# Add browser paths/credentials to your config or .env file
+```
+
+---
+
+## 🧠 Architecture Overview
+
+Nova uses a decoupled cognitive architecture to handle audio streams, planners, and dashboard reporting:
+
+```
+  🎤 Microphone ──► DSP (Filters/AGC) ──► VAD ──► OpenWakeWord
+                                                        │
+  🧠 Nova core  ◄── LLM Planner  ◄── Whisper STT ◄── Speaker Verification
+```
+
+### Folder Structure
+```
+├── docs/                 # Subsystem user/developer guides
+├── nova/                 # Main application source code
+│   ├── actions/          # Executable skill action adapters
+│   ├── ai/               # Intent parsing and LLM planners
+│   │   └── planner/      # Goal decomposition and templates
+│   ├── browser/          # Chromium controller & site playbooks
+│   ├── core/             # CLI, TCP clients, and daemon launcher
+│   ├── dashboard/        # Websocket backend and React frontend
+│   ├── services/         # REST client adapters (Weather, News, etc.)
+│   └── voice/            # Audio processors and wake word detection
+├── tests/                # Automated pytest unit tests
+└── shell.nix             # NixOS system dependencies environment shell
+```
+
+---
+
+## 🧪 Testing
+
+Run the full automated test suite containing 304 unit and stress tests:
+```bash
+nix-shell --run ".venv/bin/python -m pytest"
+```
+
+---
+
+## 🗺️ Project Status & Roadmap
+
+Nova is currently at status **v1.0.0 Stable Release**.
+
+### Upcoming Releases:
+*   **v1.1.0**: Memory optimization, SQLite-based RAG support.
+*   **v1.2.0**: Multimodal vision integrations.
+*   **v2.0.0**: Distributed local agent swarm control.
+
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please review [CONTRIBUTING.md](CONTRIBUTING.md) and our [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md).
+
+---
+
+## 📄 License
+
+Distributed under the Apache 2.0 License. See [LICENSE](LICENSE) for more information.
+
+---
+
+## ✉️ Contact
+
+*   **Project Lead**: Abhishek (abhishek@domain.example)
+*   **GitHub Issues**: [https://github.com/your-username/Nova/issues](https://github.com/your-username/Nova/issues)

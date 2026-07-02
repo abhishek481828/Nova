@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.coingecko import CoinGeckoService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 COIN_MAPPING = {
     "btc": "bitcoin",
@@ -55,15 +56,15 @@ class CryptoPriceAction(BaseAction):
             price_string = f"Cryptocurrency: {coin_id.capitalize()}\nPrice: {price_formatted} {currency.upper()}"
 
             # 3. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's cryptocurrency price question naturally based on the provided price data.\n"
                     "Rules:\n"
                     "1. Keep it concise, conversational, and direct.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Express the price naturally (e.g. say 'Bitcoin is currently sixty-eight thousand five hundred dollars' or 'Bitcoin is currently 68,500 dollars' instead of listing raw text)."
                 )
+                system_prompt = load_prompt("crypto_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -78,4 +79,5 @@ class CryptoPriceAction(BaseAction):
             return f"Current price details:\n\n" + price_string
 
         except Exception as e:
+            log_error("Cryptocurrency price execution failed", e)
             return f"Cryptocurrency price execution failed: {e}"

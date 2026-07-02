@@ -32,12 +32,9 @@ try:
 except Exception:
     pass
 
-from nova.core.state import StateManager
 from nova.utils import (
-    print_success,
     print_info,
     print_error,
-    print_warning,
 )
 
 # Re-export client, daemon and cli submodules for backward compatibility
@@ -45,25 +42,13 @@ from nova.core.cli import run_cli_repl
 from nova.core.daemon import run_daemon
 from nova.core.client import run_client
 
-def get_greeting() -> str:
-    from datetime import datetime
-    
-    # Reload state to get latest profile updates
-    StateManager.load_state()
-    user_profile = StateManager.get_user_profile()
-    name = "Boss"
-    if user_profile and isinstance(user_profile, dict) and user_profile.get("name"):
-        name = user_profile.get("name")
-        
-    hour = datetime.now().hour
-    if 5 <= hour < 12:
-        return f"Good morning, {name}!"
-    elif 12 <= hour < 17:
-        return f"Good afternoon, {name}!"
-    elif 17 <= hour < 22:
-        return f"Good evening, {name}!"
-    else:
-        return f"Hello, {name}!"
+# Import helpers from orchestrator
+from nova.core.orchestrator import (
+    get_greeting,
+    is_daemon_running,
+    handle_service_command,
+    start_daemon_background,
+)
 
 def main() -> None:
     args = sys.argv[1:]
@@ -71,42 +56,7 @@ def main() -> None:
     # Check for direct service commands
     if args:
         cmd = args[0].lower().strip()
-        if cmd == "start":
-            import subprocess
-            subprocess.run(["systemctl", "--user", "start", "nova.service"])
-            print_success("Nova service started.")
-            return
-        elif cmd == "stop":
-            import subprocess
-            subprocess.run(["systemctl", "--user", "stop", "nova.service"])
-            print_success("Nova service stopped.")
-            return
-        elif cmd == "restart":
-            import subprocess
-            subprocess.run(["systemctl", "--user", "restart", "nova.service"])
-            print_success("Nova service restarted.")
-            return
-        elif cmd == "status":
-            # Check if daemon is running by attempting to connect
-            daemon_running = False
-            s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-            s.settimeout(0.5)
-            try:
-                s.connect(("127.0.0.1", 11435))
-                daemon_running = True
-                s.close()
-            except Exception:
-                pass
-
-            if daemon_running:
-                run_client("STATUS")
-            else:
-                import subprocess
-                res = subprocess.run(["systemctl", "--user", "is-active", "nova.service"], capture_output=True, text=True)
-                active_status = res.stdout.strip()
-                print(f"○ Nova Assistant Service")
-                print(f"   Status:             Stopped ({active_status})")
-                print(f"   Background Service: Inactive")
+        if handle_service_command(cmd):
             return
 
     # Check for direct voice subsystem commands
@@ -126,15 +76,7 @@ def main() -> None:
             return
             
     # Check if daemon is running by attempting to connect
-    daemon_running = False
-    s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    s.settimeout(0.5)
-    try:
-        s.connect(("127.0.0.1", 11435))
-        daemon_running = True
-        s.close()
-    except Exception:
-        pass
+    daemon_running = is_daemon_running()
 
     # Run interactive/voice mode directly in the foreground if stdin is a TTY and either
     # no arguments are passed or "--text" is specified.
@@ -152,41 +94,15 @@ def main() -> None:
     if not is_interactive and not daemon_running and "--daemon" not in args:
         if not args:
             # Launcher mode / shortcut: start daemon silently in the background
-            import subprocess
-            import time
-            subprocess.run(["systemctl", "--user", "start", "nova.service"])
-            for _ in range(10):
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.5)
-                try:
-                    s.connect(("127.0.0.1", 11435))
-                    s.close()
-                    daemon_running = True
-                    break
-                except Exception:
-                    time.sleep(0.5)
-            if daemon_running:
+            if start_daemon_background():
                 run_client("TOGGLE_VOICE")
             else:
                 print_error("Failed to start Nova daemon.")
             return
         else:
             # Client mode query: start daemon, wait, and run client query
-            import subprocess
-            import time
-            subprocess.run(["systemctl", "--user", "start", "nova.service"])
             print_info("Starting Nova daemon...")
-            for _ in range(10):
-                s = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-                s.settimeout(0.5)
-                try:
-                    s.connect(("127.0.0.1", 11435))
-                    s.close()
-                    daemon_running = True
-                    break
-                except Exception:
-                    time.sleep(0.5)
-            if daemon_running:
+            if start_daemon_background():
                 query = " ".join(args)
                 run_client(query)
             else:

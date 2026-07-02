@@ -11,8 +11,6 @@ from typing import Any, Dict, List, Optional, Set, Tuple
 logger = logging.getLogger("nova.ai.planner")
 
 
-from abc import ABC, abstractmethod
-from dataclasses import dataclass, field, asdict
 from nova.ai.planner.models import (
     Goal,
     RecoveryPolicy,
@@ -21,7 +19,6 @@ from nova.ai.planner.models import (
     PlanningContext,
     ValidationReport,
     PlanningResult,
-    PlanProgress,
 )
 from nova.ai.planner.rules import (
     DECOMPOSITION_RULES,
@@ -31,7 +28,6 @@ from nova.ai.planner.rules import (
 )
 from nova.ai.planner.execution import (
     PlanExecutionInterface,
-    PlanExecutionManager,
 )
 
 class Planner:
@@ -57,40 +53,35 @@ class Planner:
         for frame_info in inspect.stack():
             if "test_planner.py" in frame_info.filename:
                 return None
-        desc_lower = description.lower()
-        if "dummy" in desc_lower or "legacy" in desc_lower:
+        
+        from pathlib import Path
+        import json
+        
+        mappings_path = Path(__file__).resolve().parent / "templates" / "mappings.json"
+        try:
+            with open(mappings_path, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception as e:
+            logger.error(f"Failed to load framework templates mappings: {e}")
             return None
-        if "flask" in desc_lower:
-            return "flask"
-        if "fastapi" in desc_lower:
-            return "fastapi"
-        if "django" in desc_lower:
-            return "django"
-        if "react" in desc_lower:
-            return "react"
-        if "vue" in desc_lower:
-            return "vue"
-        if "angular" in desc_lower:
-            return "angular"
-        if "express" in desc_lower:
-            return "express"
-        if "electron" in desc_lower:
-            return "electron"
-        if "node" in desc_lower:
-            return "node.js"
-        if "rust" in desc_lower or "cargo" in desc_lower:
-            return "rust"
-        if "c++" in desc_lower or "cpp" in desc_lower or "g++" in desc_lower:
-            return "c++"
-        if "qt" in desc_lower:
-            return "qt"
-        if "java" in desc_lower:
-            return "java"
-        if "python cli" in desc_lower or ("python" in desc_lower and "calculator" in desc_lower) or ("python" in desc_lower and "cli" in desc_lower):
-            return "python cli"
-        if "static website" in desc_lower or "portfolio" in desc_lower or "html website" in desc_lower or "html" in desc_lower:
-            return "static website"
+
+        desc_lower = description.lower()
+        
+        # Check exclude keywords
+        for excl in data.get("exclude_keywords", []):
+            if excl in desc_lower:
+                return None
+                
+        # Match mappings
+        for item in data.get("mappings", []):
+            template_name = item.get("template")
+            rules = item.get("rules", [])
+            for rule in rules:
+                if all(kw in desc_lower for kw in rule):
+                    return template_name
+                    
         return None
+
 
     def determine_project_name(self, description: str, template_name: str) -> str:
         desc_lower = description.lower()

@@ -2,8 +2,9 @@ import os
 from typing import Any, Dict
 from nova.actions.base import BaseAction
 from nova.services.tavily import TavilyService
-from nova.logger import logger
+from nova.logger import logger, log_error
 from nova.services.nebius import call_nebius_llm
+from nova.config import load_prompt, NEBIUS_API_KEY
 
 class TavilySearchAction(BaseAction):
     @property
@@ -29,15 +30,15 @@ class TavilySearchAction(BaseAction):
             search_context = "\n".join(formatted_results)
 
             # 3. Call LLM (Nebius) to summarize naturally
-            nebius_key = os.environ.get("NEBIUS_API_KEY")
-            if nebius_key:
-                system_prompt = (
+            if NEBIUS_API_KEY:
+                fallback_prompt = (
                     "You are Nova, a helpful voice assistant. Answer the user's question naturally based on the provided search results.\n"
                     "Rules:\n"
                     "1. Keep it concise, natural, and direct.\n"
                     "2. Avoid using markdown formatting (like bullet points or bold text) since it might be spoken aloud.\n"
                     "3. Answer the question using only the search results. If the results do not contain the answer, say so."
                 )
+                system_prompt = load_prompt("tavily_search_prompt.txt", fallback_prompt)
                 summary = call_nebius_llm(
                     messages=[
                         {"role": "system", "content": system_prompt},
@@ -52,4 +53,5 @@ class TavilySearchAction(BaseAction):
             return f"Here are the search results for '{query}':\n\n" + search_context
 
         except Exception as e:
+            log_error("Search execution failed", e)
             return f"Search execution failed: {e}"

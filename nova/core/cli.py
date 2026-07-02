@@ -17,7 +17,7 @@ from nova.utils import (
     COLOR_RED,
     COLOR_RESET,
 )
-from nova.core.assistant import get_greeting
+from nova.core.orchestrator import get_greeting
 
 def run_cli_repl(args=None) -> None:
     if args is None:

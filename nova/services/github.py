@@ -2,6 +2,7 @@ import os
 import time
 import httpx
 from nova.logger import logger
+from nova.config import GITHUB_API_KEY
 
 # In-memory cache
 _cache = {}
@@ -9,7 +10,7 @@ CACHE_TTL = 60  # 1 minute
 
 class GitHubService:
     def __init__(self):
-        self.api_key = os.environ.get("GITHUB_API_KEY")
+        self.api_key = GITHUB_API_KEY
         self.base_url = "https://api.github.com"
 
     def get_profile(self) -> dict:

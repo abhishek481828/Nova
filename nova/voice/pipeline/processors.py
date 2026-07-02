@@ -7,7 +7,10 @@ import os
 import time
 import ctypes
 import ctypes.util
-from typing import Dict, List, Tuple, Optional
+from typing import Optional
+import threading
+import collections
+import json
 
 import numpy as np
 
@@ -21,6 +24,7 @@ except ImportError:
     welch = None
     spectrogram = None
 
+import nova.voice.config as voice_config
 from nova.voice.config import (
     SAMPLE_RATE, VAD_THRESHOLD, NOISE_FLOOR_MARGIN, HIGHPASS_CUTOFF,
     VAD_AGGRESSIVENESS, AGC_TARGET_RMS, AGC_MAX_GAIN, AGC_RATE
