@@ -280,17 +280,36 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
             self.buffer_index = 0
             self.buffer_filled = True
 
-        current_rms = self.get_current_rms()
-        self.noise_floor += (current_rms - self.noise_floor) * 0.05
+        # Calculate RMS of the current frame (fast, local voice activity detection)
+        frame_rms = float(np.sqrt(np.mean(pcm_audio.astype(np.float32) ** 2))) / 32768.0
 
-        if current_rms > self.noise_floor * 2.0:
+        # Estimate background noise floor using a robust 10th percentile filter over the rolling buffer
+        calculated_noise = self.get_noise_floor()
+        # Smooth the noise floor slightly to prevent jitter
+        self.noise_floor += (calculated_noise - self.noise_floor) * 0.1
+
+        # Use instant frame RMS for voice activity start/stop tracking
+        if frame_rms > self.noise_floor * 2.0:
             if self.speech_start_time is None:
                 self.speech_start_time = time.perf_counter()
                 self.speech_start_time_abs = time.time()
         else:
-            if current_rms < self.noise_floor * 1.2:
+            if frame_rms < self.noise_floor * 1.2:
                 self.speech_start_time = None
                 self.speech_start_time_abs = None
+
+    def get_noise_floor(self) -> float:
+        active_len = self.buffer_capacity if self.buffer_filled else self.buffer_index
+        # We need at least one 1280-sample frame to calculate
+        if active_len < 1280:
+            return self.noise_floor
+        # Reshape the active portion into 1280-sample frames
+        num_frames = active_len // 1280
+        frames = self.audio_buffer[:num_frames * 1280].reshape(num_frames, 1280)
+        # Compute RMS of each frame
+        rms_values = np.sqrt(np.mean(frames.astype(np.float32) ** 2, axis=1)) / 32768.0
+        # Return 10th percentile
+        return float(np.percentile(rms_values, 10))
 
     def get_current_rms(self) -> float:
         active_buffer = self.audio_buffer if self.buffer_filled else self.audio_buffer[:self.buffer_index]
