@@ -118,7 +118,8 @@ def record_audio(output_file: str | None = None, calibrated_threshold: float | N
                 
                 if len(audio_data) > 0:
                     last_is_speech = audio_data[-1][1]
-                    if last_is_speech:
+                    is_settled = len(audio_data) >= 10
+                    if last_is_speech and is_settled:
                         last_sound_time = time.time()
                         has_speech_started = True
                         consecutive_silent_frames = 0
@@ -282,7 +283,10 @@ def record_audio_from_stream(
                 is_speech = vad.is_speech(chunk, SAMPLE_RATE)
             audio_data.append((chunk, is_speech))
 
-            if is_speech:
+            # Settling period (10 frames = ~300ms) to prevent trailing speaker echoes/clicks from causing premature silence cutoffs
+            is_settled = len(audio_data) >= 10
+
+            if is_speech and is_settled:
                 last_sound_time = time.time()
                 consecutive_silent_frames = 0
                 if not has_speech_started:
