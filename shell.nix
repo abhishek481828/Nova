@@ -16,6 +16,7 @@ pkgs.mkShell {
     zlib
     nodejs
     scrot
+    playerctl
   ];
 
   shellHook = ''

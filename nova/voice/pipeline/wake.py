@@ -13,6 +13,7 @@ from nova.voice.pipeline.state_machine import (
     get_current_state,
     recover_microphone,
 )
+from nova.voice.media_control import duck_all_media, unduck_players
 
 _WAKE_CHUNK = 480
 _WAKE_FRAME = 1280
@@ -34,20 +35,29 @@ def _wait_for_wake(
     oww_accum = np.zeros(0, dtype=np.int16)
 
     _SOFTWARE_GAIN = 2.0
-    _DETECT_THRESHOLD = 0.07
-    _PATIENCE = 2
-    _PATIENCE_WINDOW = 3
+    _DETECT_THRESHOLD = 0.04
+    _PATIENCE = 1
+    _PATIENCE_WINDOW = 2
     score_history = collections.deque(maxlen=_PATIENCE_WINDOW)
     last_trigger = 0.0
     _WARMUP_FRAMES = 6
     warmup_remaining = _WARMUP_FRAMES
 
+    # Duck media volume so "Hey Nova" can be heard over background audio
+    _ducked_volumes: dict = {}
+    try:
+        _ducked_volumes = duck_all_media()
+    except Exception as _e:
+        logger.debug(f"Media duck failed: {_e}")
+
     while True:
         current_state = get_current_state()
         if shutdown_event.is_set() or current_state == VoiceState.INACTIVE:
+            unduck_players(_ducked_volumes)
             return False, None, 0.0
         if voice_active_event.is_set():
             voice_active_event.clear()
+            unduck_players(_ducked_volumes)
             return True, None, 1.0
 
         try:
@@ -67,15 +77,24 @@ def _wait_for_wake(
             flat = aec.process(flat)
         capture_buffer.extend(flat)
 
-        amplified = flat * _SOFTWARE_GAIN
-        pcm_chunk = (np.clip(amplified, -1.0, 1.0) * 32767).astype(np.int16)
+        # Apply RMS normalization with a safety gain limit to match diag_wake.py behavior
+        rms = float(np.sqrt(np.mean(flat * flat)))
+        TARGET_RMS = 0.08
+        if rms > 1e-6:
+            gain = min(8.0, TARGET_RMS / rms)
+            normalized = flat * gain
+        else:
+            normalized = flat * _SOFTWARE_GAIN
+
+        pcm_chunk = (np.clip(normalized, -1.0, 1.0) * 32767).astype(np.int16)
         oww_accum = np.concatenate((oww_accum, pcm_chunk))
+
 
         if len(oww_accum) < _WAKE_FRAME:
             continue
 
         oww_frame = oww_accum[:_WAKE_FRAME]
-        oww_accum = oww_accum[_WAKE_FRAME:]
+        oww_accum = oww_accum[_WAKE_FRAME // 2:]  # 50% overlap — matches diag_wake.py behavior
 
         try:
             predictions = wake_detector.model.predict(oww_frame)
@@ -122,4 +141,6 @@ def _wait_for_wake(
             last_trigger = now
             score_history.clear()
             wake_audio = capture_buffer.get_latest()
+            # Restore volume before returning — core.py will do a full pause next
+            unduck_players(_ducked_volumes)
             return True, wake_audio, float(score)

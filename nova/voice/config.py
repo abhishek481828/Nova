@@ -131,6 +131,13 @@ VOICE_NAME = get_env("NOVA_TTS_VOICE", "en-US-GuyNeural")
 # Set NOVA_SPEAKER_VERIFY=false to disable entirely.
 enable_speaker_verification = get_env("NOVA_SPEAKER_VERIFY", "true").lower() == "true"
 speaker_similarity_threshold = float(get_env("NOVA_SPEAKER_THRESHOLD", "0.75"))
+FUSION_TRIGGER_THRESHOLD = float(get_env("NOVA_FUSION_TRIGGER_THRESHOLD", "0.50"))
+# Fusion engine component weights — must sum to ~1.0
+FUSION_WEIGHT_WAKE    = float(get_env("NOVA_FUSION_WEIGHT_WAKE",    "0.40"))
+FUSION_WEIGHT_SPEAKER = float(get_env("NOVA_FUSION_WEIGHT_SPEAKER", "0.30"))
+FUSION_WEIGHT_VAD     = float(get_env("NOVA_FUSION_WEIGHT_VAD",     "0.15"))
+FUSION_WEIGHT_QUALITY = float(get_env("NOVA_FUSION_WEIGHT_QUALITY", "0.10"))
+FUSION_WEIGHT_NOISE   = float(get_env("NOVA_FUSION_WEIGHT_NOISE",   "0.05"))
 _OLD_SPEAKER_PATH = os.path.expanduser("~/.config/nova/speaker_embedding.bin")
 _NEW_SPEAKER_PATH = os.path.expanduser("~/.config/nova/speaker_embedding.bin")
 _default_speaker_path = _OLD_SPEAKER_PATH if os.path.exists(_OLD_SPEAKER_PATH) else _NEW_SPEAKER_PATH

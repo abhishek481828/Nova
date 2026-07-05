@@ -43,6 +43,7 @@ from nova.voice.speaker import SpeakerVerifier
 from nova.voice.whisper import get_stt_provider
 from nova.voice.tts import speak
 from nova.voice.wakeword import LocalWakeWordDetector, AdaptiveWakeController
+from nova.voice.media_control import pause_all_media, resume_players
 
 
 from nova.voice.async_log import async_log
@@ -474,6 +475,13 @@ def process_single_iteration(
                 if confirmation_sound:
                     play_confirmation_sound()
                     time.sleep(0.15)
+
+                # Pause any playing media so it doesn't interfere with STT
+                _paused_players = pause_all_media()
+                voice_config._paused_media_players = _paused_players  # store for resume later
+                if _paused_players:
+                    logger.debug(f"Paused media players: {_paused_players}")
+                    time.sleep(0.10)  # brief gap so speakers go silent
 
                 try:
                     with voice_config.stream_lock:
@@ -930,6 +938,15 @@ def process_single_iteration(
         sm._deferred_deactivate = False
         print_info("Nova has stopped listening.")
         transition_to(VoiceState.INACTIVE)
+
+    # Resume any media that was paused when Nova woke up
+    try:
+        _paused = getattr(voice_config, "_paused_media_players", [])
+        if _paused:
+            resume_players(_paused)
+            voice_config._paused_media_players = []
+    except Exception:
+        pass
 
     save_state()
     return "continue"
