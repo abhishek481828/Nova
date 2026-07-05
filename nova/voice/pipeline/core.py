@@ -632,6 +632,7 @@ def process_single_iteration(
         except Exception as stt_err:
             logger.error(f"Failed to re-initialize STT provider: {stt_err}")
             sm._stt_healthy = False
+        skip_idle_wait = False
         save_state()
         return "continue"
     transcribe_dur = time.time() - t0
@@ -639,6 +640,7 @@ def process_single_iteration(
     if not text:
         print_warning("I didn't catch that.")
         last_printed_state = VoiceState.VOICE_IDLE
+        skip_idle_wait = False
         save_state()
         return "continue"
 
@@ -748,6 +750,7 @@ def process_single_iteration(
             except Exception as wm_err:
                 logger.debug(f"Failed to update working memory: {wm_err}")
             last_printed_state = VoiceState.VOICE_IDLE
+            skip_idle_wait = False
             save_state()
             return "continue"
 
@@ -771,11 +774,13 @@ def process_single_iteration(
             emit("llm_finished", module="llm", status="failed", metadata={"query": corrected, "error": str(e)})
         except Exception:
             pass
+        skip_idle_wait = False
         save_state()
         return "continue"
 
     if not raw_response:
         print_error("All AI APIs failed. Check your API keys and network.")
+        skip_idle_wait = False
         save_state()
         return "continue"
 
@@ -784,11 +789,13 @@ def process_single_iteration(
         actions = parse_and_validate_action(raw_response)
     except Exception as e:
         print_error(f"Action validation failed: {e}")
+        skip_idle_wait = False
         save_state()
         return "continue"
 
     if not actions:
         print_error("Could not parse an action from the AI response.")
+        skip_idle_wait = False
         save_state()
         return "continue"
 
@@ -948,6 +955,7 @@ def process_single_iteration(
     except Exception:
         pass
 
+    skip_idle_wait = True
     save_state()
     return "continue"
 
