@@ -955,7 +955,7 @@ def process_single_iteration(
     except Exception:
         pass
 
-    skip_idle_wait = True
+    skip_idle_wait = False
     save_state()
     return "continue"
 
