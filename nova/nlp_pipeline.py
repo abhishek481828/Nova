@@ -27,7 +27,7 @@ COMMON_BIGRAMS = {
     ("set", "volume"), ("set", "brightness"),
     ("git", "status"), ("git", "commit"), ("git", "push"), ("git", "pull"),
     ("show", "dashboard"), ("show", "specs"),
-    ("suspend", "system"), ("reboot", "system"), ("shutdown", "system"),
+    ("suspend", "system"), ("shutdown", "system"),
     ("check", "status"), ("check", "connections"), ("diagnose", "connections")
 }
 

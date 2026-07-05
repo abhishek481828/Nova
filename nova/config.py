@@ -130,7 +130,7 @@ Actions & parameters:
 - git_action: {"action": "git_action", "operation": "push"|"pull"|"status"|"commit", "repo_path": "path", "message": "msg"}
 - file_action: {"action": "file_action", "operation": "create"|"delete"|"list"|"read", "path": "path", "content": "text"}
 - browser_action: {"action": "browser_action", "url": "url"}
-- system_action: {"action": "system_action", "operation": "reboot"|"shutdown"|"suspend"|"storage"}
+- system_action: {"action": "system_action", "operation": "shutdown"|"suspend"|"storage"}
 - chat_response: {"action": "chat_response", "message": "text"}
 - adb_action: {"action": "adb_action", "operation": "devices"|"connect"|"disconnect"|"setup"|"mirror", "target": "ip_or_device"}
 - diagnose: {"action": "diagnose"}

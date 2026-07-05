@@ -19,17 +19,14 @@ class SystemAction(BaseAction):
             else:
                 return f"Failed to get storage capacity. Error: {stderr}"
 
-        if operation == "reboot":
-            cmd = ["systemctl", "reboot"]
-            confirm_msg = "Reboot the system immediately"
-        elif operation == "shutdown":
+        if operation == "shutdown":
             cmd = ["systemctl", "poweroff"]
             confirm_msg = "Shut down the system immediately"
         elif operation == "suspend":
             cmd = ["systemctl", "suspend", "-i"]
             confirm_msg = "Suspend the system (put to sleep)"
         else:
-            return f"Error: Unsupported system operation '{operation}'. Supported: reboot, shutdown, suspend."
+            return f"Error: Unsupported system operation '{operation}'. Supported: shutdown, suspend."
 
         # Execute systemctl command with safety prompt
         exit_code, stdout, stderr = CommandExecutor.run_shell(

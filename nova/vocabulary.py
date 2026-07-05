@@ -9,7 +9,7 @@ VALID_WORDS: Set[str] = {
     "devices", "connected", "connecting", "connection", "connections", "installed", "installing", "removed", "removing", "searching",
     "updated", "updating", "running", "checking", "mirrored", "opening", "opened", "closing", "closed",
     # Operations & Targets
-    "devices", "connect", "disconnect", "setup", "mirror", "reboot", "shutdown", "suspend", "push", "pull", "commit", "status", "create", "delete", "list", "read",
+    "devices", "connect", "disconnect", "setup", "mirror", "shutdown", "suspend", "push", "pull", "commit", "status", "create", "delete", "list", "read",
     # Common applications & system components
     "chrome", "chromium", "firefox", "vscode", "code", "terminal", "phone", "scrcpy", "tailscale", "vlc", "python", "explorer", "nautilus",
     # Linux system, commands, and service manager terms

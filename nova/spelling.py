@@ -229,14 +229,12 @@ def correct_action_data(action_data: Dict[str, Any], query: str = "") -> Dict[st
                 
     elif action == "system_action":
         operation = action_data.get("operation", "").strip().lower()
-        if operation == "restart":
-            operation = "reboot"
-        elif operation in ("poweroff", "halt"):
+        if operation in ("poweroff", "halt"):
             operation = "shutdown"
         elif operation == "sleep":
             operation = "suspend"
 
-        valid_ops = {"reboot", "shutdown", "suspend", "storage"}
+        valid_ops = {"shutdown", "suspend", "storage"}
         if operation and operation not in valid_ops:
             matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
             if matches:
