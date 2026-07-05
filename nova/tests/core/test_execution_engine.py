@@ -415,5 +415,32 @@ class TestExecutionEngine(unittest.TestCase):
         self.assertEqual(self.dispatcher["file_action"].called_count, 1)
         self.assertEqual(self.dispatcher["generic_action"].called_count, 0)
 
+    def test_execution_errors_deduplication(self):
+        """Identical execution errors in get_progress should be deduplicated."""
+        plan = Plan(id="p_dedup", goal_description="Dedup Test")
+        step = PlanStep(
+            id="s1",
+            description="Failing step",
+            action_type="mock_fail",
+        )
+        plan.steps.append(step)
+        
+        self.engine.submit_plan(plan)
+        # Initialize telemetry entry
+        self.engine.telemetry[plan.id] = {
+            "start_time": 0.0,
+            "retries": 0,
+            "errors": [],
+            "success_rate": 100.0,
+            "total_executed": 0,
+            "total_success": 0
+        }
+        # Record step failure twice with identical message
+        self.engine._handle_step_failure(plan, step, "Access denied")
+        self.engine._handle_step_failure(plan, step, "Access denied")
+        
+        progress = self.engine.get_progress(plan.id)
+        self.assertEqual(progress.get("errors"), ["Access denied"])
+
 if __name__ == "__main__":
     unittest.main()

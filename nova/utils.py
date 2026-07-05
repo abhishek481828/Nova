@@ -89,6 +89,11 @@ Version: {__version__}
 def ask_confirmation(prompt_msg: str = "Proceed?") -> bool:
     """Prompt the user with a Proceed (y/n) check."""
     global _socket_conn
+    import threading
+    # Auto-approve instantly for remote Telegram commands
+    if threading.current_thread().name == "telegram_polling_thread":
+        return True
+        
     prompt_str = f"{COLOR_YELLOW}{COLOR_BOLD}{prompt_msg} (y/n): {COLOR_RESET}"
     try:
         while True:
@@ -98,6 +103,12 @@ def ask_confirmation(prompt_msg: str = "Proceed?") -> bool:
                 if not choice:
                     return False
             else:
+                if not sys.stdin.isatty():
+                    from nova.core.state import StateManager
+                    # Auto-approve if system is in autonomous mode
+                    if StateManager.is_autonomous():
+                        return True
+                    return False
                 choice = input(prompt_str).lower().strip()
                 
             if choice in ("y", "yes"):

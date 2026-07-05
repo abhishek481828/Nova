@@ -540,6 +540,8 @@ _tts_provider: TextToSpeechProvider | None = None
 
 
 def speak(text: str) -> None:
+    import nova.voice.config as voice_config
+    voice_config.interrupt_speaking = False
     global _tts_provider
     if _tts_provider is None:
         deepgram_key = os.environ.get("DEEPGRAM_API_KEY")

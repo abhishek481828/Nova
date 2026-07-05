@@ -48,6 +48,7 @@ from nova.voice.pipeline.state_machine import (
     _current_state,
     shutdown_event,
     voice_active_event,
+    get_voice_status_report,
 )
 
 from nova.voice.pipeline.interrupts import play_confirmation_sound

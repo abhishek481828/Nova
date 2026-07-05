@@ -5,10 +5,12 @@ from nova.utils import ask_confirmation, print_warning
 
 class CommandExecutor:
     _last_commands: List[str] = []
+    _approved_commands = set()
 
     @classmethod
     def clear_last_commands(cls) -> None:
         cls._last_commands.clear()
+        cls._approved_commands.clear()
 
     @classmethod
     def get_last_commands(cls) -> List[str]:
@@ -20,7 +22,8 @@ class CommandExecutor:
         require_confirmation: bool = False,
         confirm_message: str = "Execute system changes?",
         shell: bool = False,
-        cwd: str = None
+        cwd: str = None,
+        extra_env: dict = None
     ) -> Tuple[int, str, str]:
         """
         Runs a command synchronously and returns (exit_code, stdout, stderr).
@@ -29,11 +32,15 @@ class CommandExecutor:
         cmd_str = cmd if isinstance(cmd, str) else " ".join(cmd)
         
         if require_confirmation:
-            print_warning(f"Security Warning: An action is trying to execute code that modifies the system:")
-            print_warning(f"  Command: {cmd_str}")
-            print_warning(f"  Action Details: {confirm_message}")
-            if not ask_confirmation("Proceed?"):
-                return -1, "", "Command execution aborted by user."
+            if cmd_str in CommandExecutor._approved_commands:
+                require_confirmation = False
+            else:
+                print_warning(f"Security Warning: An action is trying to execute code that modifies the system:")
+                print_warning(f"  Command: {cmd_str}")
+                print_warning(f"  Action Details: {confirm_message}")
+                if not ask_confirmation("Proceed?"):
+                    return -1, "", "Command execution aborted by user."
+                CommandExecutor._approved_commands.add(cmd_str)
                 
         # Record command
         CommandExecutor._last_commands.append(cmd_str)
@@ -46,13 +53,16 @@ class CommandExecutor:
             pass
             
         try:
+            import os as _os
+            merged_env = extra_env if extra_env else None
             result = subprocess.run(
                 cmd,
                 shell=shell,
                 capture_output=True,
                 text=True,
                 check=False,
-                cwd=cwd
+                cwd=cwd,
+                env=merged_env
             )
             log_command(cmd_str, result.returncode, result.stdout)
             

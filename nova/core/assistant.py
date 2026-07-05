@@ -74,6 +74,9 @@ def main() -> None:
             from nova.voice.pipeline import run_voice_self_test as voice_test_main
             voice_test_main()
             return
+        elif cmd == "wake-diag":
+            import nova.voice.wizards.diag_wake
+            return
             
     # Check if daemon is running by attempting to connect
     daemon_running = is_daemon_running()

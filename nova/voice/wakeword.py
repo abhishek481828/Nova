@@ -211,20 +211,27 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
                         inference_latency = time.perf_counter() - start_t
                         adaptive_thresh = self.detector.get_adaptive_threshold()
                         current_rms = self.detector.get_current_rms()
-                        
+
+                        # Track whether we already fired a missed-wake for this round
+                        # to prevent double-firing with log_false_wake on the same event.
+                        _missed_fired_this_round = False
+
                         for name in self.detector.model_names:
                             score = predictions.get(name, 0.0)
+                            # Only log a missed wake if the score is near-threshold, speech
+                            # was detected, and we haven't already logged one this round.
                             if (adaptive_thresh - 0.15) <= score < adaptive_thresh:
-                                if self.detector.speech_start_time is not None:
+                                if self.detector.speech_start_time is not None and not _missed_fired_this_round:
                                     self.detector.log_missed_wake(name, score, current_rms)
-                            
+                                    _missed_fired_this_round = True
+
                             if score >= adaptive_thresh:
                                 latency_sec = 0.0
                                 if self.detector.speech_start_time is not None:
                                     latency_sec = time.perf_counter() - self.detector.speech_start_time
                                     self.detector.last_speech_start_time_abs = self.detector.speech_start_time_abs
                                 self.detector._log_diagnostics(name, score, current_rms, inference_latency, latency_sec, adaptive_thresh)
-                        
+
                         return predictions
 
                 def __getattr__(self, name):
@@ -426,17 +433,21 @@ class AdaptiveWakeController:
                 pass
         else:
             wake_thresh = 0.50
-            noise_adjustment = noise_floor * 4.0
-            wake_thresh += min(0.20, noise_adjustment)
+            # Use a gentler noise multiplier (2.5 instead of 4.0) and a lower cap
+            # (0.10 instead of 0.20) so that normal indoor ambient noise doesn't
+            # push the adaptive threshold so high that real "Hey Nova" utterances
+            # are missed. Previous values caused threshold to drift to ~0.56.
+            noise_adjustment = noise_floor * 2.5
+            wake_thresh += min(0.10, noise_adjustment)
             if noise_adjustment > 0.02:
-                reasons.append(f"Raised wake threshold by +{noise_adjustment:.2f} due to high background noise ({noise_floor:.5f})")
+                reasons.append(f"Raised wake threshold by +{min(0.10, noise_adjustment):.2f} due to high background noise ({noise_floor:.5f})")
 
             if success_rate < 0.70:
-                wake_thresh += 0.15
-                reasons.append(f"Raised wake threshold by +0.15 due to low success rate ({success_rate:.2%})")
+                wake_thresh += 0.10
+                reasons.append(f"Raised wake threshold by +0.10 due to low success rate ({success_rate:.2%})")
             elif success_rate > 0.95:
                 wake_thresh -= 0.05
-                
+
             new_vals["wake_threshold"] = min(0.85, max(0.30, wake_thresh))
 
         # 2. Adapt VAD Noise Threshold

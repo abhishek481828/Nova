@@ -25,7 +25,7 @@ Actions & parameters:
 - list_packages: {"action": "list_packages"}
 - volume_control: {"action": "volume_control", "operation": "set"|"increase"|"decrease"|"mute"|"unmute"|"get", "level": int}
 - brightness_control: {"action": "brightness_control", "operation": "set"|"increase"|"decrease"|"get", "level": int}
-- desktop_control: {"action": "desktop_control", "operation": "lock"|"night_light"|"media", "state": "on"|"off"|"toggle", "media_command": "play"|"pause"|"playpause"|"next"|"prev"|"stop"}
+- desktop_control: {"action": "desktop_control", "operation": "lock"|"unlock"|"night_light"|"media", "state": "on"|"off"|"toggle", "media_command": "play"|"pause"|"playpause"|"next"|"prev"|"stop"}
 - wifi_control: {"action": "wifi_control", "operation": "status"|"toggle"|"scan"|"connect", "state": "on"|"off"|"toggle", "ssid": "ssid_name", "password": "pass"}
 - rich_system_info: {"action": "rich_system_info"}
 - chromium_action: {"action": "chromium_action", "operation": "open"|"search_youtube"|"fill_form"|"click"|"get_content", "url": "url", "query": "text", "selector": "css_selector", "value": "text", "form_data": {"selector": "value"}}
@@ -122,6 +122,7 @@ Examples:
 - "make screen brighter" -> {"action": "brightness_control", "operation": "increase", "level": 10}
 - "check my brightness level" -> {"action": "brightness_control", "operation": "get"}
 - "lock my laptop screen" -> {"action": "desktop_control", "operation": "lock"}
+- "unlock my laptop screen" -> {"action": "desktop_control", "operation": "unlock"}
 - "enable night light" -> {"action": "desktop_control", "operation": "night_light", "state": "on"}
 - "toggle night light mode" -> {"action": "desktop_control", "operation": "night_light", "state": "toggle"}
 - "pause the media player" -> {"action": "desktop_control", "operation": "media", "media_command": "pause"}

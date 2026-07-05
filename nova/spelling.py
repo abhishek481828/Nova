@@ -327,14 +327,16 @@ def correct_action_data(action_data: Dict[str, Any], query: str = "") -> Dict[st
         operation = action_data.get("operation", "").strip().lower()
         if operation in ("lockscreen", "screenlock"):
             operation = "lock"
+        elif operation in ("unlockscreen", "screenunlock", "unlockit", "delock", "open screen"):
+            operation = "unlock"
         elif operation in ("nightlight", "night-light", "color"):
             operation = "night_light"
         elif operation in ("player", "music", "video"):
             operation = "media"
             
-        valid_ops = {"lock", "night_light", "media"}
+        valid_ops = {"lock", "unlock", "night_light", "media"}
         if operation and operation not in valid_ops:
-            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.8)
             if matches:
                 print_info(f"Correcting Desktop operation typo '{operation}' to '{matches[0]}'")
                 operation = matches[0]

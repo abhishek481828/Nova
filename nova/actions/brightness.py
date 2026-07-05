@@ -10,6 +10,48 @@ class BrightnessControlAction(BaseAction):
     def action_name(self) -> str:
         return "brightness_control"
 
+    def _get_brightness_dbus(self) -> int:
+        """Reads current brightness level (percentage) via D-Bus."""
+        cmd = [
+            "gdbus", "call", "--session",
+            "--dest", "org.gnome.SettingsDaemon.Power",
+            "--object-path", "/org/gnome/SettingsDaemon/Power",
+            "--method", "org.freedesktop.DBus.Properties.Get",
+            "org.gnome.SettingsDaemon.Power.Screen", "Brightness"
+        ]
+        exit_code, stdout, stderr = CommandExecutor.run_shell(
+            cmd,
+            shell=False,
+            require_confirmation=False
+        )
+        if exit_code != 0:
+            raise RuntimeError(f"D-Bus call failed: {stderr.strip()}")
+        
+        match = re.search(r'<\s*([0-9]+)\s*>', stdout)
+        if not match:
+            raise ValueError(f"Could not parse D-Bus output: {stdout.strip()}")
+        
+        return int(match.group(1))
+
+    def _set_brightness_dbus(self, pct: int) -> bool:
+        """Sets brightness level (percentage) via D-Bus."""
+        cmd = [
+            "gdbus", "call", "--session",
+            "--dest", "org.gnome.SettingsDaemon.Power",
+            "--object-path", "/org/gnome/SettingsDaemon/Power",
+            "--method", "org.freedesktop.DBus.Properties.Set",
+            "org.gnome.SettingsDaemon.Power.Screen", "Brightness",
+            f"<int32 {pct}>"
+        ]
+        exit_code, stdout, stderr = CommandExecutor.run_shell(
+            cmd,
+            shell=False,
+            require_confirmation=False
+        )
+        if exit_code != 0:
+            raise RuntimeError(f"D-Bus call failed: {stderr.strip()}")
+        return True
+
     def _get_backlight_device(self) -> str:
         """Finds the first available backlight device under /sys/class/backlight."""
         backlight_dir = "/sys/class/backlight"
@@ -52,17 +94,12 @@ class BrightnessControlAction(BaseAction):
             except (ValueError, TypeError):
                 pass
 
+        # Try D-Bus method first
         try:
-            device = self._get_backlight_device()
-            cur_raw, max_raw = self._get_brightness_values(device)
-            
-            if max_raw <= 0:
-                return "Error: Invalid hardware maximum brightness level."
-
-            curr_pct = int((cur_raw / max_raw) * 100)
+            curr_pct = self._get_brightness_dbus()
 
             if operation == "get":
-                return f"Current Screen Brightness: {COLOR_CYAN}{curr_pct}%{COLOR_RESET} (Device: {device})"
+                return f"Current Screen Brightness: {COLOR_CYAN}{curr_pct}%{COLOR_RESET} (D-Bus)"
 
             elif operation in ("set", "increase", "decrease"):
                 new_pct = curr_pct
@@ -82,29 +119,66 @@ class BrightnessControlAction(BaseAction):
                 elif new_pct > 100:
                     new_pct = 100
 
-                new_raw = int((new_pct / 100.0) * max_raw)
-                brightness_file = os.path.join("/sys/class/backlight", device, "brightness")
-
-                # Build sudo command to write value
-                cmd = f"echo {new_raw} | sudo tee {brightness_file}"
-                confirm_msg = f"Set screen brightness to {new_pct}% (Device: {device})"
-
-                # Execute without confirmation
-                exit_code, stdout, stderr = CommandExecutor.run_shell(
-                    cmd,
-                    shell=True,
-                    require_confirmation=False
-                )
-
-                if exit_code == 0:
-                    return f"Screen brightness set to {COLOR_CYAN}{new_pct}%{COLOR_RESET} (Previous: {curr_pct}%)"
-                elif exit_code == -1:
-                    return "Brightness adjustment cancelled by user."
-                else:
-                    return f"Failed to adjust screen brightness. Error: {stderr.strip()}"
-
+                self._set_brightness_dbus(new_pct)
+                return f"Screen brightness set to {COLOR_CYAN}{new_pct}%{COLOR_RESET} (Previous: {curr_pct}%)"
             else:
                 return f"Error: Unsupported brightness operation '{operation}'."
 
-        except Exception as e:
-            return f"Error controlling screen brightness: {e}"
+        except Exception as dbus_err:
+            # Fallback to sysfs method
+            print_warning(f"D-Bus brightness control unavailable ({dbus_err}). Falling back to sysfs method...")
+            try:
+                device = self._get_backlight_device()
+                cur_raw, max_raw = self._get_brightness_values(device)
+
+                if max_raw <= 0:
+                    return "Error: Invalid hardware maximum brightness level."
+
+                curr_pct = int((cur_raw / max_raw) * 100)
+
+                if operation == "get":
+                    return f"Current Screen Brightness: {COLOR_CYAN}{curr_pct}%{COLOR_RESET} (Device: {device})"
+
+                elif operation in ("set", "increase", "decrease"):
+                    new_pct = curr_pct
+                    if operation == "set":
+                        new_pct = level if level is not None else 50
+                    elif operation == "increase":
+                        step = level if level is not None else 10
+                        new_pct = curr_pct + step
+                    elif operation == "decrease":
+                        step = level if level is not None else 10
+                        new_pct = curr_pct - step
+
+                    # Enforce bounds: min 5% (prevent blackout), max 100%
+                    if new_pct < 5:
+                        new_pct = 5
+                        print_warning("Enforcing safety limit: Screen brightness cannot be lowered below 5% to prevent total screen blackout.")
+                    elif new_pct > 100:
+                        new_pct = 100
+
+                    new_raw = int((new_pct / 100.0) * max_raw)
+                    brightness_file = os.path.join("/sys/class/backlight", device, "brightness")
+
+                    # Build sudo command to write value
+                    cmd = f"echo {new_raw} | sudo tee {brightness_file}"
+
+                    # Execute without confirmation
+                    exit_code, stdout, stderr = CommandExecutor.run_shell(
+                        cmd,
+                        shell=True,
+                        require_confirmation=False
+                    )
+
+                    if exit_code == 0:
+                        return f"Screen brightness set to {COLOR_CYAN}{new_pct}%{COLOR_RESET} (Previous: {curr_pct}%)"
+                    elif exit_code == -1:
+                        return "Brightness adjustment cancelled by user."
+                    else:
+                        return f"Failed to adjust screen brightness. Error: {stderr.strip()}"
+
+                else:
+                    return f"Error: Unsupported brightness operation '{operation}'."
+
+            except Exception as sysfs_err:
+                return f"Error controlling screen brightness: {sysfs_err}"

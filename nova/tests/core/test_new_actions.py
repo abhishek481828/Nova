@@ -58,6 +58,25 @@ class TestNewActions(unittest.TestCase):
         )
 
     @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_desktop_control_unlock(self, mock_run_shell):
+        mock_run_shell.return_value = (0, "", "")
+        action = DesktopControlAction()
+        result = action.execute({"operation": "unlock"})
+        self.assertEqual(result, "Desktop screen unlocked successfully.")
+        mock_run_shell.assert_called_with(
+            [
+                "gdbus", "call",
+                "--session",
+                "--dest", "org.gnome.ScreenSaver",
+                "--object-path", "/org/gnome/ScreenSaver",
+                "--method", "org.gnome.ScreenSaver.SetActive",
+                "false"
+            ],
+            require_confirmation=False,
+            extra_env=unittest.mock.ANY
+        )
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
     def test_wifi_control_status(self, mock_run_shell):
         # 1. nmcli radio wifi
         # 2. nmcli -t -f active,ssid,signal,bars dev wifi
@@ -70,6 +89,135 @@ class TestNewActions(unittest.TestCase):
         self.assertIn(f"Wi-Fi Radio: {COLOR_GREEN}ENABLED{COLOR_RESET}", result)
         self.assertIn(f"SSID: {COLOR_CYAN}MyHomeWifi{COLOR_RESET}", result)
         self.assertIn(f"Signal Strength: {COLOR_GREEN}85% (▂▄▆_){COLOR_RESET}", result)
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_brightness_control_get_dbus(self, mock_run_shell):
+        mock_run_shell.return_value = (0, "(<50>,)\n", "")
+        from nova.actions.brightness import BrightnessControlAction
+        action = BrightnessControlAction()
+        result = action.execute({"operation": "get"})
+        self.assertIn("50%", result)
+        self.assertIn("D-Bus", result)
+        mock_run_shell.assert_called_with(
+            ["gdbus", "call", "--session", "--dest", "org.gnome.SettingsDaemon.Power",
+             "--object-path", "/org/gnome/SettingsDaemon/Power",
+             "--method", "org.freedesktop.DBus.Properties.Get",
+             "org.gnome.SettingsDaemon.Power.Screen", "Brightness"],
+            shell=False,
+            require_confirmation=False
+        )
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_brightness_control_set_dbus(self, mock_run_shell):
+        mock_run_shell.side_effect = [
+            (0, "(<50>,)\n", ""),
+            (0, "()\n", "")
+        ]
+        from nova.actions.brightness import BrightnessControlAction
+        action = BrightnessControlAction()
+        result = action.execute({"operation": "set", "level": 80})
+        self.assertIn("80%", result)
+        self.assertIn("Previous: 50%", result)
+        self.assertEqual(mock_run_shell.call_count, 2)
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_brightness_control_fallback_sysfs(self, mock_run_shell):
+        mock_run_shell.side_effect = [
+            (1, "", "D-Bus not available"),
+            (0, "", "")
+        ]
+        from nova.actions.brightness import BrightnessControlAction
+        action = BrightnessControlAction()
+        
+        with patch.object(action, "_get_brightness_values", return_value=(450, 1000)), \
+             patch.object(action, "_get_backlight_device", return_value="amdgpu_bl1"):
+            result = action.execute({"operation": "set", "level": 70})
+            self.assertIn("70%", result)
+            self.assertIn("Previous: 45%", result)
+
+    @patch("nova.core.executor.ask_confirmation", return_value=True)
+    @patch("subprocess.run")
+    def test_executor_one_time_confirmation(self, mock_subprocess_run, mock_ask_confirmation):
+        from nova.core.executor import CommandExecutor
+        mock_res = MagicMock()
+        mock_res.returncode = 0
+        mock_res.stdout = "ok"
+        mock_res.stderr = ""
+        mock_subprocess_run.return_value = mock_res
+        
+        CommandExecutor.clear_last_commands()
+        
+        code, out, err = CommandExecutor.run_shell("test-cmd", require_confirmation=True)
+        self.assertEqual(code, 0)
+        self.assertEqual(mock_ask_confirmation.call_count, 1)
+        
+        code2, out2, err2 = CommandExecutor.run_shell("test-cmd", require_confirmation=True)
+        self.assertEqual(code2, 0)
+        self.assertEqual(mock_ask_confirmation.call_count, 1)
+        
+        CommandExecutor.clear_last_commands()
+        
+        code3, out3, err3 = CommandExecutor.run_shell("test-cmd", require_confirmation=True)
+        self.assertEqual(code3, 0)
+        self.assertEqual(mock_ask_confirmation.call_count, 2)
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_system_action_suspend_error_message(self, mock_run_shell):
+        mock_run_shell.return_value = (1, "", "Failed to execute: Call to Suspend failed: Access denied")
+        from nova.actions.system import SystemAction
+        action = SystemAction()
+        result = action.execute({"operation": "suspend"})
+        self.assertIn("Access Denied error occurs because", result)
+        self.assertIn("security.polkit.extraConfig", result)
+        self.assertEqual(mock_run_shell.call_count, 2)
+        self.assertEqual(mock_run_shell.call_args_list[0][0][0], ["systemctl", "suspend", "-i"])
+        self.assertEqual(mock_run_shell.call_args_list[1][0][0], ["sudo", "-n", "systemctl", "suspend", "-i"])
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_system_action_suspend_sudo_fallback_success(self, mock_run_shell):
+        mock_run_shell.side_effect = [
+            (1, "", "Failed to execute: Call to Suspend failed: Access denied"),
+            (0, "Success", "")
+        ]
+        from nova.actions.system import SystemAction
+        action = SystemAction()
+        result = action.execute({"operation": "suspend"})
+        self.assertIn("initiated successfully (via passwordless sudo)", result)
+        self.assertEqual(mock_run_shell.call_count, 2)
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_system_action_suspend_password_error_message(self, mock_run_shell):
+        mock_run_shell.return_value = (1, "", "sudo: a password is required")
+        from nova.actions.system import SystemAction
+        action = SystemAction()
+        result = action.execute({"operation": "suspend"})
+        self.assertIn("Access Denied error occurs because", result)
+        self.assertIn("security.polkit.extraConfig", result)
+        self.assertEqual(mock_run_shell.call_count, 2)
+
+    @patch("sys.stdin.isatty")
+    @patch("threading.current_thread")
+    def test_ask_confirmation_remote_auto_approve(self, mock_current_thread, mock_isatty):
+        mock_isatty.return_value = False
+        
+        # Test 1: Telegram thread name
+        mock_thread = MagicMock()
+        mock_thread.name = "telegram_polling_thread"
+        mock_current_thread.return_value = mock_thread
+        
+        from nova.utils import ask_confirmation
+        self.assertTrue(ask_confirmation("Test message"))
+        
+        # Test 2: Non-telegram thread, not autonomous
+        mock_thread.name = "some_other_thread"
+        from nova.core.state import StateManager
+        StateManager.set_autonomous_mode(False)
+        self.assertFalse(ask_confirmation("Test message"))
+        
+        # Test 3: Non-telegram thread, autonomous
+        StateManager.set_autonomous_mode(True)
+        self.assertTrue(ask_confirmation("Test message"))
+        StateManager.set_autonomous_mode(False) # Reset
 
 if __name__ == "__main__":
     unittest.main()

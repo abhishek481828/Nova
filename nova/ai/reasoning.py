@@ -561,7 +561,7 @@ class ExecutionEngine:
                 "estimated_remaining_time": remaining_time,
                 "execution_time": elapsed_time,
                 "retries": tel.get("retries", 0),
-                "errors": tel.get("errors", []),
+                "errors": list(dict.fromkeys(tel.get("errors", []))),
                 "success_rate": tel.get("success_rate", 100.0),
                 "execution_timeline": plan.metadata.get("execution_timeline", [])
             }

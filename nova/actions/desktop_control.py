@@ -34,6 +34,27 @@ class DesktopControlAction(BaseAction):
             else:
                 return f"Failed to lock screen. Error: {stderr.strip()}"
 
+        elif operation == "unlock":
+            import os
+            uid = os.getuid()
+            session_bus = f"unix:path=/run/user/{uid}/bus"
+            env = {**os.environ, "DBUS_SESSION_BUS_ADDRESS": session_bus}
+            cmd = [
+                "gdbus", "call",
+                "--session",
+                "--dest", "org.gnome.ScreenSaver",
+                "--object-path", "/org/gnome/ScreenSaver",
+                "--method", "org.gnome.ScreenSaver.SetActive",
+                "false"
+            ]
+            exit_code, stdout, stderr = CommandExecutor.run_shell(
+                cmd, require_confirmation=False, extra_env=env
+            )
+            if exit_code == 0:
+                return "Desktop screen unlocked successfully."
+            else:
+                return f"Failed to unlock screen. Error: {stderr.strip()}"
+
         elif operation == "night_light":
             state = params.get("state")
             # Query current night light state
@@ -120,4 +141,4 @@ class DesktopControlAction(BaseAction):
                 return f"Failed to control media players. Details: {err_details}"
 
         else:
-            return f"Error: Unsupported desktop operation '{operation}'."
+            return f"Error: Unsupported desktop operation '{operation}'. Supported: lock, unlock, night_light, media."

@@ -1,0 +1,700 @@
+﻿2026-07-02T12:15:45.2092959Z ##[group]Run python -m pytest
+2026-07-02T12:15:45.2093327Z [36;1mpython -m pytest[0m
+2026-07-02T12:15:45.2125491Z shell: /usr/bin/bash -e {0}
+2026-07-02T12:15:45.2125768Z env:
+2026-07-02T12:15:45.2126048Z   pythonLocation: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-02T12:15:45.2126507Z   PKG_CONFIG_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib/pkgconfig
+2026-07-02T12:15:45.2126968Z   Python_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-02T12:15:45.2127382Z   Python2_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-02T12:15:45.2127794Z   Python3_ROOT_DIR: /opt/hostedtoolcache/Python/3.12.13/x64
+2026-07-02T12:15:45.2128215Z   LD_LIBRARY_PATH: /opt/hostedtoolcache/Python/3.12.13/x64/lib
+2026-07-02T12:15:45.2128585Z ##[endgroup]
+2026-07-02T12:15:49.9024344Z ============================= test session starts ==============================
+2026-07-02T12:15:49.9025430Z platform linux -- Python 3.12.13, pytest-9.1.1, pluggy-1.6.0
+2026-07-02T12:15:49.9026643Z rootdir: /home/runner/work/Nova/Nova
+2026-07-02T12:15:49.9027430Z plugins: asyncio-1.4.0, anyio-4.14.1, mock-3.15.1
+2026-07-02T12:15:49.9028444Z asyncio: mode=Mode.STRICT, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+2026-07-02T12:15:49.9029262Z collected 319 items
+2026-07-02T12:15:49.9029452Z 
+2026-07-02T12:15:50.2307778Z nova/tests/ai/test_planner.py .......                                    [  2%]
+2026-07-02T12:15:50.3077879Z nova/tests/ai/test_planning_intelligence.py .........                    [  5%]
+2026-07-02T12:15:56.0343647Z nova/tests/browser/test_browser_engine.py .............................. [ 14%]
+2026-07-02T12:15:56.4539778Z .....                                                                    [ 15%]
+2026-07-02T12:15:59.9935475Z nova/tests/browser/test_browser_helper.py .......F...................... [ 25%]
+2026-07-02T12:16:01.0028794Z ...                                                                      [ 26%]
+2026-07-02T12:16:01.0182513Z nova/tests/browser/test_browser_memory.py ......                         [ 28%]
+2026-07-02T12:16:06.9124680Z nova/tests/browser/test_browser_resilience.py EEEEEEEEE                  [ 31%]
+2026-07-02T12:16:06.9176206Z nova/tests/core/test_action_memory.py ....                               [ 32%]
+2026-07-02T12:16:06.9285432Z nova/tests/core/test_context_memory.py ..........                        [ 35%]
+2026-07-02T12:16:07.4598082Z nova/tests/core/test_diagnostics.py .........................            [ 43%]
+2026-07-02T12:16:13.7880153Z nova/tests/core/test_execution_engine.py ........success
+2026-07-02T12:16:14.0500847Z ......                  [ 47%]
+2026-07-02T12:16:14.0605419Z nova/tests/core/test_history_memory.py .......                           [ 49%]
+2026-07-02T12:16:14.2632148Z nova/tests/core/test_long_term_memory.py ............................... [ 59%]
+2026-07-02T12:16:14.2661759Z .                                                                        [ 59%]
+2026-07-02T12:16:14.3305915Z nova/tests/core/test_new_actions.py ....                                 [ 61%]
+2026-07-02T12:16:14.9859159Z nova/tests/core/test_stress_memory.py .                                  [ 61%]
+2026-07-02T12:16:15.0012742Z nova/tests/core/test_working_memory.py ..............                    [ 65%]
+2026-07-02T12:16:15.0027002Z nova/tests/desktop/test_placeholder.py .                                 [ 66%]
+2026-07-02T12:16:15.0413888Z nova/tests/services/test_adapters.py ......................              [ 73%]
+2026-07-02T12:16:16.5434371Z nova/tests/services/test_nlp_pipeline.py .........                       [ 75%]
+2026-07-02T12:16:16.5537468Z nova/tests/voice/test_adaptive_wake.py ......                            [ 77%]
+2026-07-02T12:16:16.6277227Z nova/tests/voice/test_audio_pipeline.py .....                            [ 79%]
+2026-07-02T12:16:16.6340857Z nova/tests/voice/test_audio_quality.py .....                             [ 80%]
+2026-07-02T12:16:16.6411192Z nova/tests/voice/test_confidence_fusion.py .....                         [ 82%]
+2026-07-02T12:16:16.9889221Z nova/tests/voice/test_echo_cancellation.py .....                         [ 84%]
+2026-07-02T12:16:16.9952769Z nova/tests/voice/test_lifecycle_safeguards.py sssssssss                  [ 86%]
+2026-07-02T12:16:17.1126839Z nova/tests/voice/test_speaker_continuous_learning.py ....F               [ 88%]
+2026-07-02T12:16:17.1212802Z nova/tests/voice/test_speaker_verification_upgrades.py .....             [ 89%]
+2026-07-02T12:16:17.1316128Z nova/tests/voice/test_streaming_pipeline.py .........                    [ 92%]
+2026-07-02T12:16:17.2819240Z nova/tests/voice/test_voice.py .............                             [ 96%]
+2026-07-02T12:16:17.2845297Z nova/tests/voice/test_voice_concurrency.py sss                           [ 97%]
+2026-07-02T12:16:17.2869024Z nova/tests/voice/test_voice_memory.py sss                                [ 98%]
+2026-07-02T12:16:17.2965115Z nova/tests/voice/test_wake_word_upgrades.py ....                         [100%]
+2026-07-02T12:16:17.2966303Z 
+2026-07-02T12:16:17.2966598Z ==================================== ERRORS ====================================
+2026-07-02T12:16:17.2967504Z ___ ERROR at setup of TestBrowserResilience.test_chatgpt_handler_integration ___
+2026-07-02T12:16:17.2968150Z 
+2026-07-02T12:16:17.2968545Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.2969141Z 
+2026-07-02T12:16:17.2969304Z     @classmethod
+2026-07-02T12:16:17.2969725Z     def setUpClass(cls):
+2026-07-02T12:16:17.2970160Z         import asyncio
+2026-07-02T12:16:17.2970563Z         try:
+2026-07-02T12:16:17.2970972Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.2971737Z             if loop:
+2026-07-02T12:16:17.2972164Z                 loop.close()
+2026-07-02T12:16:17.2972612Z         except Exception:
+2026-07-02T12:16:17.2973041Z             pass
+2026-07-02T12:16:17.2973444Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.2973905Z     
+2026-07-02T12:16:17.2974356Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.2974951Z         try:
+2026-07-02T12:16:17.2975392Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.2975965Z             cls.cdp = True
+2026-07-02T12:16:17.2976406Z         except Exception:
+2026-07-02T12:16:17.2976924Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.2977601Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.2978198Z                 headless=True,
+2026-07-02T12:16:17.2978792Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.2979474Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.2979941Z             )
+2026-07-02T12:16:17.2980150Z 
+2026-07-02T12:16:17.2980399Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.2981082Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.2982425Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.2983479Z     self._sync(
+2026-07-02T12:16:17.2984360Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.2985393Z     await self._channel.send(
+2026-07-02T12:16:17.2986331Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.2987376Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.2988035Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.2988495Z 
+2026-07-02T12:16:17.2988891Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.2989626Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.2990169Z is_internal = False, title = None
+2026-07-02T12:16:17.2990435Z 
+2026-07-02T12:16:17.2990579Z     async def wrap_api_call(
+2026-07-02T12:16:17.2991629Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.2992249Z     ) -> Any:
+2026-07-02T12:16:17.2992583Z         if self._api_zone.get():
+2026-07-02T12:16:17.2992996Z             return await cb()
+2026-07-02T12:16:17.2993510Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.2994115Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.2994673Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.2995181Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.2995621Z     
+2026-07-02T12:16:17.2996199Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.2996954Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.2997396Z         try:
+2026-07-02T12:16:17.2997748Z             return await cb()
+2026-07-02T12:16:17.2998215Z         except Exception as error:
+2026-07-02T12:16:17.2998869Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3000603Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3002126Z 
+2026-07-02T12:16:17.3002776Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3003951Z ---------------------------- Captured stdout setup -----------------------------
+2026-07-02T12:16:17.3004907Z [ERROR] CDP endpoint not available or not ready.
+2026-07-02T12:16:17.3005593Z [ERROR] Failed to connect to browser over CDP: CDP endpoint not ready
+2026-07-02T12:16:17.3006260Z Traceback (most recent call last):
+2026-07-02T12:16:17.3015873Z   File "/home/runner/work/Nova/Nova/nova/browser/manager.py", line 700, in get_browser
+2026-07-02T12:16:17.3016766Z     raise Exception("CDP endpoint not ready")
+2026-07-02T12:16:17.3017255Z Exception: CDP endpoint not ready
+2026-07-02T12:16:17.3017560Z 
+2026-07-02T12:16:17.3017882Z ------------------------------ Captured log setup ------------------------------
+2026-07-02T12:16:17.3018545Z INFO     nova:manager.py:683 Starting Playwright...
+2026-07-02T12:16:17.3019074Z INFO     nova:manager.py:688 Playwright started.
+2026-07-02T12:16:17.3019610Z INFO     nova:manager.py:697 Checking CDP endpoint...
+2026-07-02T12:16:17.3020277Z ERROR    nova:manager.py:699 CDP endpoint not available or not ready.
+2026-07-02T12:16:17.3020934Z INFO     nova:manager.py:729 Playwright stopped.
+2026-07-02T12:16:17.3022094Z ERROR    nova:manager.py:712 Failed to connect to browser over CDP: CDP endpoint not ready
+2026-07-02T12:16:17.3022820Z Traceback (most recent call last):
+2026-07-02T12:16:17.3023583Z   File "/home/runner/work/Nova/Nova/nova/browser/manager.py", line 700, in get_browser
+2026-07-02T12:16:17.3024361Z     raise Exception("CDP endpoint not ready")
+2026-07-02T12:16:17.3024860Z Exception: CDP endpoint not ready
+2026-07-02T12:16:17.3025486Z _____ ERROR at setup of TestBrowserResilience.test_disabled_button_raises ______
+2026-07-02T12:16:17.3026028Z 
+2026-07-02T12:16:17.3026371Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3026855Z 
+2026-07-02T12:16:17.3026997Z     @classmethod
+2026-07-02T12:16:17.3027339Z     def setUpClass(cls):
+2026-07-02T12:16:17.3027712Z         import asyncio
+2026-07-02T12:16:17.3028049Z         try:
+2026-07-02T12:16:17.3028393Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3028834Z             if loop:
+2026-07-02T12:16:17.3029172Z                 loop.close()
+2026-07-02T12:16:17.3029544Z         except Exception:
+2026-07-02T12:16:17.3029893Z             pass
+2026-07-02T12:16:17.3030235Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3030629Z     
+2026-07-02T12:16:17.3030999Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3031725Z         try:
+2026-07-02T12:16:17.3032123Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3032613Z             cls.cdp = True
+2026-07-02T12:16:17.3033322Z         except Exception:
+2026-07-02T12:16:17.3033735Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3034276Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3034781Z                 headless=True,
+2026-07-02T12:16:17.3035276Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3035836Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3036233Z             )
+2026-07-02T12:16:17.3036422Z 
+2026-07-02T12:16:17.3036626Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3037198Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3038181Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3039067Z     self._sync(
+2026-07-02T12:16:17.3039795Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3040872Z     await self._channel.send(
+2026-07-02T12:16:17.3041827Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3042737Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3043301Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3043686Z 
+2026-07-02T12:16:17.3044022Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3044768Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3045360Z is_internal = False, title = None
+2026-07-02T12:16:17.3045633Z 
+2026-07-02T12:16:17.3045779Z     async def wrap_api_call(
+2026-07-02T12:16:17.3046351Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3046971Z     ) -> Any:
+2026-07-02T12:16:17.3047317Z         if self._api_zone.get():
+2026-07-02T12:16:17.3047741Z             return await cb()
+2026-07-02T12:16:17.3048174Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3048673Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3049128Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3049549Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3049925Z     
+2026-07-02T12:16:17.3050439Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3051318Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3051915Z         try:
+2026-07-02T12:16:17.3052229Z             return await cb()
+2026-07-02T12:16:17.3052625Z         except Exception as error:
+2026-07-02T12:16:17.3053210Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3054496Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3055473Z 
+2026-07-02T12:16:17.3056003Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3057044Z _____ ERROR at setup of TestBrowserResilience.test_dynamic_element_loading _____
+2026-07-02T12:16:17.3057564Z 
+2026-07-02T12:16:17.3057899Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3058439Z 
+2026-07-02T12:16:17.3058586Z     @classmethod
+2026-07-02T12:16:17.3058922Z     def setUpClass(cls):
+2026-07-02T12:16:17.3059288Z         import asyncio
+2026-07-02T12:16:17.3059625Z         try:
+2026-07-02T12:16:17.3059951Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3060389Z             if loop:
+2026-07-02T12:16:17.3060721Z                 loop.close()
+2026-07-02T12:16:17.3061100Z         except Exception:
+2026-07-02T12:16:17.3061635Z             pass
+2026-07-02T12:16:17.3061989Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3062412Z     
+2026-07-02T12:16:17.3063009Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3063540Z         try:
+2026-07-02T12:16:17.3063903Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3064376Z             cls.cdp = True
+2026-07-02T12:16:17.3064745Z         except Exception:
+2026-07-02T12:16:17.3065159Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3065718Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3066213Z                 headless=True,
+2026-07-02T12:16:17.3066697Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3067233Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3067632Z             )
+2026-07-02T12:16:17.3067803Z 
+2026-07-02T12:16:17.3068015Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3068597Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3069744Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3070616Z     self._sync(
+2026-07-02T12:16:17.3071359Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3072411Z     await self._channel.send(
+2026-07-02T12:16:17.3073206Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3074117Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3074695Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3075067Z 
+2026-07-02T12:16:17.3075402Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3076142Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3076708Z is_internal = False, title = None
+2026-07-02T12:16:17.3076999Z 
+2026-07-02T12:16:17.3077157Z     async def wrap_api_call(
+2026-07-02T12:16:17.3077695Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3078282Z     ) -> Any:
+2026-07-02T12:16:17.3078741Z         if self._api_zone.get():
+2026-07-02T12:16:17.3079142Z             return await cb()
+2026-07-02T12:16:17.3079578Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3080067Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3080541Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3080960Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3081333Z     
+2026-07-02T12:16:17.3082117Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3082805Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3083223Z         try:
+2026-07-02T12:16:17.3083538Z             return await cb()
+2026-07-02T12:16:17.3083928Z         except Exception as error:
+2026-07-02T12:16:17.3084539Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3085843Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3086806Z 
+2026-07-02T12:16:17.3087344Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3088375Z ___ ERROR at setup of TestBrowserResilience.test_github_handler_integration ____
+2026-07-02T12:16:17.3088879Z 
+2026-07-02T12:16:17.3089219Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3089718Z 
+2026-07-02T12:16:17.3089864Z     @classmethod
+2026-07-02T12:16:17.3090187Z     def setUpClass(cls):
+2026-07-02T12:16:17.3090549Z         import asyncio
+2026-07-02T12:16:17.3090892Z         try:
+2026-07-02T12:16:17.3091229Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3091875Z             if loop:
+2026-07-02T12:16:17.3092535Z                 loop.close()
+2026-07-02T12:16:17.3092920Z         except Exception:
+2026-07-02T12:16:17.3093270Z             pass
+2026-07-02T12:16:17.3093604Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3094013Z     
+2026-07-02T12:16:17.3094379Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3094858Z         try:
+2026-07-02T12:16:17.3095223Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3095689Z             cls.cdp = True
+2026-07-02T12:16:17.3096050Z         except Exception:
+2026-07-02T12:16:17.3096459Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3097002Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3097503Z                 headless=True,
+2026-07-02T12:16:17.3097996Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3098537Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3099123Z             )
+2026-07-02T12:16:17.3099303Z 
+2026-07-02T12:16:17.3099500Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3100073Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3101006Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3102179Z     self._sync(
+2026-07-02T12:16:17.3102906Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3103783Z     await self._channel.send(
+2026-07-02T12:16:17.3104566Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3105466Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3106034Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3106464Z 
+2026-07-02T12:16:17.3106796Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3107555Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3108131Z is_internal = False, title = None
+2026-07-02T12:16:17.3108401Z 
+2026-07-02T12:16:17.3108550Z     async def wrap_api_call(
+2026-07-02T12:16:17.3109068Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3109641Z     ) -> Any:
+2026-07-02T12:16:17.3109959Z         if self._api_zone.get():
+2026-07-02T12:16:17.3110340Z             return await cb()
+2026-07-02T12:16:17.3110747Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3111219Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3111849Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3112266Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3112625Z     
+2026-07-02T12:16:17.3113113Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3113785Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3114181Z         try:
+2026-07-02T12:16:17.3114494Z             return await cb()
+2026-07-02T12:16:17.3114872Z         except Exception as error:
+2026-07-02T12:16:17.3115452Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3116717Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3117651Z 
+2026-07-02T12:16:17.3118184Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3119207Z ____ ERROR at setup of TestBrowserResilience.test_gmail_handler_integration ____
+2026-07-02T12:16:17.3119721Z 
+2026-07-02T12:16:17.3120039Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3120521Z 
+2026-07-02T12:16:17.3120664Z     @classmethod
+2026-07-02T12:16:17.3121205Z     def setUpClass(cls):
+2026-07-02T12:16:17.3121752Z         import asyncio
+2026-07-02T12:16:17.3122104Z         try:
+2026-07-02T12:16:17.3122438Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3122853Z             if loop:
+2026-07-02T12:16:17.3123169Z                 loop.close()
+2026-07-02T12:16:17.3123539Z         except Exception:
+2026-07-02T12:16:17.3123897Z             pass
+2026-07-02T12:16:17.3124225Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3124603Z     
+2026-07-02T12:16:17.3124951Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3125438Z         try:
+2026-07-02T12:16:17.3125811Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3126291Z             cls.cdp = True
+2026-07-02T12:16:17.3126645Z         except Exception:
+2026-07-02T12:16:17.3127068Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3127617Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3128321Z                 headless=True,
+2026-07-02T12:16:17.3128798Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3129330Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3129710Z             )
+2026-07-02T12:16:17.3129884Z 
+2026-07-02T12:16:17.3130088Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3130635Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3131794Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3132625Z     self._sync(
+2026-07-02T12:16:17.3133335Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3134163Z     await self._channel.send(
+2026-07-02T12:16:17.3134906Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3135770Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3136314Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3136677Z 
+2026-07-02T12:16:17.3136978Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3137652Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3138183Z is_internal = False, title = None
+2026-07-02T12:16:17.3138445Z 
+2026-07-02T12:16:17.3138596Z     async def wrap_api_call(
+2026-07-02T12:16:17.3139139Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3139707Z     ) -> Any:
+2026-07-02T12:16:17.3140026Z         if self._api_zone.get():
+2026-07-02T12:16:17.3140417Z             return await cb()
+2026-07-02T12:16:17.3140824Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3141318Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3141997Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3142449Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3142806Z     
+2026-07-02T12:16:17.3143301Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3143953Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3144350Z         try:
+2026-07-02T12:16:17.3144660Z             return await cb()
+2026-07-02T12:16:17.3145047Z         except Exception as error:
+2026-07-02T12:16:17.3145628Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3146859Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3147768Z 
+2026-07-02T12:16:17.3148289Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3149320Z _ ERROR at setup of TestBrowserResilience.test_google_search_handler_integration _
+2026-07-02T12:16:17.3150042Z 
+2026-07-02T12:16:17.3150386Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3150868Z 
+2026-07-02T12:16:17.3150996Z     @classmethod
+2026-07-02T12:16:17.3151324Z     def setUpClass(cls):
+2026-07-02T12:16:17.3151873Z         import asyncio
+2026-07-02T12:16:17.3152211Z         try:
+2026-07-02T12:16:17.3152534Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3152951Z             if loop:
+2026-07-02T12:16:17.3153276Z                 loop.close()
+2026-07-02T12:16:17.3153652Z         except Exception:
+2026-07-02T12:16:17.3153998Z             pass
+2026-07-02T12:16:17.3154335Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3154720Z     
+2026-07-02T12:16:17.3155082Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3155554Z         try:
+2026-07-02T12:16:17.3155917Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3156587Z             cls.cdp = True
+2026-07-02T12:16:17.3156963Z         except Exception:
+2026-07-02T12:16:17.3157372Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3157903Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3158381Z                 headless=True,
+2026-07-02T12:16:17.3158863Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3159399Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3159777Z             )
+2026-07-02T12:16:17.3159954Z 
+2026-07-02T12:16:17.3160161Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3160719Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3161859Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3162724Z     self._sync(
+2026-07-02T12:16:17.3163490Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3164353Z     await self._channel.send(
+2026-07-02T12:16:17.3165087Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3165931Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3166470Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3166850Z 
+2026-07-02T12:16:17.3167158Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3167887Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3168427Z is_internal = False, title = None
+2026-07-02T12:16:17.3168684Z 
+2026-07-02T12:16:17.3168836Z     async def wrap_api_call(
+2026-07-02T12:16:17.3169363Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3169926Z     ) -> Any:
+2026-07-02T12:16:17.3170255Z         if self._api_zone.get():
+2026-07-02T12:16:17.3170644Z             return await cb()
+2026-07-02T12:16:17.3171051Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3171742Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3172191Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3172590Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3172938Z     
+2026-07-02T12:16:17.3173422Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3174087Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3174474Z         try:
+2026-07-02T12:16:17.3174781Z             return await cb()
+2026-07-02T12:16:17.3175156Z         except Exception as error:
+2026-07-02T12:16:17.3175725Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3176939Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3178082Z 
+2026-07-02T12:16:17.3178598Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3179581Z ______ ERROR at setup of TestBrowserResilience.test_hidden_element_raises ______
+2026-07-02T12:16:17.3180060Z 
+2026-07-02T12:16:17.3180380Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3180861Z 
+2026-07-02T12:16:17.3180996Z     @classmethod
+2026-07-02T12:16:17.3181321Z     def setUpClass(cls):
+2026-07-02T12:16:17.3181890Z         import asyncio
+2026-07-02T12:16:17.3182213Z         try:
+2026-07-02T12:16:17.3182535Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3182962Z             if loop:
+2026-07-02T12:16:17.3183293Z                 loop.close()
+2026-07-02T12:16:17.3183668Z         except Exception:
+2026-07-02T12:16:17.3184011Z             pass
+2026-07-02T12:16:17.3184339Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3184947Z     
+2026-07-02T12:16:17.3185311Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3185778Z         try:
+2026-07-02T12:16:17.3186143Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3186616Z             cls.cdp = True
+2026-07-02T12:16:17.3186975Z         except Exception:
+2026-07-02T12:16:17.3187382Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3187926Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3188418Z                 headless=True,
+2026-07-02T12:16:17.3188900Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3189449Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3189844Z             )
+2026-07-02T12:16:17.3190015Z 
+2026-07-02T12:16:17.3190216Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3190778Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3191934Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3192777Z     self._sync(
+2026-07-02T12:16:17.3193512Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3194353Z     await self._channel.send(
+2026-07-02T12:16:17.3195108Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3195957Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3196506Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3196938Z 
+2026-07-02T12:16:17.3197248Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3197953Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3198503Z is_internal = False, title = None
+2026-07-02T12:16:17.3198806Z 
+2026-07-02T12:16:17.3198960Z     async def wrap_api_call(
+2026-07-02T12:16:17.3199484Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3200066Z     ) -> Any:
+2026-07-02T12:16:17.3200405Z         if self._api_zone.get():
+2026-07-02T12:16:17.3200791Z             return await cb()
+2026-07-02T12:16:17.3201203Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3201940Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3202393Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3202803Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3203159Z     
+2026-07-02T12:16:17.3203650Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3204302Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3204695Z         try:
+2026-07-02T12:16:17.3205005Z             return await cb()
+2026-07-02T12:16:17.3205401Z         except Exception as error:
+2026-07-02T12:16:17.3206197Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3207426Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3208353Z 
+2026-07-02T12:16:17.3208887Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3209879Z _____ ERROR at setup of TestBrowserResilience.test_multiple_submit_buttons _____
+2026-07-02T12:16:17.3210357Z 
+2026-07-02T12:16:17.3210680Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3211143Z 
+2026-07-02T12:16:17.3211272Z     @classmethod
+2026-07-02T12:16:17.3211772Z     def setUpClass(cls):
+2026-07-02T12:16:17.3212119Z         import asyncio
+2026-07-02T12:16:17.3212431Z         try:
+2026-07-02T12:16:17.3212752Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3213377Z             if loop:
+2026-07-02T12:16:17.3213710Z                 loop.close()
+2026-07-02T12:16:17.3214074Z         except Exception:
+2026-07-02T12:16:17.3214419Z             pass
+2026-07-02T12:16:17.3214755Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3215158Z     
+2026-07-02T12:16:17.3215522Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3215982Z         try:
+2026-07-02T12:16:17.3216351Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3216823Z             cls.cdp = True
+2026-07-02T12:16:17.3217180Z         except Exception:
+2026-07-02T12:16:17.3217579Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3218116Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3218619Z                 headless=True,
+2026-07-02T12:16:17.3219111Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3219664Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3220059Z             )
+2026-07-02T12:16:17.3220239Z 
+2026-07-02T12:16:17.3220448Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3221012Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3222152Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3222998Z     self._sync(
+2026-07-02T12:16:17.3223723Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3224574Z     await self._channel.send(
+2026-07-02T12:16:17.3225331Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3226184Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3226718Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3227110Z 
+2026-07-02T12:16:17.3227421Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3228149Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3228704Z is_internal = False, title = None
+2026-07-02T12:16:17.3228971Z 
+2026-07-02T12:16:17.3229121Z     async def wrap_api_call(
+2026-07-02T12:16:17.3229644Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3230210Z     ) -> Any:
+2026-07-02T12:16:17.3230528Z         if self._api_zone.get():
+2026-07-02T12:16:17.3230921Z             return await cb()
+2026-07-02T12:16:17.3231328Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3232003Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3232457Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3232863Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3233211Z     
+2026-07-02T12:16:17.3233698Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3234600Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3234994Z         try:
+2026-07-02T12:16:17.3235299Z             return await cb()
+2026-07-02T12:16:17.3235696Z         except Exception as error:
+2026-07-02T12:16:17.3236266Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3237468Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3238355Z 
+2026-07-02T12:16:17.3238881Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.3239884Z ________ ERROR at setup of TestBrowserResilience.test_overlay_dismissal ________
+2026-07-02T12:16:17.3240366Z 
+2026-07-02T12:16:17.3240690Z cls = <class 'tests.browser.test_browser_resilience.TestBrowserResilience'>
+2026-07-02T12:16:17.3241369Z 
+2026-07-02T12:16:17.3241683Z     @classmethod
+2026-07-02T12:16:17.3242024Z     def setUpClass(cls):
+2026-07-02T12:16:17.3242371Z         import asyncio
+2026-07-02T12:16:17.3242698Z         try:
+2026-07-02T12:16:17.3243022Z             loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.3243431Z             if loop:
+2026-07-02T12:16:17.3243756Z                 loop.close()
+2026-07-02T12:16:17.3244115Z         except Exception:
+2026-07-02T12:16:17.3244457Z             pass
+2026-07-02T12:16:17.3244785Z         asyncio.set_event_loop(None)
+2026-07-02T12:16:17.3245161Z     
+2026-07-02T12:16:17.3245524Z         from nova.browser.manager import BrowserManager
+2026-07-02T12:16:17.3245996Z         try:
+2026-07-02T12:16:17.3246366Z             cls.browser = BrowserManager.get_browser()
+2026-07-02T12:16:17.3246822Z             cls.cdp = True
+2026-07-02T12:16:17.3247175Z         except Exception:
+2026-07-02T12:16:17.3247576Z             cls.playwright = sync_playwright().start()
+2026-07-02T12:16:17.3248107Z >           cls.browser = cls.playwright.chromium.launch(
+2026-07-02T12:16:17.3248621Z                 headless=True,
+2026-07-02T12:16:17.3249099Z                 executable_path="/run/current-system/sw/bin/chromium",
+2026-07-02T12:16:17.3249639Z                 args=["--no-sandbox"]
+2026-07-02T12:16:17.3250019Z             )
+2026-07-02T12:16:17.3250189Z 
+2026-07-02T12:16:17.3250395Z nova/tests/browser/test_browser_resilience.py:33: 
+2026-07-02T12:16:17.3250951Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3252061Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/sync_api/_generated.py:16515: in launch
+2026-07-02T12:16:17.3252906Z     self._sync(
+2026-07-02T12:16:17.3253620Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_browser_type.py:97: in launch
+2026-07-02T12:16:17.3254455Z     await self._channel.send(
+2026-07-02T12:16:17.3255219Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:69: in send
+2026-07-02T12:16:17.3256081Z     return await self._connection.wrap_api_call(
+2026-07-02T12:16:17.3256627Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.3256998Z 
+2026-07-02T12:16:17.3257312Z self = <playwright._impl._connection.Connection object at 0x7f61e0b22660>
+2026-07-02T12:16:17.3258016Z cb = <function Channel.send.<locals>.<lambda> at 0x7f61e0b61260>
+2026-07-02T12:16:17.3258569Z is_internal = False, title = None
+2026-07-02T12:16:17.3258832Z 
+2026-07-02T12:16:17.3258979Z     async def wrap_api_call(
+2026-07-02T12:16:17.3259511Z         self, cb: Callable[[], Any], is_internal: bool = False, title: str = None
+2026-07-02T12:16:17.3260085Z     ) -> Any:
+2026-07-02T12:16:17.3260406Z         if self._api_zone.get():
+2026-07-02T12:16:17.3260793Z             return await cb()
+2026-07-02T12:16:17.3261200Z         task = asyncio.current_task(self._loop)
+2026-07-02T12:16:17.3262363Z         st: List[inspect.FrameInfo] = getattr(
+2026-07-02T12:16:17.3263186Z             task, "__pw_stack__", None
+2026-07-02T12:16:17.3263630Z         ) or inspect.stack(0)
+2026-07-02T12:16:17.3263995Z     
+2026-07-02T12:16:17.3264504Z         parsed_st = _extract_stack_trace_information_from_stack(st, is_internal, title)
+2026-07-02T12:16:17.3265179Z         self._api_zone.set(parsed_st)
+2026-07-02T12:16:17.3265577Z         try:
+2026-07-02T12:16:17.3265888Z             return await cb()
+2026-07-02T12:16:17.3266270Z         except Exception as error:
+2026-07-02T12:16:17.3266847Z >           raise rewrite_error(error, f"{parsed_st['apiName']}: {error}") from None
+2026-07-02T12:16:17.3268093Z E           playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.3269018Z 
+2026-07-02T12:16:17.4490250Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/playwright/_impl/_connection.py:563: Error
+2026-07-02T12:16:17.4492335Z =================================== FAILURES ===================================
+2026-07-02T12:16:17.4493271Z _ TestDedicatedBrowserActions.test_open_app_action_launches_other_apps_normally _
+2026-07-02T12:16:17.4493935Z 
+2026-07-02T12:16:17.4494730Z self = <tests.browser.test_browser_helper.TestDedicatedBrowserActions testMethod=test_open_app_action_launches_other_apps_normally>
+2026-07-02T12:16:17.4495949Z mock_run_background = <MagicMock name='run_background' id='140058521649760'>
+2026-07-02T12:16:17.4496718Z mock_is_browser_running = <MagicMock name='is_browser_running' id='140058523681856'>
+2026-07-02T12:16:17.4497193Z 
+2026-07-02T12:16:17.4497475Z     @patch("nova.browser.manager.BrowserManager.is_browser_running")
+2026-07-02T12:16:17.4498146Z     @patch("nova.core.executor.CommandExecutor.run_background")
+2026-07-02T12:16:17.4499006Z     def test_open_app_action_launches_other_apps_normally(self, mock_run_background, mock_is_browser_running):
+2026-07-02T12:16:17.4499829Z         mock_run_background.return_value = (0, "Success")
+2026-07-02T12:16:17.4500287Z     
+2026-07-02T12:16:17.4500584Z         action = OpenAppAction()
+2026-07-02T12:16:17.4500995Z         result = action.execute({"app": "vlc"})
+2026-07-02T12:16:17.4501529Z     
+2026-07-02T12:16:17.4501885Z >       self.assertIn("Successfully opened vlc", result)
+2026-07-02T12:16:17.4502807Z E       AssertionError: 'Successfully opened vlc' not found in 'Error: vlc (command: vlc) is not installed or could not be found in PATH.'
+2026-07-02T12:16:17.4503549Z 
+2026-07-02T12:16:17.4503800Z nova/tests/browser/test_browser_helper.py:120: AssertionError
+2026-07-02T12:16:17.4504533Z _________ TestSpeakerContinuousLearning.test_staged_pending_adaptation _________
+2026-07-02T12:16:17.4505404Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:1393: in patched
+2026-07-02T12:16:17.4506021Z     with self.decoration_helper(patched,
+2026-07-02T12:16:17.4506473Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/contextlib.py:137: in __enter__
+2026-07-02T12:16:17.4506943Z     return next(self.gen)
+2026-07-02T12:16:17.4507188Z            ^^^^^^^^^^^^^^
+2026-07-02T12:16:17.4507630Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:1375: in decoration_helper
+2026-07-02T12:16:17.4508155Z     arg = exit_stack.enter_context(patching)
+2026-07-02T12:16:17.4508467Z           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+2026-07-02T12:16:17.4508919Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/contextlib.py:526: in enter_context
+2026-07-02T12:16:17.4509402Z     result = _enter(cm)
+2026-07-02T12:16:17.4509638Z              ^^^^^^^^^^
+2026-07-02T12:16:17.4510036Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:1467: in __enter__
+2026-07-02T12:16:17.4510516Z     original, local = self.get_original()
+2026-07-02T12:16:17.4510811Z                       ^^^^^^^^^^^^^^^^^^^
+2026-07-02T12:16:17.4511145Z _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+2026-07-02T12:16:17.4511524Z 
+2026-07-02T12:16:17.4511675Z self = <unittest.mock._patch object at 0x7f61eb6c6f00>
+2026-07-02T12:16:17.4512099Z 
+2026-07-02T12:16:17.4512201Z     def get_original(self):
+2026-07-02T12:16:17.4512466Z         target = self.getter()
+2026-07-02T12:16:17.4512744Z         name = self.attribute
+2026-07-02T12:16:17.4512991Z     
+2026-07-02T12:16:17.4513197Z         original = DEFAULT
+2026-07-02T12:16:17.4513448Z         local = False
+2026-07-02T12:16:17.4513670Z     
+2026-07-02T12:16:17.4513861Z         try:
+2026-07-02T12:16:17.4514086Z             original = target.__dict__[name]
+2026-07-02T12:16:17.4514402Z         except (AttributeError, KeyError):
+2026-07-02T12:16:17.4514743Z             original = getattr(target, name, DEFAULT)
+2026-07-02T12:16:17.4515054Z         else:
+2026-07-02T12:16:17.4515272Z             local = True
+2026-07-02T12:16:17.4515503Z     
+2026-07-02T12:16:17.4515773Z         if name in _builtins and isinstance(target, ModuleType):
+2026-07-02T12:16:17.4516129Z             self.create = True
+2026-07-02T12:16:17.4516493Z     
+2026-07-02T12:16:17.4516724Z         if not self.create and original is DEFAULT:
+2026-07-02T12:16:17.4517036Z >           raise AttributeError(
+2026-07-02T12:16:17.4517356Z                 "%s does not have the attribute %r" % (target, name)
+2026-07-02T12:16:17.4517691Z             )
+2026-07-02T12:16:17.4518307Z E           AttributeError: <module 'nova.voice.speaker' from '/home/runner/work/Nova/Nova/nova/voice/speaker.py'> does not have the attribute 'preprocess_wav'
+2026-07-02T12:16:17.4518887Z 
+2026-07-02T12:16:17.4519166Z /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/unittest/mock.py:1437: AttributeError
+2026-07-02T12:16:17.4519686Z =============================== warnings summary ===============================
+2026-07-02T12:16:17.4520360Z nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_chatgpt_handler_integration
+2026-07-02T12:16:17.4521162Z   /home/runner/work/Nova/Nova/nova/tests/browser/test_browser_resilience.py:20: DeprecationWarning: There is no current event loop
+2026-07-02T12:16:17.4521898Z     loop = asyncio.get_event_loop()
+2026-07-02T12:16:17.4522088Z 
+2026-07-02T12:16:17.4522438Z nova/tests/voice/test_audio_pipeline.py::TestAudioPipelineUpgrades::test_webrtc_vad_arbitrary_sizes_and_hangover
+2026-07-02T12:16:17.4523538Z   /opt/hostedtoolcache/Python/3.12.13/x64/lib/python3.12/site-packages/webrtcvad.py:1: DeprecationWarning: pkg_resources is deprecated as an API. See https://setuptools.pypa.io/en/latest/pkg_resources.html
+2026-07-02T12:16:17.4524383Z     import pkg_resources
+2026-07-02T12:16:17.4524534Z 
+2026-07-02T12:16:17.4524745Z -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+2026-07-02T12:16:17.4525199Z =========================== short test summary info ============================
+2026-07-02T12:16:17.4526300Z FAILED nova/tests/browser/test_browser_helper.py::TestDedicatedBrowserActions::test_open_app_action_launches_other_apps_normally - AssertionError: 'Successfully opened vlc' not found in 'Error: vlc (command: vlc) is not installed or could not be found in PATH.'
+2026-07-02T12:16:17.4528159Z FAILED nova/tests/voice/test_speaker_continuous_learning.py::TestSpeakerContinuousLearning::test_staged_pending_adaptation - AttributeError: <module 'nova.voice.speaker' from '/home/runner/work/Nova/Nova/nova/voice/speaker.py'> does not have the attribute 'preprocess_wav'
+2026-07-02T12:16:17.4530037Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_chatgpt_handler_integration - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4532140Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_disabled_button_raises - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4533908Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_dynamic_element_loading - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4535824Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_github_handler_integration - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4537617Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_gmail_handler_integration - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4539412Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_google_search_handler_integration - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4541341Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_hidden_element_raises - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4543225Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_multiple_submit_buttons - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4544960Z ERROR nova/tests/browser/test_browser_resilience.py::TestBrowserResilience::test_overlay_dismissal - playwright._impl._errors.Error: BrowserType.launch: Failed to launch chromium because executable doesn't exist at /run/current-system/sw/bin/chromium
+2026-07-02T12:16:17.4546085Z ======= 2 failed, 293 passed, 15 skipped, 2 warnings, 9 errors in 30.84s =======
+2026-07-02T12:16:17.9498089Z ##[error]Process completed with exit code 1.

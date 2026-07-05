@@ -1,0 +1,89 @@
+﻿2026-07-02T12:14:43.6735523Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-02T12:14:43.6744881Z ##[group]Run actions/checkout@v4
+2026-07-02T12:14:43.6745714Z with:
+2026-07-02T12:14:43.6746321Z   repository: abhishek481828/Nova
+2026-07-02T12:14:43.6750696Z   token: ***
+2026-07-02T12:14:43.6751183Z   ssh-strict: true
+2026-07-02T12:14:43.6751855Z   ssh-user: git
+2026-07-02T12:14:43.6752353Z   persist-credentials: true
+2026-07-02T12:14:43.6752881Z   clean: true
+2026-07-02T12:14:43.6753376Z   sparse-checkout-cone-mode: true
+2026-07-02T12:14:43.6753966Z   fetch-depth: 1
+2026-07-02T12:14:43.6754446Z   fetch-tags: false
+2026-07-02T12:14:43.6754946Z   show-progress: true
+2026-07-02T12:14:43.6755432Z   lfs: false
+2026-07-02T12:14:43.6755876Z   submodules: false
+2026-07-02T12:14:43.6756427Z   set-safe-directory: true
+2026-07-02T12:14:43.6757306Z ##[endgroup]
+2026-07-02T12:14:43.7725227Z Syncing repository: abhishek481828/Nova
+2026-07-02T12:14:43.7727837Z ##[group]Getting Git version info
+2026-07-02T12:14:43.7728668Z Working directory is '/home/runner/work/Nova/Nova'
+2026-07-02T12:14:43.7729725Z [command]/usr/bin/git version
+2026-07-02T12:14:43.7803119Z git version 2.54.0
+2026-07-02T12:14:43.7856331Z ##[endgroup]
+2026-07-02T12:14:43.7870030Z Temporarily overriding HOME='/home/runner/work/_temp/b53be9bb-96bc-4a1a-bfc2-4ee7c153d2e1' before making global git config changes
+2026-07-02T12:14:43.7872853Z Adding repository directory to the temporary git global config as a safe directory
+2026-07-02T12:14:43.7875003Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/Nova/Nova
+2026-07-02T12:14:43.7925103Z Deleting the contents of '/home/runner/work/Nova/Nova'
+2026-07-02T12:14:43.7928787Z ##[group]Initializing the repository
+2026-07-02T12:14:43.7933271Z [command]/usr/bin/git init /home/runner/work/Nova/Nova
+2026-07-02T12:14:43.8077121Z hint: Using 'master' as the name for the initial branch. This default branch name
+2026-07-02T12:14:43.8079419Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+2026-07-02T12:14:43.8081852Z hint: to use in all of your new repositories, which will suppress this warning,
+2026-07-02T12:14:43.8084159Z hint: call:
+2026-07-02T12:14:43.8085646Z hint:
+2026-07-02T12:14:43.8087863Z hint: 	git config --global init.defaultBranch <name>
+2026-07-02T12:14:43.8108967Z hint:
+2026-07-02T12:14:43.8138571Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+2026-07-02T12:14:43.8143160Z hint: 'development'. The just-created branch can be renamed via this command:
+2026-07-02T12:14:43.8144757Z hint:
+2026-07-02T12:14:43.8145744Z hint: 	git branch -m <name>
+2026-07-02T12:14:43.8146814Z hint:
+2026-07-02T12:14:43.8148209Z hint: Disable this message with "git config set advice.defaultBranchName false"
+2026-07-02T12:14:43.8150338Z Initialized empty Git repository in /home/runner/work/Nova/Nova/.git/
+2026-07-02T12:14:43.8153893Z [command]/usr/bin/git remote add origin https://github.com/abhishek481828/Nova
+2026-07-02T12:14:43.8164022Z ##[endgroup]
+2026-07-02T12:14:43.8165372Z ##[group]Disabling automatic garbage collection
+2026-07-02T12:14:43.8169187Z [command]/usr/bin/git config --local gc.auto 0
+2026-07-02T12:14:43.8205394Z ##[endgroup]
+2026-07-02T12:14:43.8206994Z ##[group]Setting up auth
+2026-07-02T12:14:43.8212852Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+2026-07-02T12:14:43.8247440Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+2026-07-02T12:14:43.8634685Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+2026-07-02T12:14:43.8670157Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+2026-07-02T12:14:43.8924446Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+2026-07-02T12:14:43.8960412Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+2026-07-02T12:14:43.9202588Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+2026-07-02T12:14:43.9242042Z ##[endgroup]
+2026-07-02T12:14:43.9243033Z ##[group]Fetching the repository
+2026-07-02T12:14:43.9254436Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +94103def4af9183d4ace89b0ba0e85c83c639248:refs/remotes/pull/1/merge
+2026-07-02T12:14:44.2476832Z From https://github.com/abhishek481828/Nova
+2026-07-02T12:14:44.2479592Z  * [new ref]         94103def4af9183d4ace89b0ba0e85c83c639248 -> pull/1/merge
+2026-07-02T12:14:44.2514073Z ##[endgroup]
+2026-07-02T12:14:44.2515624Z ##[group]Determining the checkout info
+2026-07-02T12:14:44.2517061Z ##[endgroup]
+2026-07-02T12:14:44.2520716Z [command]/usr/bin/git sparse-checkout disable
+2026-07-02T12:14:44.2564701Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+2026-07-02T12:14:44.2590989Z ##[group]Checking out the ref
+2026-07-02T12:14:44.2594721Z [command]/usr/bin/git checkout --progress --force refs/remotes/pull/1/merge
+2026-07-02T12:14:44.2838103Z Note: switching to 'refs/remotes/pull/1/merge'.
+2026-07-02T12:14:44.2839487Z 
+2026-07-02T12:14:44.2840541Z You are in 'detached HEAD' state. You can look around, make experimental
+2026-07-02T12:14:44.2843485Z changes and commit them, and you can discard any commits you make in this
+2026-07-02T12:14:44.2845332Z state without impacting any branches by switching back to a branch.
+2026-07-02T12:14:44.2846679Z 
+2026-07-02T12:14:44.2847561Z If you want to create a new branch to retain commits you create, you may
+2026-07-02T12:14:44.2849522Z do so (now or later) by using -c with the switch command. Example:
+2026-07-02T12:14:44.2850468Z 
+2026-07-02T12:14:44.2850872Z   git switch -c <new-branch-name>
+2026-07-02T12:14:44.2851791Z 
+2026-07-02T12:14:44.2852208Z Or undo this operation with:
+2026-07-02T12:14:44.2853181Z 
+2026-07-02T12:14:44.2853882Z   git switch -
+2026-07-02T12:14:44.2854750Z 
+2026-07-02T12:14:44.2856079Z Turn off this advice by setting config variable advice.detachedHead to false
+2026-07-02T12:14:44.2857629Z 
+2026-07-02T12:14:44.2859506Z HEAD is now at 94103de Merge 68ea84a2c0d126c657d47d161cfb0af322636487 into f8baf7326cf468688efe0d5dfb76259991080120
+2026-07-02T12:14:44.2866287Z ##[endgroup]
+2026-07-02T12:14:44.2904074Z [command]/usr/bin/git log -1 --format=%H
+2026-07-02T12:14:44.2927707Z 94103def4af9183d4ace89b0ba0e85c83c639248

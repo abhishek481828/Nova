@@ -1,0 +1,19 @@
+﻿2026-07-02T12:14:44.3309253Z Node 20 is being deprecated. This workflow is running with Node 24 by default. If you need to temporarily use Node 20, you can set the ACTIONS_ALLOW_USE_UNSECURE_NODE_VERSION=true environment variable. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/
+2026-07-02T12:14:44.3315546Z ##[group]Run actions/setup-python@v5
+2026-07-02T12:14:44.3316738Z with:
+2026-07-02T12:14:44.3317609Z   python-version: 3.12
+2026-07-02T12:14:44.3318602Z   cache: pip
+2026-07-02T12:14:44.3319502Z   check-latest: false
+2026-07-02T12:14:44.3330738Z   token: ***
+2026-07-02T12:14:44.3331810Z   update-environment: true
+2026-07-02T12:14:44.3332901Z   allow-prereleases: false
+2026-07-02T12:14:44.3333959Z   freethreaded: false
+2026-07-02T12:14:44.3334916Z ##[endgroup]
+2026-07-02T12:14:44.4718970Z ##[group]Installed versions
+2026-07-02T12:14:44.5571806Z (node:2182) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use a userland alternative instead.
+2026-07-02T12:14:44.5576641Z (Use `node --trace-deprecation ...` to show where the warning was created)
+2026-07-02T12:14:44.5578649Z Successfully set up CPython (3.12.13)
+2026-07-02T12:14:44.5581697Z ##[endgroup]
+2026-07-02T12:14:44.6255883Z [command]/opt/hostedtoolcache/Python/3.12.13/x64/bin/pip cache dir
+2026-07-02T12:14:46.8733439Z /home/runner/.cache/pip
+2026-07-02T12:14:46.9637777Z pip cache is not found
