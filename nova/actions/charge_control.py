@@ -114,7 +114,24 @@ class ChargeControlAction(BaseAction):
             elif successes and failures:
                 return f"Charging limit partially updated. Success: {', '.join(successes)}. Errors: {', '.join(failures)}"
             else:
-                return f"Failed to set charging limit. Errors: {', '.join(failures)}"
+                err_msg = f"Failed to set charging limit. Errors: {', '.join(failures)}"
+                if any("password" in f.lower() or "permission" in f.lower() for f in failures):
+                    commands_str = "\n".join([f"      {{ command = \"/run/current-system/sw/bin/tee {fp}\"; options = [ \"NOPASSWD\" ]; }}" for fp in limit_files])
+                    err_msg += (
+                        "\n\n[Troubleshooting] Setting the battery charging limit requires elevated privileges. "
+                        "To allow Nova to configure this without prompting for a password, add the following sudoers rule "
+                        "to your NixOS configuration (e.g. `/etc/nixos/configuration.nix`):\n\n"
+                        "security.sudo.extraRules = [\n"
+                        "  {\n"
+                        "    users = [ \"nixos\" ];\n"
+                        "    commands = [\n"
+                        f"{commands_str}\n"
+                        "    ];\n"
+                        "  }\n"
+                        "];\n\n"
+                        "After updating the configuration, apply it with: `sudo nixos-rebuild switch`"
+                    )
+                return err_msg
 
         else:
             return f"Error: Unsupported charging limit operation '{operation}'."
