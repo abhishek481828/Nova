@@ -22,6 +22,9 @@ export interface SystemMetrics {
   memory: number;
   disk: number;
   browser_active: boolean;
+  battery_level?: number | null;
+  battery_plugged?: boolean | null;
+  charge_limit?: number | null;
 }
 
 export interface ToastMessage {

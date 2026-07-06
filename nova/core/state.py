@@ -54,5 +54,16 @@ class StateManager:
         profile.update(details)
         cls.save_state()
 
+    @classmethod
+    def get_charge_limit(cls) -> int | None:
+        """Returns the persistent battery charging limit."""
+        return cls._state.get("charge_limit")
+
+    @classmethod
+    def set_charge_limit(cls, limit: int | None) -> None:
+        """Sets the persistent battery charging limit and saves state."""
+        cls._state["charge_limit"] = limit
+        cls.save_state()
+
 # Load state on module import
 StateManager.load_state()

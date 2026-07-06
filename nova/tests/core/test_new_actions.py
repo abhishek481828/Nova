@@ -135,6 +135,46 @@ class TestNewActions(unittest.TestCase):
             self.assertIn("70%", result)
             self.assertIn("Previous: 45%", result)
 
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_charge_control_get(self, mock_run_shell):
+        from nova.actions.charge_control import ChargeControlAction
+        action = ChargeControlAction()
+        
+        with patch.object(action, "_find_charge_limit_files", return_value=["/sys/class/power_supply/BAT0/charge_control_end_threshold"]), \
+             patch("builtins.open", unittest.mock.mock_open(read_data="80\n")):
+            result = action.execute({"operation": "get"})
+            self.assertIn("BAT0: 80%", result)
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    def test_charge_control_set(self, mock_run_shell):
+        mock_run_shell.return_value = (0, "", "")
+        from nova.actions.charge_control import ChargeControlAction
+        action = ChargeControlAction()
+        
+        with patch.object(action, "_find_charge_limit_files", return_value=["/sys/class/power_supply/BAT0/charge_control_end_threshold"]), \
+             patch("builtins.open", unittest.mock.mock_open(read_data="80\n")):
+            result = action.execute({"operation": "set", "level": 90})
+            self.assertIn("BAT0 set to 90%", result)
+            self.assertIn("Previous: 80%", result)
+            mock_run_shell.assert_called_with(
+                "echo 90 | sudo tee /sys/class/power_supply/BAT0/charge_control_end_threshold",
+                shell=True,
+                require_confirmation=False
+            )
+
+    @patch("nova.core.executor.CommandExecutor.run_shell")
+    @patch("nova.core.state.StateManager.set_charge_limit")
+    def test_charge_control_set_saves_state(self, mock_set_charge_limit, mock_run_shell):
+        mock_run_shell.return_value = (0, "", "")
+        from nova.actions.charge_control import ChargeControlAction
+        action = ChargeControlAction()
+        
+        with patch.object(action, "_find_charge_limit_files", return_value=["/sys/class/power_supply/BAT0/charge_control_end_threshold"]), \
+             patch("builtins.open", unittest.mock.mock_open(read_data="80\n")):
+            result = action.execute({"operation": "set", "level": 85})
+            self.assertIn("BAT0 set to 85%", result)
+            mock_set_charge_limit.assert_called_once_with(85)
+
     @patch("nova.core.executor.ask_confirmation", return_value=True)
     @patch("subprocess.run")
     def test_executor_one_time_confirmation(self, mock_subprocess_run, mock_ask_confirmation):

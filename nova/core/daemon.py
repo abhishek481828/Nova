@@ -23,6 +23,17 @@ from nova.utils import (
 def run_daemon() -> None:
     print_info("Starting Nova daemon...")
     wm = WorkingMemory()
+
+    # Restore persistent battery charging limit if configured
+    try:
+        limit = StateManager.get_charge_limit()
+        if limit is not None:
+            print_info(f"Restoring persistent battery charging limit: {limit}%")
+            from nova.actions.charge_control import ChargeControlAction
+            action = ChargeControlAction()
+            action.execute({"operation": "set", "level": limit})
+    except Exception as e:
+        print_warning(f"Failed to restore persistent battery charging limit: {e}")
     
     # Start Dashboard Server
     try:

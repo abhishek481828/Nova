@@ -19,6 +19,11 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
   const disk = metrics?.disk ?? 0;
   const gpu = Math.max(0, Math.round(cpu * 0.4 + (Math.sin(Date.now() / 5000) * 5))); // Mock GPU load relative to CPU
 
+  const hasBattery = metrics?.battery_level !== undefined && metrics?.battery_level !== null;
+  const batteryLevel = metrics?.battery_level ?? 0;
+  const batteryPlugged = metrics?.battery_plugged ?? false;
+  const chargeLimit = metrics?.charge_limit ?? null;
+
   const getEngineBadge = (status: string | undefined) => {
     const s = (status || 'disabled').toLowerCase();
     if (s.includes('healthy') || s.includes('active') || s.includes('ready') || s.includes('open')) {
@@ -84,15 +89,35 @@ export const SystemDiagnostics: React.FC<SystemDiagnosticsProps> = ({
       </div>
 
       {/* Grid of hardware progress dials */}
-      <div className="grid grid-cols-4 gap-2 mb-4">
+      <div className={`grid gap-2 mb-4 ${hasBattery ? 'grid-cols-5' : 'grid-cols-4'}`}>
         <Dial value={cpu} label="CPU" color="stroke-cyan-400" />
         <Dial value={ram} label="RAM" color="stroke-sky-400" />
         <Dial value={gpu} label="GPU" color="stroke-indigo-400" />
         <Dial value={disk} label="DISK" color="stroke-slate-500" />
+        {hasBattery && (
+          <Dial 
+            value={batteryLevel} 
+            label={batteryPlugged ? "BAT (CHG)" : "BATTERY"} 
+            color={batteryPlugged ? "stroke-emerald-400" : (batteryLevel <= 20 ? "stroke-red-500 animate-pulse" : "stroke-amber-400")} 
+          />
+        )}
       </div>
 
       {/* Engine diagnostics health checklist */}
       <div className="flex-1 space-y-2 max-h-[140px] overflow-y-auto pr-1">
+        {hasBattery && (
+          <div className="flex items-center justify-between p-2 rounded bg-slate-950/30 border border-sky-500/10 text-[10px] mb-1">
+            <span className="font-semibold text-slate-300 flex items-center gap-1.5">
+              <span className={`w-1.5 h-1.5 rounded-full ${batteryPlugged ? 'bg-emerald-400 animate-pulse' : 'bg-amber-400'}`} />
+              Power & Charging Limit
+            </span>
+            <span className="font-mono text-cyan-400 font-bold">
+              {batteryPlugged ? "Plugged In" : "On Battery"}
+              {chargeLimit !== null ? ` | Limit: ${chargeLimit}%` : ""}
+            </span>
+          </div>
+        )}
+
         <div className="text-[9px] text-cyber-muted font-mono tracking-wider mb-1.5 uppercase flex items-center gap-1.5">
           <ShieldCheck className="w-3 h-3 text-sky-500" />
           Active Daemon Engines

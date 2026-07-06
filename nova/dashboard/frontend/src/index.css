@@ -4,27 +4,112 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ==========================================================================
+   BASE
+   ========================================================================== */
+
+html {
+  scroll-behavior: smooth;
+}
+
 body {
   margin: 0;
   background-color: #000000;
   color: #e2e8f0;
   overflow: hidden;
   font-family: 'Outfit', 'Inter', sans-serif;
+  position: relative;
 }
 
-/* Glassmorphism custom styling utilities */
+/* Faint animated HUD grid drifting behind everything.
+   Fixed + pointer-events:none so it never interferes with layout or clicks. */
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  background-image:
+    linear-gradient(rgba(56, 189, 248, 0.05) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(56, 189, 248, 0.05) 1px, transparent 1px);
+  background-size: 42px 42px;
+  animation: grid-drift 60s linear infinite;
+  mask-image: radial-gradient(ellipse 80% 80% at 50% 40%, #000 40%, transparent 90%);
+  -webkit-mask-image: radial-gradient(ellipse 80% 80% at 50% 40%, #000 40%, transparent 90%);
+}
+
+#root {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+}
+
+::selection {
+  background: rgba(0, 242, 254, 0.25);
+  color: #ffffff;
+}
+
+*:focus-visible {
+  outline: 2px solid rgba(0, 242, 254, 0.6);
+  outline-offset: 2px;
+}
+
+/* ==========================================================================
+   GLASS PANELS
+   ========================================================================== */
+
 .glass-panel {
   background: rgba(10, 15, 30, 0.4);
   backdrop-filter: blur(16px);
   -webkit-backdrop-filter: blur(16px);
   border: 1px solid rgba(56, 189, 248, 0.12);
   box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  border-radius: 1rem;
+  position: relative;
+  transition: border-color 0.3s ease, box-shadow 0.3s ease;
 }
 
 .glass-panel-glow {
   border-color: rgba(0, 242, 254, 0.35);
   box-shadow: 0 0 25px rgba(0, 242, 254, 0.12), inset 0 0 15px rgba(0, 242, 254, 0.05);
 }
+
+/* Add to any glass-panel that should react on hover (cards, nav items, etc.) */
+.glass-panel-interactive:hover {
+  border-color: rgba(0, 242, 254, 0.4);
+  box-shadow: 0 0 22px rgba(0, 242, 254, 0.15), 0 8px 32px 0 rgba(0, 0, 0, 0.4);
+  transform: translateY(-1px);
+}
+
+/* Sharp sci-fi corner brackets. Add class="hud-corners" to any
+   position:relative container to frame it like a targeting reticle. */
+.hud-corners::before,
+.hud-corners::after {
+  content: "";
+  position: absolute;
+  width: 14px;
+  height: 14px;
+  pointer-events: none;
+  z-index: 5;
+  border-color: rgba(0, 242, 254, 0.55);
+  transition: border-color 0.3s ease;
+}
+.hud-corners::before {
+  top: 6px;
+  left: 6px;
+  border-top: 2px solid;
+  border-left: 2px solid;
+}
+.hud-corners::after {
+  bottom: 6px;
+  right: 6px;
+  border-bottom: 2px solid;
+  border-right: 2px solid;
+}
+
+/* ==========================================================================
+   GLOW TEXT
+   ========================================================================== */
 
 .glow-text-cyan {
   text-shadow: 0 0 10px rgba(0, 242, 254, 0.5);
@@ -34,7 +119,56 @@ body {
   text-shadow: 0 0 10px rgba(79, 172, 254, 0.5);
 }
 
-/* Cybernetic scanline overlay */
+/* ==========================================================================
+   STATUS INDICATORS
+   ========================================================================== */
+
+.status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  position: relative;
+}
+.status-dot::after {
+  content: "";
+  position: absolute;
+  inset: -4px;
+  border-radius: 999px;
+  background: inherit;
+  opacity: 0.35;
+  animation: status-ping 1.8s cubic-bezier(0, 0, 0.2, 1) infinite;
+}
+.status-dot-online { background: #10b981; }
+.status-dot-warn   { background: #eab308; }
+.status-dot-error  { background: #ef4444; }
+.status-dot-idle   { background: #00f2fe; }
+
+/* ==========================================================================
+   BUTTONS / CONTROLS
+   ========================================================================== */
+
+.btn-hud {
+  border: 1px solid rgba(0, 242, 254, 0.3);
+  background: rgba(0, 242, 254, 0.06);
+  color: #67e8f9;
+  font-family: 'JetBrains Mono', monospace;
+  letter-spacing: 0.08em;
+  transition: all 0.2s ease;
+}
+.btn-hud:hover {
+  background: rgba(0, 242, 254, 0.14);
+  border-color: rgba(0, 242, 254, 0.6);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.25);
+}
+.btn-hud:active {
+  transform: scale(0.97);
+}
+
+/* ==========================================================================
+   SCANLINES OVERLAY
+   ========================================================================== */
+
 .scanlines {
   position: relative;
   overflow: hidden;
@@ -51,7 +185,10 @@ body {
   pointer-events: none;
 }
 
-/* Scrollbar styling */
+/* ==========================================================================
+   SCROLLBAR
+   ========================================================================== */
+
 ::-webkit-scrollbar {
   width: 6px;
   height: 6px;
@@ -68,4 +205,26 @@ body {
 
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(0, 242, 254, 0.45);
+}
+
+/* ==========================================================================
+   KEYFRAMES
+   ========================================================================== */
+
+@keyframes grid-drift {
+  from { background-position: 0 0; }
+  to   { background-position: 42px 42px; }
+}
+
+@keyframes status-ping {
+  0%   { transform: scale(1);   opacity: 0.5; }
+  75%  { transform: scale(2.2); opacity: 0; }
+  100% { transform: scale(2.2); opacity: 0; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before,
+  .status-dot::after {
+    animation: none !important;
+  }
 }

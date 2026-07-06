@@ -91,12 +91,38 @@ async def system_metrics_loop() -> None:
                 from nova.browser.manager import BrowserManager
                 loop = asyncio.get_running_loop()
                 browser_active = await loop.run_in_executor(None, BrowserManager.is_browser_running)
+
+                # Collect battery level and charging limit
+                battery = psutil.sensors_battery()
+                battery_level = battery.percent if battery else None
+                battery_plugged = battery.power_plugged if battery else None
+
+                charge_limit = None
+                battery_dir = "/sys/class/power_supply"
+                if os.path.exists(battery_dir):
+                    for bat in sorted(os.listdir(battery_dir)):
+                        if bat.startswith("BAT"):
+                            bat_path = os.path.join(battery_dir, bat)
+                            for filename in ["charge_control_end_threshold", "charge_control_limit_max", "charge_stop_threshold"]:
+                                file_path = os.path.join(bat_path, filename)
+                                if os.path.exists(file_path):
+                                    try:
+                                        with open(file_path, "r") as f:
+                                            charge_limit = int(f.read().strip())
+                                            break
+                                    except Exception:
+                                        pass
+                            if charge_limit is not None:
+                                break
                 
                 metrics = {
                     "cpu": cpu,
                     "memory": mem.percent,
                     "disk": disk.percent,
-                    "browser_active": browser_active
+                    "browser_active": browser_active,
+                    "battery_level": battery_level,
+                    "battery_plugged": battery_plugged,
+                    "charge_limit": charge_limit
                 }
                 
                 # Broadcast using event bus emit

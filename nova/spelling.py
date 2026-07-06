@@ -321,6 +321,22 @@ def correct_action_data(action_data: Dict[str, Any], query: str = "") -> Dict[st
                 
         action_data["operation"] = operation
 
+    elif action == "charge_control":
+        operation = action_data.get("operation", "").strip().lower()
+        if operation in ("status", "level", "show", "check", "limit", "get_limit"):
+            operation = "get"
+        elif operation in ("change", "update", "limit_to"):
+            operation = "set"
+            
+        valid_ops = {"set", "get"}
+        if operation and operation not in valid_ops:
+            matches = difflib.get_close_matches(operation, valid_ops, n=1, cutoff=0.7)
+            if matches:
+                print_info(f"Correcting Charge control operation typo '{operation}' to '{matches[0]}'")
+                operation = matches[0]
+                
+        action_data["operation"] = operation
+
     elif action == "desktop_control":
         operation = action_data.get("operation", "").strip().lower()
         if operation in ("lockscreen", "screenlock"):

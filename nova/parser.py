@@ -27,6 +27,7 @@ VALID_ACTIONS = {
     "list_packages",
     "volume_control",
     "brightness_control",
+    "charge_control",
     "desktop_control",
     "wifi_control",
     "rich_system_info",
