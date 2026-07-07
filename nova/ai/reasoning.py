@@ -257,26 +257,9 @@ class ExecutionEngine:
         # Browser safety check
         if "browser" in step.required_skills or step.action_type == "chromium_action":
             try:
+                from nova.browser.runner import BrowserRunner
                 from nova.browser.manager import BrowserManager
-                from nova.browser.helper import find_active_page
-                
-                if not BrowserManager.is_browser_running():
-                    BrowserManager.ensure_browser()
-                    
-                browser = BrowserManager.get_browser()
-                context = BrowserManager.get_persistent_context(browser)
-                
-                # Enforce safety: filter out chrome-extension:// pages
-                pages = context.pages
-                safe_pages = [p for p in pages if not (p.url or "").startswith("chrome-extension://")]
-                
-                if not safe_pages:
-                    page = context.new_page()
-                else:
-                    page = find_active_page(context)
-                    
-                if (page.url or "").startswith("chrome-extension://"):
-                    raise ValueError(f"Target URL points to an extension page: {page.url}")
+                BrowserRunner.execute(BrowserManager.verify_browser_safety)
             except Exception as e:
                 self._handle_step_failure(plan, step, f"Browser Verification Failed: {e}")
                 return

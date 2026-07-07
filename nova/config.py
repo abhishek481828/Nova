@@ -57,6 +57,9 @@ _OLD_LOG_FILE_PATH = Path.home() / ".config" / "nova" / "nova.log"
 _NEW_LOG_FILE_PATH = Path.home() / ".config" / "nova" / "nova.log"
 LOG_FILE_PATH = _OLD_LOG_FILE_PATH if _OLD_LOG_FILE_PATH.exists() else _NEW_LOG_FILE_PATH
 
+# Project Awareness Engine cache
+PROJECT_CACHE_PATH = Path.home() / ".config" / "nova" / "project_cache.json"
+
 # Create necessary directories
 HISTORY_JSON_PATH.parent.mkdir(parents=True, exist_ok=True)
 
@@ -90,6 +93,8 @@ CHROMIUM_HEADLESS = os.environ.get("CHROMIUM_HEADLESS", "false").lower() in ("tr
 
 # Centralized API Keys & Tokens from Environment
 NEBIUS_API_KEY = os.environ.get("NEBIUS_API_KEY")
+NOVA_NEBIUS_TIMEOUT = float(os.environ.get("NOVA_NEBIUS_TIMEOUT", "8.0"))
+NOVA_NEBIUS_RETRIES = int(os.environ.get("NOVA_NEBIUS_RETRIES", "2"))
 GEMINI_API_KEY = os.environ.get("GEMINI_API_KEY")
 TAVILY_API_KEY = os.environ.get("TAVILY_API_KEY")
 WEATHER_API_KEY = os.environ.get("WEATHER_API_KEY")
@@ -147,6 +152,7 @@ Actions & parameters:
 - wifi_control: {"action": "wifi_control", "operation": "status"|"toggle"|"scan"|"connect", "state": "on"|"off"|"toggle", "ssid": "ssid_name", "password": "pass"}
 - rich_system_info: {"action": "rich_system_info"}
 - chromium_action: {"action": "chromium_action", "operation": "open"|"search_youtube"|"fill_form"|"click"|"get_content", "url": "url", "query": "text", "selector": "css_selector", "value": "text", "form_data": {"selector": "value"}}
+- chatgpt_action: {"action": "chatgpt_action", "operation": "open"|"ask"|"search"|"send"|"new_chat"|"copy"|"save"|"export_md"|"export_pdf"|"summarize_response"|"translate_response", "prompt": "text", "language": "language_name"}
 - tavily_search: {"action": "tavily_search", "query": "search query"}
 - weather: {"action": "weather", "location": "city_name"}
 - crypto_price: {"action": "crypto_price", "coin": "coin_name", "currency": "currency_code"}
@@ -164,8 +170,10 @@ Answering questions about name or history: Answer directly using the history con
 
 Context & Session Rules:
 1. If the user previously opened YouTube or played music, and the current request is to play a song/video (e.g. "Play Perfect"), route it to 'chromium_action' with operation 'search_youtube' to play on YouTube.
-2. If the user is currently on ChatGPT (based on previous actions in history), and asks to search or type something, execute it inside ChatGPT using 'chromium_action' (operation 'fill_form' to input text and 'click' to submit) instead of opening Google search.
-3. Be context-aware. Maintain active session continuity.
+2. Active Tool Rule: If the last successfully executed action in the conversation history was 'chatgpt_action', then ChatGPT is the active tool. All subsequent user inputs (questions, requests, follow-ups) MUST automatically continue the current ChatGPT conversation using 'chatgpt_action' (operation 'ask' with 'prompt' set to the user's input), UNLESS another specific tool intent is clearly and explicitly detected (e.g. "what is the weather", "open youtube", "list my github repositories"). Prioritize continuing the ChatGPT conversation for general queries and follow-ups over routing to Tavily search or other tools.
+3. If the user asks to open ChatGPT, ask a question to ChatGPT, search on ChatGPT, or send something to ChatGPT, route it to 'chatgpt_action' (operation 'open', 'ask', 'search', or 'send').
+4. If the user asks to start a new chat, start a new conversation, clear chat, or new chat, route it to 'chatgpt_action' (operation 'new_chat').
+5. Be context-aware. Maintain active session continuity.
 4. If the user asks for real-time information, news, current events, or asks questions/commands containing words like "search", "latest", "news", "who is", "what is", or "find" (e.g. "what is the latest news about OpenAI", "who is the current prime minister of the UK", "find info on Python syntax"), route it to 'tavily_search' with a specific search query.
 5. If the user asks about the weather, climate, temperature, or rain (e.g. "what is the weather like", "is it going to rain in New York", "current temperature in London"), route it to 'weather' action with the optional location parameter.
 6. If the user asks for the price or value of a cryptocurrency (e.g. "how much is bitcoin", "price of ethereum", "solana value"), route it to 'crypto_price' action with the coin name and optional currency code.
@@ -256,7 +264,24 @@ Examples:
 - "open wikipedia.org" -> {"action": "chromium_action", "operation": "open", "url": "wikipedia.org"}
 - "play lofi hip hop on youtube" -> {"action": "chromium_action", "operation": "search_youtube", "query": "lofi hip hop"}
 - "type standard_user into the username input" -> {"action": "chromium_action", "operation": "fill_form", "selector": "input#username", "value": "standard_user"}
-- "click submit button" -> {"action": "chromium_action", "operation": "click", "selector": "button[type='submit']"}"""
+- "click submit button" -> {"action": "chromium_action", "operation": "click", "selector": "button[type='submit']"}
+- "open chatgpt" -> {"action": "chatgpt_action", "operation": "open"}
+- "ask chatgpt how to write quicksort in python" -> {"action": "chatgpt_action", "operation": "ask", "prompt": "how to write quicksort in python"}
+- "search on chatgpt what is the speed of light" -> {"action": "chatgpt_action", "operation": "search", "prompt": "what is the speed of light"}
+- "send this to chatgpt: write a short poem" -> {"action": "chatgpt_action", "operation": "send", "prompt": "write a short poem"}
+- "new chat" -> {"action": "chatgpt_action", "operation": "new_chat"}
+- "start a new conversation" -> {"action": "chatgpt_action", "operation": "new_chat"}
+- "continue" -> {"action": "chatgpt_action", "operation": "ask", "prompt": "continue"}
+- "explain more" -> {"action": "chatgpt_action", "operation": "ask", "prompt": "explain more"}
+- "summarize" -> {"action": "chatgpt_action", "operation": "ask", "prompt": "summarize"}
+- "simplify" -> {"action": "chatgpt_action", "operation": "ask", "prompt": "simplify"}
+- "give example" -> {"action": "chatgpt_action", "operation": "ask", "prompt": "give example"}
+- "copy response" -> {"action": "chatgpt_action", "operation": "copy"}
+- "save response" -> {"action": "chatgpt_action", "operation": "save"}
+- "export markdown" -> {"action": "chatgpt_action", "operation": "export_md"}
+- "export pdf" -> {"action": "chatgpt_action", "operation": "export_pdf"}
+- "summarize response" -> {"action": "chatgpt_action", "operation": "summarize_response"}
+- "translate response to Spanish" -> {"action": "chatgpt_action", "operation": "translate_response", "language": "Spanish"}"""
 
 SYSTEM_PROMPT = load_prompt("system_prompt.txt", FALLBACK_SYSTEM_PROMPT)
 

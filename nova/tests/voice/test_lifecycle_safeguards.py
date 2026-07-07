@@ -38,7 +38,7 @@ class TestLifecycleSafeguards(unittest.TestCase):
         self.assertTrue(hasattr(voice_config, "VAD_THRESHOLD"))
         
         # Test that getting a missing attribute returns the fallback correctly
-        fusion_threshold = getattr(voice_config, "FUSION_TRIGGER_THRESHOLD", 0.50)
+        fusion_threshold = getattr(voice_config, "NON_EXISTENT_DUMMY_ATTRIBUTE", 0.50)
         self.assertEqual(fusion_threshold, 0.50)
 
     def test_confidence_fusion_robustness(self):

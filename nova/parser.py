@@ -43,7 +43,8 @@ VALID_ACTIONS = {
     "ocr",
     "ip_info",
     "tmdb",
-    "finance"
+    "finance",
+    "chatgpt_action"
 }
 
 def clean_json_text(text: str) -> str:

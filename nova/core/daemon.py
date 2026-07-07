@@ -7,7 +7,7 @@ from nova.ai.ollama import OllamaClient
 from nova.parser import parse_and_validate_action
 from nova.actions import get_action_dispatcher
 from nova.core.executor import CommandExecutor
-from nova.core.memory import HistoryManager, WorkingMemory
+from nova.core.memory import HistoryManager, get_working_memory
 from nova.core.state import StateManager
 from nova.utils import (
     print_info,
@@ -22,7 +22,7 @@ from nova.utils import (
 
 def run_daemon() -> None:
     print_info("Starting Nova daemon...")
-    wm = WorkingMemory()
+    wm = get_working_memory()
 
     # Restore persistent battery charging limit if configured
     try:
@@ -55,6 +55,33 @@ def run_daemon() -> None:
         
     server.listen(5)
     print_info("Nova daemon listening on 127.0.0.1:11435")
+
+    # Warm up ChatGPT page in background
+    try:
+        from nova.browser.chatgpt_manager import ChatGPTManager
+        ChatGPTManager._working_memory = wm
+        ChatGPTManager.initialize_on_startup()
+    except Exception as e:
+        print_warning(f"Failed to start ChatGPT background tab initialization: {e}")
+
+    # Start Project Awareness Engine in background
+    try:
+        import pathlib
+        from nova.project.engine import ProjectAwarenessEngine
+        _project_engine = ProjectAwarenessEngine()
+        _project_engine.scan_in_background(pathlib.Path.cwd())
+        _project_engine.start_watching()
+    except Exception as e:
+        print_warning(f"Failed to start Project Awareness Engine: {e}")
+
+    # Start Code Intelligence Engine in background (depends on PAE)
+    try:
+        from nova.code.engine import CodeIntelligenceEngine
+        _code_engine = CodeIntelligenceEngine()
+        _code_engine.start_in_background()
+    except Exception as e:
+        print_warning(f"Failed to start Code Intelligence Engine: {e}")
+
     
     # Initialize and start voice loop in background thread
     from nova.voice.pipeline import run_voice_loop, shutdown_event
@@ -192,7 +219,15 @@ def run_daemon() -> None:
                     conn.close()
                     continue
 
+                import time
+                start_intent = time.time()
                 raw_response = ai_client.parse_intent(query)
+                intent_duration = time.time() - start_intent
+                try:
+                    wm.set("intent_detection_time", intent_duration)
+                except Exception:
+                    pass
+
                 if not raw_response:
                     print_error("Failed to connect to Ollama or parse the request. Please check if Ollama is running.")
                     HistoryManager.add_entry(query, {}, CommandExecutor.get_last_commands(), "ollama_failed")

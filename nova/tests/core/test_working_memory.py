@@ -6,12 +6,12 @@ import time
 # Ensure project path is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
-from nova.core.memory import WorkingMemory, WorkingMemoryState, BrowserInfo, MemoryEvent, Interaction, SessionState
+from nova.core.memory import WorkingMemory, WorkingMemoryState, BrowserInfo, MemoryEvent, Interaction, SessionState, reset_working_memory
 
 class TestWorkingMemory(unittest.TestCase):
 
     def setUp(self):
-        self.wm = WorkingMemory()
+        self.wm = reset_working_memory()
 
     def test_initialization(self):
         """Verify that WorkingMemory starts in a clean default state."""

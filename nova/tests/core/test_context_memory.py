@@ -1,12 +1,12 @@
 import unittest
 import time
 
-from nova.core.memory import WorkingMemory, SessionState
+from nova.core.memory import WorkingMemory, SessionState, reset_working_memory
 from nova.core.context import MemoryContext
 
 class TestContextMemory(unittest.TestCase):
     def setUp(self):
-        self.wm = WorkingMemory()
+        self.wm = reset_working_memory()
         self.cm = self.wm.context_manager
 
     def test_initial_context_state(self):

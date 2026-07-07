@@ -4,7 +4,7 @@ from nova.ai.ollama import OllamaClient
 from nova.parser import parse_and_validate_action
 from nova.actions import get_action_dispatcher
 from nova.core.executor import CommandExecutor
-from nova.core.memory import HistoryManager, WorkingMemory
+from nova.core.memory import HistoryManager, get_working_memory
 from nova.core.state import StateManager
 from nova.utils import (
     print_banner,
@@ -29,7 +29,7 @@ def run_cli_repl(args=None) -> None:
         print_info("Initializing Nova intent parser...")
     
     # Initialize components
-    wm = WorkingMemory()
+    wm = get_working_memory()
     ai_client = OllamaClient()
     dispatcher = get_action_dispatcher()
     

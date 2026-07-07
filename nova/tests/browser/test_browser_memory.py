@@ -2,12 +2,12 @@ import unittest
 from unittest.mock import MagicMock, patch
 import time
 
-from nova.core.memory import WorkingMemory, SessionState, Interaction
+from nova.core.memory import WorkingMemory, SessionState, Interaction, reset_working_memory
 from nova.browser.manager import BrowserManager
 
 class TestBrowserMemory(unittest.TestCase):
     def setUp(self):
-        self.wm = WorkingMemory()
+        self.wm = reset_working_memory()
         # Ensure BrowserManager working memory is reset/set to our test instance
         BrowserManager._working_memory = self.wm
 

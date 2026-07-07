@@ -105,8 +105,9 @@ class VoiceLoopState:
         import nova.voice.config as _vc_cfg
         _vc_cfg.active_diagnostics = self.diagnostics
 
-        from nova.core.memory import WorkingMemory
-        self.working_memory = working_memory if working_memory is not None else WorkingMemory()
+        from nova.core.memory import get_working_memory
+        self.working_memory = working_memory if working_memory is not None else get_working_memory()
+
         self.use_wake_word = enable_wake_word
         self.noise_floor = VAD_THRESHOLD
         self.speech_threshold = VAD_THRESHOLD + NOISE_FLOOR_MARGIN
@@ -761,7 +762,13 @@ def process_single_iteration(
         pass
 
     try:
+        start_intent = time.time()
         raw_response = ai_client.parse_intent(corrected)
+        intent_duration = time.time() - start_intent
+        try:
+            state.working_memory.set("intent_detection_time", intent_duration)
+        except Exception:
+            pass
         try:
             from nova.dashboard.event_bus import emit
             emit("llm_finished", module="llm", status="success", metadata={"query": corrected, "response": raw_response})
@@ -872,21 +879,58 @@ def process_single_iteration(
             ]
             read_full = any(phrase in user_text_lower for phrase in read_full_phrases)
             
-            if read_full:
-                assistant_reply = spoken
-                _tts_start = time.perf_counter()
-                speak(spoken)
-                _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
-            else:
-                try:
-                    spoken_summary = ai_client.generate_tts_summary(text, spoken)
-                except Exception as e:
-                    logger.debug(f"Failed to generate spoken summary: {e}")
-                    spoken_summary = spoken
+            from nova.voice.config import READ_CHATGPT_RESPONSES
+            
+            def clean_markdown_for_tts(val: str) -> str:
+                import re
+                val = re.sub(r'```[\s\S]*?```', '[code snippet]', val)
+                val = re.sub(r'`([^`\n]+)`', r'\1', val)
+                val = re.sub(r'^\s*#{1,6}\s*(.+)$', r'\1', val, flags=re.MULTILINE)
+                val = re.sub(r'\*\*([^*]+)\*\*', r'\1', val)
+                val = re.sub(r'\*([^*]+)\*', r'\1', val)
+                val = re.sub(r'\[([^\]]+)\]\([^)]+\)', r'\1', val)
+                val = re.sub(r'^\s*[-*+]\s+', '', val, flags=re.MULTILINE)
+                val = re.sub(r'^\s*\d+\.\s+', '', val, flags=re.MULTILINE)
+                val = re.sub(r'\n+', ' ', val)
+                val = re.sub(r'\s+', ' ', val)
+                return val.strip()
+
+            is_chatgpt = any(act.get("action") == "chatgpt_action" for act in actions) if actions else False
+
+            if is_chatgpt and READ_CHATGPT_RESPONSES:
+                cleaned_response = clean_markdown_for_tts(spoken)
+                if len(cleaned_response) > 300 or len(cleaned_response.split()) > 50:
+                    if read_full:
+                        spoken_summary = cleaned_response
+                    else:
+                        try:
+                            spoken_summary = ai_client.generate_chatgpt_tts_summary(text, cleaned_response)
+                        except Exception as e:
+                            logger.debug(f"Failed to generate ChatGPT spoken summary: {e}")
+                            spoken_summary = cleaned_response
+                else:
+                    spoken_summary = cleaned_response
+                
                 assistant_reply = spoken_summary
                 _tts_start = time.perf_counter()
                 speak(spoken_summary)
                 _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
+            else:
+                if read_full:
+                    assistant_reply = spoken
+                    _tts_start = time.perf_counter()
+                    speak(spoken)
+                    _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
+                else:
+                    try:
+                        spoken_summary = ai_client.generate_tts_summary(text, spoken)
+                    except Exception as e:
+                        logger.debug(f"Failed to generate spoken summary: {e}")
+                        spoken_summary = spoken
+                    assistant_reply = spoken_summary
+                    _tts_start = time.perf_counter()
+                    speak(spoken_summary)
+                    _turn_tts_ms = (time.perf_counter() - _tts_start) * 1000.0
 
     if enable_debug:
         print_success("✔ Finished")

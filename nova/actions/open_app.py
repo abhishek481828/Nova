@@ -16,6 +16,14 @@ class OpenAppAction(BaseAction):
         if not app_name:
             return "Error: No application name provided in parameters."
 
+        # Route ChatGPT requests
+        if app_name in ("chatgpt", "gpt", "chat gpt"):
+            from nova.actions.chatgpt import ChatGPTAction
+            action = ChatGPTAction()
+            if hasattr(self, "working_memory"):
+                action.working_memory = self.working_memory
+            return action.execute({"operation": "open"})
+
         # Route mirroring requests to self-healing mirroring handler
         if app_name in ("phone", "mirror", "connect"):
             from nova.actions.adb import start_mirroring

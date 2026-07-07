@@ -4,7 +4,7 @@ import time
 import random
 from typing import Dict, Any
 
-from nova.core.memory import WorkingMemory, SessionState, Interaction
+from nova.core.memory import WorkingMemory, SessionState, Interaction, reset_working_memory
 from nova.actions.base import BaseAction
 from nova.logger import logger
 
@@ -19,7 +19,7 @@ class StressTestAction(BaseAction):
 
 class TestStressMemory(unittest.TestCase):
     def setUp(self):
-        self.wm = WorkingMemory()
+        self.wm = reset_working_memory()
         self.iterations = 200
         self.exception_caught = False
         self.error_messages = []

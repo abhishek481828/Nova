@@ -26,14 +26,16 @@ class NovaBrowserTestCase(unittest.TestCase):
 
 class TestChromiumAction(NovaBrowserTestCase):
 
+    @patch("nova.browser.actions.BrowserRunner")
     @patch("nova.browser.actions.run_automation")
     @patch("nova.browser.manager.BrowserManager.is_browser_running")
-    def test_chromium_action_open(self, mock_is_browser_running, mock_run_automation):
+    def test_chromium_action_open(self, mock_is_browser_running, mock_run_automation, mock_runner):
         # 1. DevTools readiness check returns True
         mock_is_browser_running.return_value = True
         
         # 2. Mock run_automation to return success dict
         mock_run_automation.return_value = {"status": "success", "message": "Successfully navigated to youtube.com"}
+        mock_runner.execute.side_effect = lambda fn, *args, **kwargs: fn(*args, **kwargs)
         
         action = ChromiumAction()
         result = action.execute({"operation": "open", "url": "youtube.com"})

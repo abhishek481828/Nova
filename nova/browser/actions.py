@@ -9,6 +9,7 @@ from nova.core.executor import CommandExecutor
 from nova.utils import print_info
 from nova.browser.manager import BrowserManager
 from nova.browser.helper import run_automation
+from nova.browser.runner import BrowserRunner
 
 class BrowserAction(BaseAction):
     @property
@@ -87,36 +88,14 @@ class ChromiumAction(BaseAction):
         if enable_debug:
             print_info(f"Executing web automation step: {params.get('operation', 'open')}...")
 
-        # Playwright objects are bound to the thread they were created in.
-        # If we are in a background thread (e.g. voice loop), we MUST use subprocess.
-        if threading.current_thread() is not threading.main_thread():
-            self.run_in_process = False
-
-        if getattr(self, "run_in_process", True):
-            try:
-                result = run_automation(params)
-                status = result.get("status")
-                message = result.get("message", "Web step completed successfully.")
-                return f"✅ {message}" if status == "success" else f"❌ {message}"
-            except Exception as e:
-                from nova.logger import logger
-                import traceback
-                logger.error(f"In-process browser automation failed, falling back to subprocess: {e}\n{traceback.format_exc()}")
-                # Fall through to subprocess execution
-        
-        # Subprocess execution fallback
-        cmd = [sys.executable, str(helper_path), json.dumps(params)]
-        exit_code, stdout, stderr = CommandExecutor.run_shell(cmd, require_confirmation=False)
-
-        if exit_code != 0:
-            return f"Error: Web automation script failed (exit {exit_code}). Stderr: {stderr.strip()}"
 
         try:
-            result = json.loads(stdout.strip())
+            result = BrowserRunner.execute(run_automation, params)
             status = result.get("status")
             message = result.get("message", "Web step completed successfully.")
             return f"✅ {message}" if status == "success" else f"❌ {message}"
-        except json.JSONDecodeError:
-            if "success" in stdout.lower() or "playing" in stdout.lower():
-                return f"✅ Web step completed: {stdout.strip()[:200]}"
-            return f"Error: Failed to parse automation helper response. Output: {stdout.strip()[:300]}"
+        except Exception as e:
+            from nova.logger import logger
+            import traceback
+            logger.error(f"In-process browser automation via BrowserRunner failed: {e}\n{traceback.format_exc()}")
+            return f"❌ Browser automation failed: {e}"

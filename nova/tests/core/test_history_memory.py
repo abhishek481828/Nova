@@ -2,7 +2,8 @@ import unittest
 from unittest.mock import MagicMock, patch
 import time
 
-from nova.core.memory import WorkingMemory, HistoryEntry, Interaction
+from nova.core.memory import WorkingMemory, HistoryEntry, Interaction, reset_working_memory
+
 from nova.actions.base import BaseAction
 from nova.browser.manager import BrowserManager
 
@@ -17,11 +18,15 @@ class DummyHistoryAction(BaseAction):
 
 class TestHistoryMemory(unittest.TestCase):
     def setUp(self):
+        # Reset the shared working memory first to ensure zero cross-test state leakage
+        reset_working_memory()
+
         # Reset BrowserManager class caches to avoid test cross-contamination
         BrowserManager._browser = None
         BrowserManager._browser_context = None
         BrowserManager._playwright = None
         BrowserManager._working_memory = None
+
         
         # Configure History Manager with a limit of 3 for testing sliding window
         self.wm = WorkingMemory(history_limit=3)

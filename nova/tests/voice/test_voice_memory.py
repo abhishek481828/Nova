@@ -14,14 +14,19 @@ from unittest.mock import patch, MagicMock
 # Ensure project path is in sys.path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), "../../../")))
 
-from nova.core.memory import WorkingMemory, Interaction
+from nova.core.memory import WorkingMemory, Interaction, reset_working_memory
+
 
 @unittest.skipUnless(_NUMPY_AVAILABLE, "numpy not installed - skipping voice tests")
 class TestVoiceMemoryIntegration(unittest.TestCase):
 
     def setUp(self):
+        # Reset the process-wide shared memory to guarantee test isolation
+        reset_working_memory()
+
         self.patcher = patch("nova.core.state.StateManager.is_autonomous", return_value=True)
         self.mock_is_autonomous = self.patcher.start()
+
 
         # Mock BrowserManager to bypass browser check in tests
         self.browser_patcher = patch("nova.browser.manager.BrowserManager")

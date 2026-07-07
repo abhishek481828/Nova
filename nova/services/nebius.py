@@ -8,18 +8,23 @@ def call_nebius_llm(
     messages: List[Dict[str, str]],
     model: str = "meta-llama/Llama-3.3-70B-Instruct",
     temperature: float = 0.3,
-    timeout: float = 15.0,
-    retries: int = 1,
+    timeout: Optional[float] = None,
+    retries: Optional[int] = None,
     backoff: float = 1.0
 ) -> Optional[str]:
     """
     Consolidated helper to call the Nebius chat completion API.
     Provides standard retry mechanism, error logging, and payload mapping.
     """
-    from nova.config import NEBIUS_API_KEY
+    from nova.config import NEBIUS_API_KEY, NOVA_NEBIUS_TIMEOUT, NOVA_NEBIUS_RETRIES
     nebius_key = NEBIUS_API_KEY
     if not nebius_key:
         return None
+
+    if timeout is None:
+        timeout = NOVA_NEBIUS_TIMEOUT
+    if retries is None:
+        retries = NOVA_NEBIUS_RETRIES
 
     nebius_url = "https://api.studio.nebius.ai/v1/chat/completions"
     payload = {

@@ -75,8 +75,7 @@ class OllamaClient:
         if nebius_key:
             content = call_nebius_llm(
                 messages=messages,
-                temperature=0.0,
-                retries=3
+                temperature=0.0
             )
             if content:
                 return content
@@ -293,4 +292,213 @@ class OllamaClient:
         if "error" in clean_text.lower() or "failed" in clean_text.lower():
             return "I couldn't complete that task."
         return "Done. The task is complete."
+
+    def generate_chatgpt_tts_summary(self, user_query: str, response: str) -> str:
+        """
+        Generates a concise conversational summary (1-3 sentences, usually under 60 words)
+        of a long ChatGPT response for natural voice output.
+        """
+        import re
+        import os
+        
+        def clean_ansi(text: str) -> str:
+            return re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", text)
+
+        system_prompt = (
+            "You are a text-to-speech summary generator for the virtual assistant Nova.\n"
+            "Given the user's question and ChatGPT's detailed response, summarize the answer "
+            "into a concise, conversational 1-3 sentence response (under 60 words) suitable for reading aloud.\n"
+            "Do NOT include markdown, HTML, code snippets, lists, or special characters. Output ONLY the raw summary text."
+        )
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": f"Question: {user_query}\nDetailed Response: {response}"}
+        ]
+
+        content = ""
+        nebius_key = NEBIUS_API_KEY
+        if nebius_key:
+            nebius_content = call_nebius_llm(
+                messages=messages,
+                temperature=0.3,
+                timeout=8.0
+            )
+            if nebius_content:
+                content = nebius_content
+
+        # Fallback to local Ollama if not explicitly disabled
+        if not DISABLE_OLLAMA and not content:
+            url = f"{self.api_url}/api/chat"
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.3,
+                    "num_predict": 100
+                }
+            }
+            try:
+                with httpx.Client() as client:
+                    resp = client.post(
+                        url,
+                        json=payload,
+                        timeout=12.0
+                    )
+                    if resp.status_code == 200:
+                        content = resp.json().get("message", {}).get("content", "").strip()
+            except Exception:
+                pass
+
+        if content:
+            content = clean_ansi(content).strip()
+            content = content.strip().strip('"').strip("'").strip('`').strip()
+            if content:
+                return content
+
+        # Simple fallback: return the first 3 sentences of the response
+        clean_text = clean_ansi(response).strip()
+        clean_text = re.sub(r'```[\s\S]*?```', '', clean_text)
+        clean_text = re.sub(r'`.*?`', '', clean_text)
+        clean_text = re.sub(r'\[.*?\]\(.*?\)', '', clean_text)
+        clean_text = re.sub(r'https?://\S+', '', clean_text)
+        
+        sentences = re.split(r'(?<=[.!?])\s+', clean_text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+        if sentences:
+            return " ".join(sentences[:3])
+        return "Here is the response from ChatGPT."
+
+    def enhance_prompt(self, prompt: str) -> str:
+        """
+        Enhances the user's raw prompt using the prompt enhancer system prompt.
+        """
+        import re
+        from nova.config import load_prompt
+        
+        def clean_ansi(text: str) -> str:
+            return re.compile(r"\x1B(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])").sub("", text)
+
+        fallback_prompt = (
+            "You are a Prompt Enhancer for the Nova Virtual Assistant. Your goal is to improve and expand the user's spoken request into a high-quality, detailed, and context-rich prompt suitable for ChatGPT, while strictly preserving the user's original intention.\n"
+            "Follow these strict rules:\n"
+            "1. Do not lose key facts, names, technologies, or parameters from the original request.\n"
+            "2. Expand the prompt to request detailed explanations, clear code structure, and comments if code is requested.\n"
+            "3. Keep the prompt professional, clear, and direct.\n"
+            "4. Output ONLY the enhanced prompt itself. Never include introduction, backticks, conversational filler, or quotes."
+        )
+        system_prompt = load_prompt("prompt_enhancer_prompt.txt", fallback_prompt)
+
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": prompt}
+        ]
+
+        content = ""
+        nebius_key = NEBIUS_API_KEY
+        if nebius_key:
+            nebius_content = call_nebius_llm(
+                messages=messages,
+                temperature=0.0,
+                timeout=10.0
+            )
+            if nebius_content:
+                content = nebius_content
+
+        if not DISABLE_OLLAMA and not content:
+            gemini_key = GEMINI_API_KEY
+            if gemini_key:
+                try:
+                    gemini_url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={gemini_key}"
+                    combined_text = messages[0].get("content", "") + "\n\n" + messages[1].get("content", "")
+                    gemini_payload = {
+                        "contents": [{"role": "user", "parts": [{"text": combined_text}]}],
+                        "generationConfig": {"temperature": 0.0}
+                    }
+                    with httpx.Client() as client:
+                        gemini_resp = client.post(
+                            gemini_url,
+                            json=gemini_payload,
+                            timeout=10.0
+                        )
+                        if gemini_resp.status_code == 200:
+                            resp_data = gemini_resp.json()
+                            candidates = resp_data.get("candidates", [])
+                            if candidates:
+                                parts = candidates[0].get("content", {}).get("parts", [])
+                                if parts:
+                                    content = parts[0].get("text", "").strip()
+                except Exception as e:
+                    log_error("Gemini prompt enhancement failed, falling back to local Ollama", e)
+
+        # Local Ollama fallback if neither Nebius nor Gemini succeeded
+        if not DISABLE_OLLAMA and not content:
+            url = f"{self.api_url}/api/chat"
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "options": {
+                    "temperature": 0.0,
+                    "num_predict": 150
+                }
+            }
+            try:
+                with httpx.Client() as client:
+                    response = client.post(
+                        url,
+                        json=payload,
+                        timeout=15.0
+                    )
+                    if response.status_code == 200:
+                        resp_data = response.json()
+                        content = resp_data.get("message", {}).get("content", "").strip()
+            except Exception as e:
+                log_error("Ollama prompt enhancement failed", e)
+
+        if content:
+            content = clean_ansi(content).strip()
+            # Clean wrapping quotes if the model output them
+            content = content.strip().strip('"').strip("'").strip('`').strip()
+            return content
+
+        return prompt
+
+    def translate_text(self, text: str, target_language: str) -> str:
+        """Translates the given text into the target language using the LLM."""
+        import os
+        
+        messages = [
+            {
+                "role": "system",
+                "content": f"You are a translator. Translate the given text into {target_language}. Return ONLY the direct translation text. Do not explain, write preambles or wrap in quotes."
+            },
+            {"role": "user", "content": text}
+        ]
+        
+        nebius_key = os.environ.get("NEBIUS_API_KEY") or NEBIUS_API_KEY
+        if nebius_key:
+            content = call_nebius_llm(messages=messages, temperature=0.0)
+            if content:
+                return content.strip()
+                
+        # Fallback to local Ollama
+        if not DISABLE_OLLAMA:
+            url = f"{self.api_url}/api/chat"
+            payload = {
+                "model": self.model,
+                "messages": messages,
+                "stream": False,
+                "options": {"temperature": 0.0}
+            }
+            try:
+                with httpx.Client() as client:
+                    resp = client.post(url, json=payload, timeout=12.0)
+                    if resp.status_code == 200:
+                        return resp.json().get("message", {}).get("content", "").strip()
+            except Exception:
+                pass
+                
+        return f"[Translation to {target_language} failed. Original text]: {text}"
 

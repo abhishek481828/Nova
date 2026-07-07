@@ -171,3 +171,6 @@ active_diagnostics = None   # VoiceDiagnosticsEngine instance (set by conversati
 interrupt_speaking = False
 stream_lock = threading.Lock()
 
+# ChatGPT Response Reading Configs
+READ_CHATGPT_RESPONSES = get_env("READ_CHATGPT_RESPONSES", "True").lower() == "true"
+

@@ -1,7 +1,7 @@
 import unittest
 from typing import Dict, Any
 
-from nova.core.memory import WorkingMemory
+from nova.core.memory import WorkingMemory, reset_working_memory
 from nova.actions.base import BaseAction
 
 # Test actions
@@ -23,8 +23,9 @@ class DummyFailureAction(BaseAction):
 
 class TestActionMemory(unittest.TestCase):
     def setUp(self):
-        # Instantiate working memory which automatically sets BaseAction._shared_working_memory
-        self.wm = WorkingMemory()
+        # reset_working_memory() returns a fresh shared instance and sets it as
+        # the process-wide singleton, giving this test class a clean slate.
+        self.wm = reset_working_memory()
         self.success_action = DummySuccessAction()
         self.failure_action = DummyFailureAction()
 

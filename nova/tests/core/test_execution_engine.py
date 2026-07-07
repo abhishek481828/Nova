@@ -10,7 +10,7 @@ from typing import Dict, Any, List, Optional
 
 from nova.ai.planner import Planner, Goal, Plan, PlanStep, RecoveryPolicy
 from nova.ai.reasoning import ExecutionEngine, ExecutionState, PlanQueue
-from nova.core.memory import WorkingMemory
+from nova.core.memory import WorkingMemory, reset_working_memory
 from nova.core.memory import LongTermMemoryManager
 from nova.actions.base import BaseAction
 
@@ -46,7 +46,7 @@ class MockAction(BaseAction):
 
 class TestExecutionEngine(unittest.TestCase):
     def setUp(self):
-        self.wm = WorkingMemory()
+        self.wm = reset_working_memory()
         self.dispatcher = {
             "mock_success": MockAction("mock_success", "success"),
             "mock_fail": MockAction("mock_fail", "fail"),

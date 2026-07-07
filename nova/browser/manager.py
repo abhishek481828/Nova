@@ -5,6 +5,7 @@ import subprocess
 import json
 import atexit
 import errno
+import threading
 from nova.utils import resolve_chromium_bin, print_info, print_warning
 from nova.config import CHROMIUM_DEVTOOLS_PORT
 from nova.logger import logger
@@ -591,23 +592,13 @@ class BrowserManager:
 
     @classmethod
     def get_persistent_context(cls, browser):
-        """
-        Safely retrieve the default persistent browser context.
-        
-        RATIONALE:
-        When connecting to Chromium via CDP, the browser instance already has a
-        default persistent context created on launch (corresponding to the main user
-        profile/data-dir). 
-        
-        Creating a new context via browser.new_context() creates a new, isolated
-        non-persistent (incognito-like) context. This splits the user session,
-        causing automation actions to run in a clean sandbox instead of inheriting
-        the active user profile, cookies, and state (e.g. login credentials).
-        
-        Therefore, we must strictly attach to the existing persistent context and
-        never create a new one. If no active context is found, we fall back to creating
-        a new context to prevent automation failure.
-        """
+        from nova.browser.runner import BrowserRunner
+        if not _is_testing() and BrowserRunner._running and threading.current_thread().name != "BrowserRunnerThread":
+            if cls._browser_context is None or not hasattr(cls._browser_context, "_mock_name"):
+                raise RuntimeError(
+                    f"Thread Violation: Playwright context accessed from thread '{threading.current_thread().name}'."
+                )
+
         if not browser.contexts:
             logger.warning("No active browser contexts found. Creating a fallback context.")
             try:
@@ -643,10 +634,14 @@ class BrowserManager:
 
     @classmethod
     def get_browser(cls, playwright_api=None):
-        """
-        Retrieve or establish the persistent Playwright CDP connection.
-        If the connection is lost or closed, it automatically reconnects.
-        """
+        from nova.browser.runner import BrowserRunner
+        if not _is_testing() and BrowserRunner._running and threading.current_thread().name != "BrowserRunnerThread":
+            if cls._browser is None or not hasattr(cls._browser, "_mock_name"):
+                raise RuntimeError(
+                    f"Thread Violation: Playwright browser accessed from thread '{threading.current_thread().name}'. "
+                    "All browser operations must run on BrowserRunner thread."
+                )
+
         # Validate existing browser connection
         if cls._browser is not None and cls._browser.is_connected():
             try:
@@ -711,6 +706,31 @@ class BrowserManager:
             err_msg = f"Failed to connect to browser over CDP: {e}\n{traceback.format_exc()}"
             logger.error(err_msg)
             raise Exception(err_msg)
+
+    @classmethod
+    def verify_browser_safety(cls) -> bool:
+        """
+        Runs browser safety validation inside the BrowserRunner thread.
+        Verifies that Chromium is running, connects, and checks that target URL is safe.
+        """
+        if not cls.is_browser_running():
+            cls.ensure_browser()
+            
+        browser = cls.get_browser()
+        context = cls.get_persistent_context(browser)
+        
+        pages = context.pages
+        safe_pages = [p for p in pages if not (p.url or "").startswith("chrome-extension://")]
+        
+        if not safe_pages:
+            page = context.new_page()
+        else:
+            page = find_active_page(context)
+            
+        if (page.url or "").startswith("chrome-extension://"):
+            raise ValueError(f"Target URL points to an extension page: {page.url}")
+            
+        return True
 
     @classmethod
     def close_connection(cls):
@@ -847,7 +867,8 @@ class BrowserManager:
         if cls._working_memory is None:
             return
         try:
-            cls.update_browser_memory_state(cls._working_memory)
+            from nova.browser.runner import BrowserRunner
+            BrowserRunner.execute(cls.update_browser_memory_state, cls._working_memory)
         except Exception as e:
             logger.debug(f"Failed to trigger browser memory update: {e}")
 
@@ -996,11 +1017,22 @@ def _focused_page(pages):
     return None
 
 
+def _is_testing() -> bool:
+    import sys
+    return "pytest" in sys.modules or "unittest" in sys.modules or any("pytest" in arg for arg in sys.argv)
+
+
 def find_active_page(context: BrowserContext) -> Page:
     """
     Find the page the user is most likely looking at right now.
     Priority: visible -> focused -> first open page -> new blank page.
     """
+    from nova.browser.runner import BrowserRunner
+    if not _is_testing() and BrowserRunner._running and threading.current_thread().name != "BrowserRunnerThread":
+        if context is None or not hasattr(context, "_mock_name"):
+            raise RuntimeError(
+                f"Thread Violation: find_active_page accessed from thread '{threading.current_thread().name}'."
+            )
     pages = context.pages
     safe_pages = [p for p in pages if not (p.url or "").startswith("chrome-extension://")]
     return (

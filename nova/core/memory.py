@@ -20,6 +20,11 @@ from nova.core.context import BrowserInfo, MemoryContext, MemoryContextManager
 # Allowed values for runtime execution status
 VALID_STATUSES = {"idle", "running", "paused", "completed", "failed", "aborted"}
 
+# Module-level shared WorkingMemory state — declared early so WorkingMemory.__init__
+# can reference it for the divergence warning.
+_shared_wm_instance: Optional["WorkingMemory"] = None
+_shared_wm_lock: threading.Lock = threading.Lock()
+
 
 @dataclass
 class MemoryEvent:
@@ -83,6 +88,19 @@ class SessionState:
     download_activity: List[Dict[str, Any]] = field(default_factory=list)
     open_tabs_count: int = 0
 
+    # Project Awareness Engine properties
+    project_root: Optional[str] = None
+    project_name: Optional[str] = None
+    project_languages: List[str] = field(default_factory=list)
+    project_frameworks: List[str] = field(default_factory=list)
+
+    # Git Intelligence Engine properties
+    current_branch: Optional[str] = None
+    git_status: Optional[str] = None
+    last_commit: Optional[str] = None
+    staged_files: List[str] = field(default_factory=list)
+    modified_files: List[str] = field(default_factory=list)
+
     def __post_init__(self) -> None:
         self.validate()
 
@@ -133,6 +151,23 @@ class SessionState:
         for item in self.download_activity:
             if not isinstance(item, dict):
                 raise TypeError("All items in download_activity must be dictionaries.")
+
+        if self.current_branch is not None and not isinstance(self.current_branch, str):
+            raise TypeError("current_branch must be a string or None.")
+        if self.git_status is not None and not isinstance(self.git_status, str):
+            raise TypeError("git_status must be a string or None.")
+        if self.last_commit is not None and not isinstance(self.last_commit, str):
+            raise TypeError("last_commit must be a string or None.")
+        if not isinstance(self.staged_files, list):
+            raise TypeError("staged_files must be a list.")
+        for item in self.staged_files:
+            if not isinstance(item, str):
+                raise TypeError("All items in staged_files must be strings.")
+        if not isinstance(self.modified_files, list):
+            raise TypeError("modified_files must be a list.")
+        for item in self.modified_files:
+            if not isinstance(item, str):
+                raise TypeError("All items in modified_files must be strings.")
 
 
 @dataclass
@@ -216,12 +251,25 @@ class WorkingMemory:
         self.state = WorkingMemoryState()
         self.context_manager = MemoryContextManager(self)
         self.history_manager = MemoryHistoryManager(self, limit=history_limit)
-        
+
         try:
             from nova.actions.base import BaseAction
             BaseAction._shared_working_memory = self
         except Exception:
             pass
+
+        # Warn when a raw WorkingMemory() is constructed while a shared instance
+        # already exists — this usually means a module accidentally bypassed
+        # get_working_memory() and will operate on a disconnected store.
+        if _shared_wm_instance is not None and self is not _shared_wm_instance:
+            logger.warning(
+                "[WorkingMemory] A new WorkingMemory instance is being created "
+                "(id=%d) while the shared instance (id=%d) already exists. "
+                "Use get_working_memory() in production code to avoid divergence.",
+                id(self),
+                id(_shared_wm_instance),
+            )
+
         logger.info("Working memory system initialized.")
 
     def log_system_event(self, message: str, metadata: Optional[Dict[str, Any]] = None) -> HistoryEntry:
@@ -306,6 +354,8 @@ class WorkingMemory:
                     default_val = []
                 elif key == "open_tabs_count":
                     default_val = 0
+                elif key in ("staged_files", "modified_files"):
+                    default_val = []
                 setattr(self.state.session_state, key, default_val)
                 self.state.session_state.validate()
                 logger.debug(f"Session state attribute reset: '{key}'", extra={"key": key})
@@ -502,6 +552,54 @@ class WorkingMemory:
         with self._lock:
             self.clear()
             logger.info("Working memory system reset.")
+
+
+# ── Shared WorkingMemory instance ─────────────────────────────────────────────
+# All production modules MUST use get_working_memory() to access the single
+# shared instance.  WorkingMemory() can still be used directly in unit tests
+# that need an isolated store, but those tests should call reset_working_memory()
+# in setUp() to ensure the shared instance is also clean.
+# (_shared_wm_instance and _shared_wm_lock are declared at module top.)
+
+
+def get_working_memory() -> "WorkingMemory":
+    """
+    Return the process-wide shared WorkingMemory instance.
+
+    Thread-safe lazy initialization using double-checked locking.
+    All production modules (daemon, CLI, session manager, voice pipeline, etc.)
+    must call this function instead of constructing WorkingMemory() directly.
+    """
+    global _shared_wm_instance
+    if _shared_wm_instance is None:
+        with _shared_wm_lock:
+            if _shared_wm_instance is None:
+                _shared_wm_instance = WorkingMemory()
+                logger.info(
+                    "[WorkingMemory] Shared instance created (id=%d).",
+                    id(_shared_wm_instance),
+                )
+    return _shared_wm_instance
+
+
+def reset_working_memory() -> "WorkingMemory":
+    """
+    Replace the shared WorkingMemory instance with a fresh one.
+
+    **TEST USE ONLY.**  Call this in test setUp() to guarantee a clean
+    shared instance between test cases without leaving stale state behind.
+
+    Returns the new shared instance so callers can assign it directly:
+        self.wm = reset_working_memory()
+    """
+    global _shared_wm_instance
+    with _shared_wm_lock:
+        _shared_wm_instance = WorkingMemory()
+        logger.debug(
+            "[WorkingMemory] Shared instance reset (id=%d).",
+            id(_shared_wm_instance),
+        )
+    return _shared_wm_instance
 
 
 # ==========================================
