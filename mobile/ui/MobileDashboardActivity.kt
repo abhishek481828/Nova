@@ -88,7 +88,15 @@ class MobileDashboardActivity : Activity() {
                 • Pending Conflicts   : ${health["sync_conflicts_pending"]}
                 • Last Sync           : ${if ((health["sync_last_timestamp"] as? Long ?: 0L) > 0L) "Recent ✅" else "Never"}
                 • Trusted Devices     : ${core.syncManager.deviceRegistry.getAuthenticated().size}
-                • Version             : 3.0.0 (Phase 8 Multi-Device Sync Active)
+                
+                === AI SKILLS PLATFORM (PHASE 9) ===
+                • Installed Skills    : ${health["skills_installed"]}
+                • Running Skills      : ${health["skills_running"]}
+                • Total Executions    : ${health["skills_total_executions"]}
+                • Failed Executions   : ${health["skills_failed_executions"]}
+                • Registered Intents  : ${core.skillManager.registry.getIntentIndex().size}
+                • Pending Approvals   : ${core.skillManager.getPendingPermissions().values.sumOf { it.size }}
+                • Version             : 3.0.0 (Phase 9 AI Skills Platform Active)
             """.trimIndent()
         }
 

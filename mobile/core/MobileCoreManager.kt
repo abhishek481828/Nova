@@ -58,6 +58,9 @@ class MobileCoreManager private constructor(private val context: Context) {
             lifecycleManager = lifecycleManager
         )
     }
+    val skillManager: com.nova.mobile.skills.SkillManager by lazy {
+        com.nova.mobile.skills.SkillManager(lifecycleManager)
+    }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -139,6 +142,19 @@ class MobileCoreManager private constructor(private val context: Context) {
             // 12. Start Sync Manager (Phase 8)
             syncManager.start()
 
+            // 13. Initialize & Register Built-In Skills (Phase 9)
+            listOf(
+                com.nova.mobile.skills.builtin.CalculatorSkill(),
+                com.nova.mobile.skills.builtin.UnitConverterSkill(),
+                com.nova.mobile.skills.builtin.DeviceStatusSkill(),
+                com.nova.mobile.skills.builtin.NotesSkill(),
+                com.nova.mobile.skills.builtin.TranslatorSkill(),
+                com.nova.mobile.skills.builtin.WeatherSkill(),
+                com.nova.mobile.skills.builtin.ReminderSkill(),
+                com.nova.mobile.skills.builtin.AlarmSkill(),
+                com.nova.mobile.skills.builtin.TimerSkill()
+            ).forEach { skill -> skillManager.installAndLoad(skill) }
+
             isInitialized = true
             lifecycleManager.publishEvent("AppStarted", mapOf("version" to "3.0.0"))
             Log.i(TAG, "Nova Mobile Core v3.0 initialized successfully.")
@@ -206,7 +222,11 @@ class MobileCoreManager private constructor(private val context: Context) {
             "sync_total_sent" to syncManager.getStats().totalPayloadsSent,
             "sync_total_received" to syncManager.getStats().totalPayloadsReceived,
             "sync_conflicts_pending" to syncManager.repository.getUnresolved().size,
-            "sync_last_timestamp" to syncManager.getStats().lastSyncTimestamp
+            "sync_last_timestamp" to syncManager.getStats().lastSyncTimestamp,
+            "skills_installed" to skillManager.registry.count(),
+            "skills_running" to skillManager.registry.countEnabled(),
+            "skills_total_executions" to skillManager.executor.totalExecutions(),
+            "skills_failed_executions" to skillManager.executor.failureCount()
         )
     }
 }
