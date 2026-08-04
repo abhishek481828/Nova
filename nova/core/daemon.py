@@ -219,6 +219,43 @@ def run_daemon() -> None:
                     conn.close()
                     continue
 
+                # Direct Phone Control Shortcuts in Daemon Mode
+                if any(phrase in query_lower for phrase in ("list phone apps", "show phone apps", "list apps on phone", "installed phone apps", "phone apps")):
+                    inc_sys = True if "system" in query_lower else False
+                    res = dispatcher["app_list"].execute({"include_system": inc_sys})
+                    conn.sendall((res + "\n").encode("utf-8"))
+                    conn.close()
+                    continue
+                elif "on phone" in query_lower and any(query_lower.startswith(p) for p in ("open ", "launch ")):
+                    import re as _re
+                    match = _re.search(r"^(?:open|launch)\s+(.+?)\s+on\s+phone$", query_lower)
+                    if match:
+                        app_target = match.group(1).strip()
+                        res = dispatcher["app_launch"].execute({"app_name": app_target})
+                        conn.sendall((res + "\n").encode("utf-8"))
+                        conn.close()
+                        continue
+                elif any(phrase in query_lower for phrase in ("go home on phone", "press home on phone")):
+                    res = dispatcher["global_gesture"].execute({"gesture": "home"})
+                    conn.sendall((res + "\n").encode("utf-8"))
+                    conn.close()
+                    continue
+                elif any(phrase in query_lower for phrase in ("go back on phone", "press back on phone")):
+                    res = dispatcher["global_gesture"].execute({"gesture": "back"})
+                    conn.sendall((res + "\n").encode("utf-8"))
+                    conn.close()
+                    continue
+                elif "scroll down" in query_lower and "phone" in query_lower:
+                    res = dispatcher["accessibility_scroll"].execute({"direction": "down"})
+                    conn.sendall((res + "\n").encode("utf-8"))
+                    conn.close()
+                    continue
+                elif "scroll up" in query_lower and "phone" in query_lower:
+                    res = dispatcher["accessibility_scroll"].execute({"direction": "up"})
+                    conn.sendall((res + "\n").encode("utf-8"))
+                    conn.close()
+                    continue
+
                 import time
                 start_intent = time.time()
                 raw_response = ai_client.parse_intent(query)

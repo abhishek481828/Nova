@@ -412,12 +412,13 @@ class Planner:
         matched_key = None
         # Match rules using original description (before context overrides)
         orig_desc_lower = description.lower()
-        for key in DECOMPOSITION_RULES:
-            if key not in rule_history:
-                pattern = r'\b' + re.escape(key) + r'\b'
-                if re.search(pattern, orig_desc_lower):
-                    matched_key = key
-                    break
+        if "phone" not in orig_desc_lower and "on phone" not in orig_desc_lower:
+            for key in DECOMPOSITION_RULES:
+                if key not in rule_history:
+                    pattern = r'\b' + re.escape(key) + r'\b'
+                    if re.search(pattern, orig_desc_lower):
+                        matched_key = key
+                        break
 
         if matched_key:
             logger.info(f"Decomposing step '{description}' using rule '{matched_key}'")

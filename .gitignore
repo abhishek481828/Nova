@@ -8,7 +8,7 @@ __pycache__/
 .vscode/
 .idea/
 
-# Browser profiles, locks, cache, and state (including local or literal ~ directories)
+# Browser profiles, locks, cache, and state
 ~
 **/~
 *profile*/
@@ -40,10 +40,23 @@ env/
 # Node dependencies and build artifacts
 node_modules/
 dist/
+logs/
+downloads/
+backups/
+config/
+
+# Android build artifacts
+android/.gradle/
+android/app/build/
+android/.idea/
+android/*.iml
 
 # Local temporary/scratch files
 temp/
 scratch/
 record.txt
-
-
+a.py
+db.py
+main.py
+nova-phone
+utils.py

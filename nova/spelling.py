@@ -106,6 +106,36 @@ def correct_query_spelling(query: str) -> str:
     if query_clean in ("sleep", "sleeping", "go to sleep", "put system to sleep", "suspend", "suspend system"):
         print_info("Mapping query to system suspend action...")
         return "suspend system"
+    # Map phone control commands to standardized forms
+    phone_connect_phrases = ("connect phone", "connect to phone", "phone connect", "nova connect phone", "pair phone", "connect my phone")
+    phone_flash_on_phrases = ("turn on phone flash", "turn on flashlight", "flash on", "flashlight on", "enable flashlight", "phone flash on", "phone torch on", "turn on flash", "turn on phone flashlight")
+    phone_flash_off_phrases = ("turn off phone flash", "turn off flashlight", "flash off", "flashlight off", "disable flashlight", "phone flash off", "phone torch off", "turn off flash", "turn off phone flashlight")
+    phone_vibrate_phrases = ("vibrate phone", "phone vibrate", "vibrate my phone", "buzz my phone", "buzz phone")
+
+    if query_clean in phone_connect_phrases or any(p in query_clean for p in phone_connect_phrases):
+        return "connect phone"
+    if query_clean in phone_flash_on_phrases or any(p in query_clean for p in phone_flash_on_phrases):
+        return "turn on phone flash"
+    if query_clean in phone_flash_off_phrases or any(p in query_clean for p in phone_flash_off_phrases):
+        return "turn off phone flash"
+    if query_clean in phone_vibrate_phrases or any(p in query_clean for p in phone_vibrate_phrases):
+        return "vibrate phone"
+
+    # Map Phase E media commands
+    if any(p in query_clean for p in ("take photo", "capture photo", "snap photo", "take a photo")):
+        return "take photo on phone"
+    if any(p in query_clean for p in ("record video", "record phone video", "take video")):
+        return "record video on phone"
+    if any(p in query_clean for p in ("scan qr", "scan qr code", "qr scanner")):
+        return "scan qr code on phone"
+    if any(p in query_clean for p in ("ocr scan", "extract text from camera", "phone ocr")):
+        return "ocr scan on phone"
+    if any(p in query_clean for p in ("phone gallery", "show gallery", "list gallery", "gallery items")):
+        return "show phone gallery"
+    if any(p in query_clean for p in ("view photo", "open photo", "see photo", "show photo")):
+        return "view photo on phone"
+    if any(p in query_clean for p in ("upload photo", "upload media", "upload to server")):
+        return "upload media to server"
 
     return query
 

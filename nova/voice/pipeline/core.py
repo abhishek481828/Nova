@@ -367,11 +367,11 @@ def process_single_iteration(
                         _, speaker_score = verifier.verify(wake_audio, SAMPLE_RATE)
                         
                     _raw_wake = wake_score
-                    _wake_detect_thresh = 0.07
-                    if _raw_wake >= _wake_detect_thresh:
-                        normalized_wake = 0.70 + 0.30 * min(1.0, (_raw_wake - _wake_detect_thresh) / (1.0 - _wake_detect_thresh))
+                    _wake_thresh = wake_detector.confidence_threshold if wake_detector is not None else wake_word_threshold
+                    if _raw_wake >= _wake_thresh:
+                        normalized_wake = 0.70 + 0.30 * min(1.0, (_raw_wake - _wake_thresh) / (1.0 - _wake_thresh)) if _wake_thresh < 1.0 else 1.0
                     else:
-                        normalized_wake = _raw_wake
+                        normalized_wake = 0.70 * (_raw_wake / _wake_thresh) if _wake_thresh > 0.0 else _raw_wake
 
                     normalized_speaker = speaker_score
                     if speaker_score is not None and verifier is not None:

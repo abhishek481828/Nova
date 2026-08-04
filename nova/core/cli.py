@@ -121,6 +121,224 @@ def run_cli_repl(args=None) -> None:
                 
             # Check for direct voice subsystem commands in REPL
             cmd_lower = user_input.lower().strip()
+
+            # Phone Control Natural Language Shortcuts
+            if any(phrase in cmd_lower for phrase in ("connect phone", "connect to phone", "phone connect", "nova connect phone")):
+                action_res = dispatcher["phone_connect"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("turn on phone flash", "turn on flashlight", "flash on", "flashlight on", "turn on flash", "enable flashlight", "on phone flash")):
+                action_res = dispatcher["phone_flashlight"].execute({"state": "on"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("turn off phone flash", "turn off flashlight", "flash off", "flashlight off", "turn off flash", "disable flashlight", "off phone flash")):
+                action_res = dispatcher["phone_flashlight"].execute({"state": "off"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("vibrate phone", "phone vibrate")):
+                action_res = dispatcher["phone_vibrate"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("decrease phone volume", "lower phone volume", "reduce phone volume", "phone volume down")):
+                import re as _re
+                nums = _re.findall(r'\d+', user_input)
+                level = int(nums[0]) if nums else 10
+                action_res = dispatcher["phone_volume"].execute({"operation": "decrease", "level": level})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("increase phone volume", "raise phone volume", "phone volume up")):
+                import re as _re
+                nums = _re.findall(r'\d+', user_input)
+                level = int(nums[0]) if nums else 10
+                action_res = dispatcher["phone_volume"].execute({"operation": "increase", "level": level})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("mute my phone", "mute phone", "phone mute")):
+                action_res = dispatcher["phone_volume"].execute({"operation": "mute"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("set phone volume", "phone volume set", "phone volume to")):
+                import re as _re
+                nums = _re.findall(r'\d+', user_input)
+                level = int(nums[0]) if nums else 50
+                action_res = dispatcher["phone_volume"].execute({"operation": "set", "level": level})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("take photo", "capture photo", "snap photo", "take a photo")):
+                facing = "front" if "front" in cmd_lower else "back"
+                action_res = dispatcher["phone_camera"].execute({"operation": "capture_photo", "camera_selector": facing})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("record video", "record phone video", "take video")):
+                import re as _re
+                nums = _re.findall(r'\d+', user_input)
+                dur = int(nums[0]) if nums else 5
+                facing = "front" if "front" in cmd_lower else "back"
+                action_res = dispatcher["phone_camera"].execute({"operation": "record_video", "camera_selector": facing, "duration_seconds": dur})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("scan qr", "scan qr code", "qr scanner")):
+                action_res = dispatcher["phone_camera"].execute({"operation": "scan_qr"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("ocr scan", "extract text from camera", "phone ocr")):
+                action_res = dispatcher["phone_camera"].execute({"operation": "ocr_scan"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("phone gallery", "show gallery", "list gallery", "gallery items")):
+                import re as _re
+                nums = _re.findall(r'\d+', user_input)
+                limit = int(nums[0]) if nums else 5
+                action_res = dispatcher["phone_gallery"].execute({"operation": "get_recent", "limit": limit})
+                print_success(action_res)
+                continue
+            elif "on phone" not in cmd_lower and any(phrase in cmd_lower for phrase in ("view photo", "open photo", "see photo", "show photo", "view image", "open image")):
+                import re as _re
+                nums = _re.findall(r'\d+', user_input)
+                idx = int(nums[0]) if nums else 1
+                action_res = dispatcher["phone_gallery"].execute({"operation": "view", "index": idx})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("upload photo", "upload media", "upload to server")):
+                action_res = dispatcher["phone_media_upload"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("list phone apps", "show phone apps", "list apps on phone", "installed phone apps")):
+                inc_sys = True if "system" in cmd_lower else False
+                action_res = dispatcher["app_list"].execute({"include_system": inc_sys})
+                print_success(action_res)
+                continue
+            elif "youtube" in cmd_lower and any(kw in cmd_lower for kw in ("search", "play", "find")):
+                import re as _re
+                m = _re.search(r"^(?:search|play|find)\s+(.+?)\s+on\s+youtube(?:\s+(?:in|on)\s+phone)?$", cmd_lower)
+                if not m:
+                    m = _re.search(r"^(?:search|find)\s+youtube\s+for\s+(.+?)(?:\s+(?:in|on)\s+phone)?$", cmd_lower)
+                if m:
+                    yt_query = m.group(1).strip()
+                    action_res = dispatcher["app_launch"].execute({"app_name": "youtube", "search_query": yt_query})
+                    print_success(action_res)
+                    continue
+            elif "whatsapp" in cmd_lower and any(kw in cmd_lower for kw in ("call", "voice call", "message", "msg")):
+                import re as _re
+                m = _re.search(r"^(?:call|voice call)\s+(.+?)\s+on\s+whatsapp(?:\s+(?:in|on)\s+phone)?$", cmd_lower)
+                if m:
+                    contact = m.group(1).strip()
+                    action_res = dispatcher["app_launch"].execute({"app_name": "whatsapp", "contact_name": contact, "operation": "call"})
+                    print_success(action_res)
+                    continue
+            elif "on phone" in cmd_lower and any(cmd_lower.startswith(p) for p in ("open ", "launch ")):
+                import re as _re
+                match = _re.search(r"^(?:open|launch)\s+(.+?)\s+on\s+phone$", cmd_lower)
+                if match:
+                    app_target = match.group(1).strip()
+                    action_res = dispatcher["app_launch"].execute({"app_name": app_target})
+                    print_success(action_res)
+                    continue
+            elif any(phrase in cmd_lower for phrase in ("take screenshot", "take screenshot on phone", "screen capture", "screenshot phone", "take a screenshot")):
+                action_res = dispatcher["screen_capture"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("start screen recording", "record phone screen", "start recording phone screen", "start recording")):
+                action_res = dispatcher["screen_record_start"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("stop screen recording", "stop recording phone screen", "stop recording")):
+                action_res = dispatcher["screen_record_stop"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("start screen stream", "start screen streaming", "start screen sharing")):
+                action_res = dispatcher["screen_stream_start"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("stop screen stream", "stop screen streaming", "stop screen sharing")):
+                action_res = dispatcher["screen_stream_stop"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("get screen state", "screen state", "check screen state", "screen status")):
+                action_res = dispatcher["screen_state_get"].execute({})
+                print_success(action_res)
+                continue
+            elif any(cmd_lower.startswith(p) for p in ("tap ", "click ")) and any(char.isdigit() for char in cmd_lower):
+                import re as _re
+                match = _re.search(r"^(?:tap|click)\s+(?:at\s+)?(\d+)\s+(\d+)(?:\s+on\s+phone)?$", cmd_lower)
+                if match:
+                    x, y = float(match.group(1)), float(match.group(2))
+                    action_res = dispatcher["screen_tap"].execute({"x": x, "y": y})
+                    print_success(action_res)
+                    continue
+            elif any(phrase in cmd_lower for phrase in ("start voice session", "start voice session on phone", "start voice mode")):
+                action_res = dispatcher["voice_session_start"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("stop voice session", "stop voice session on phone", "stop voice mode")):
+                action_res = dispatcher["voice_session_stop"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("mic on", "open mic", "start mic", "listen", "start audio capture", "start mic capture")):
+                action_res = dispatcher["audio_capture_start"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("mic off", "close mic", "stop mic", "stop audio capture", "stop mic capture")):
+                action_res = dispatcher["audio_capture_stop"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("mute mic", "mute microphone", "mute phone mic")):
+                action_res = dispatcher["microphone_mute"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("unmute mic", "unmute microphone", "unmute phone mic")):
+                action_res = dispatcher["microphone_unmute"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("go home on phone", "press home on phone")):
+                action_res = dispatcher["global_gesture"].execute({"gesture": "home"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("go back on phone", "press back on phone")):
+                action_res = dispatcher["global_gesture"].execute({"gesture": "back"})
+                print_success(action_res)
+                continue
+            elif "scroll down" in cmd_lower and "phone" in cmd_lower:
+                action_res = dispatcher["accessibility_scroll"].execute({"direction": "down"})
+                print_success(action_res)
+                continue
+            elif "scroll up" in cmd_lower and "phone" in cmd_lower:
+                action_res = dispatcher["accessibility_scroll"].execute({"direction": "up"})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device info", "phone info", "check device info")):
+                action_res = dispatcher["device_info"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device health", "phone health", "check device health")):
+                action_res = dispatcher["device_health"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device storage", "phone storage", "check storage")):
+                action_res = dispatcher["device_storage"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device memory", "phone memory", "phone ram", "check ram")):
+                action_res = dispatcher["device_memory"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device cpu", "phone cpu", "check cpu")):
+                action_res = dispatcher["device_cpu"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device battery", "phone battery", "check battery")):
+                action_res = dispatcher["device_battery"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("adb devices", "adb status")):
+                action_res = dispatcher["adb_status"].execute({})
+                print_success(action_res)
+                continue
+            elif any(phrase in cmd_lower for phrase in ("device backup", "backup phone", "backup device")):
+                action_res = dispatcher["device_backup"].execute({})
+                print_success(action_res)
+                continue
+
             if cmd_lower == "voice-setup":
                 from nova.voice.speaker import run_speaker_enrollment_wizard as voice_setup_main
                 try:

@@ -162,6 +162,9 @@ def determine_required_skills(description: str, action_type: str) -> List[str]:
         "music": ["music", "song", "audio player", "spotify", "soundtrack"]
     }
     
+    if "phone" in desc_lower or "on phone" in desc_lower or any(x in act_lower for x in ["app_launch", "app_list", "accessibility", "global_gesture", "phone"]):
+        return ["adb"]
+
     for skill, keywords in mappings.items():
         if skill in act_lower:
             skills.append(skill)

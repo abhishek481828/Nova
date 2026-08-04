@@ -1,25 +1,19 @@
-# Changelog
+# Nova v2.0 — Change Log
 
-All notable changes to this project will be documented in this file.
-
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+All notable changes to Nova v2.0 are documented in this file.
 
 ---
 
-## [1.0.0] - 2026-07-02
+## [2.0.0] - 2026-08-04 - Stable Release
 
 ### Added
-*   Dynamic framework template match rules via external configuration file `mappings.json`.
-*   Systemd user service config file (`home.nix` configuration layout) to manage the daemon service.
-*   Speaker profile reset and verification Wizards.
-
-### Changed
-*   Decoupled circular CLI dependencies by importing `get_greeting` directly from `orchestrator`.
-*   Refactored `assistant.py` to delegate launcher, systemctl commands, and health checks to the new `orchestrator.py` module.
-*   Refactored the voice pipeline loop coordinator in `core.py` to extract diagnostics (`diagnostics.py`), wake loop (`wake.py`), and working memory TURN synchronization (`memory.py`).
-
-### Fixed
-*   Resolved NameErrors in `processors.py` due to missing `voice_config`, `threading`, `collections`, and `json` imports.
-*   Resolved `sounddevice as sd` NameError in voice pipeline core initialization.
-*   Resolved `public_ip` UnboundLocalError in `rich_system_info.py` by initializing the variable.
+- **Phase A**: Companion Gateway, WebSocket Server, JWT Auth, PIN Pairing.
+- **Phase B**: Dynamic Capability Registry, Capability Discovery Protocol.
+- **Phase C**: Hardware Control (Flashlight, Volume, Vibration, Ringtone, Clipboard).
+- **Phase D**: Communication Subsystem (SMS, Calls, Contacts, OTP extraction).
+- **Phase E**: Camera & Media Pipeline (Photos, Video Recording, Media Upload).
+- **Phase F**: Accessibility & App Automation Subsystem (`performTap`, `performSwipe`, `GlobalGesture`).
+- **Phase G**: Screen Capture & Remote Interaction Subsystem (Screenshots, Recording, Remote touch/type).
+- **Phase H**: Audio Streaming & Voice Integration Subsystem (16 kHz PCM mic streaming, TTS `AudioTrack` playback, mic mute/unmute).
+- **Phase I**: Device Management & Remote Operations Subsystem (Device info/health/storage/RAM/CPU, File Manager, Wireless ADB, Backup/Restore).
+- **Phase J**: Production Hardening, Release Packaging, Security Audit, Multi-Channel Logging, and Complete Documentation.

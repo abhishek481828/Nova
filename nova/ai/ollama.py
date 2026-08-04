@@ -1,4 +1,5 @@
 import os
+import re
 import json
 import httpx
 from typing import Optional
@@ -16,6 +17,105 @@ class OllamaClient:
         Sends the user request to Ollama with conversation history and returns the raw JSON string response.
         """
         log_request(user_input)
+        user_lower = user_input.strip().lower()
+
+        # Deterministic Phone Automation Intent Rules
+        if user_lower in ("list phone apps", "show phone apps", "list apps on phone", "show installed phone apps", "phone apps"):
+            return json.dumps({"action": "app_list"})
+
+        match_app = re.search(r"^(?:open|launch)\s+(.+?)\s+on\s+phone$", user_lower)
+        if match_app:
+            target_app = match_app.group(1).strip()
+            return json.dumps({"action": "app_launch", "app_name": target_app})
+
+        match_app2 = re.search(r"^(?:open|launch)\s+phone\s+(.+)$", user_lower)
+        if match_app2 and match_app2.group(1).strip() not in ("camera", "gallery", "flashlight", "volume"):
+            return json.dumps({"action": "app_launch", "app_name": match_app2.group(1).strip()})
+
+        if user_lower in ("go home on phone", "press home on phone", "home button on phone", "go home"):
+            return json.dumps({"action": "global_gesture", "gesture": "home"})
+        if user_lower in ("go back on phone", "press back on phone", "back button on phone"):
+            return json.dumps({"action": "global_gesture", "gesture": "back"})
+        if user_lower in ("show recent apps on phone", "open recent apps on phone"):
+            return json.dumps({"action": "global_gesture", "gesture": "recents"})
+
+        # YouTube Search / Play on Phone
+        match_compound_yt = re.search(r"^(?:open|launch)\s+youtube(?:\s+(?:on|in)\s+phone)?\s+and\s+(?:play|search|find)\s+(.+)$", user_lower)
+        if match_compound_yt:
+            song = match_compound_yt.group(1).strip()
+            return json.dumps({"action": "app_launch", "app_name": "youtube", "search_query": song, "auto_play": True})
+
+        match_yt = re.search(r"^(?:search|play|find)\s+(.+?)\s+on\s+youtube(?:\s+(?:in|on)\s+phone)?$", user_lower)
+        if match_yt:
+            query = match_yt.group(1).strip()
+            return json.dumps({"action": "app_launch", "app_name": "youtube", "search_query": query, "auto_play": True})
+
+        match_yt2 = re.search(r"^(?:search|find)\s+youtube\s+for\s+(.+?)(?:\s+(?:in|on)\s+phone)?$", user_lower)
+        if match_yt2:
+            query = match_yt2.group(1).strip()
+            return json.dumps({"action": "app_launch", "app_name": "youtube", "search_query": query})
+
+        # WhatsApp Call / Message on Phone
+        match_wa_call = re.search(r"^(?:call|voice call)\s+(.+?)\s+on\s+whatsapp(?:\s+(?:in|on)\s+phone)?$", user_lower)
+        if match_wa_call:
+            contact = match_wa_call.group(1).strip()
+            return json.dumps({"action": "app_launch", "app_name": "whatsapp", "contact_name": contact, "operation": "call"})
+
+        match_wa_msg = re.search(r"^(?:message|msg|text|send message to)\s+(.+?)\s+on\s+whatsapp(?:\s+(?:in|on)\s+phone)?$", user_lower)
+        if match_wa_msg:
+            contact = match_wa_msg.group(1).strip()
+            return json.dumps({"action": "app_launch", "app_name": "whatsapp", "contact_name": contact, "operation": "message"})
+
+        # Screen Capture & Remote Interaction Intent Rules (Phase G)
+        if user_lower in ("take screenshot", "take screenshot on phone", "capture phone screen", "screen capture", "screenshot phone", "take a screenshot"):
+            return json.dumps({"action": "screen_capture"})
+
+        if user_lower in ("start screen recording", "start recording phone screen", "record phone screen", "start recording"):
+            return json.dumps({"action": "screen_record_start"})
+
+        if user_lower in ("stop screen recording", "stop recording", "stop recording phone screen"):
+            return json.dumps({"action": "screen_record_stop"})
+
+        if user_lower in ("start screen stream", "start screen streaming", "start screen sharing"):
+            return json.dumps({"action": "screen_stream_start"})
+
+        if user_lower in ("stop screen stream", "stop screen streaming", "stop screen sharing"):
+            return json.dumps({"action": "screen_stream_stop"})
+
+        match_tap = re.search(r"^(?:tap|click)\s+(?:at\s+)?(\d+)\s+(\d+)(?:\s+on\s+phone)?$", user_lower)
+        if match_tap:
+            return json.dumps({"action": "screen_tap", "x": float(match_tap.group(1)), "y": float(match_tap.group(2))})
+
+        match_type = re.search(r"^type\s+(.+?)(?:\s+on\s+phone)?$", user_lower)
+        if match_type and not match_type.group(1).strip().startswith("photo"):
+            return json.dumps({"action": "screen_type", "text": match_type.group(1).strip()})
+
+        if user_lower in ("get screen state", "screen state", "check screen state", "screen status"):
+            return json.dumps({"action": "screen_state_get"})
+
+        # Audio Streaming & Voice Integration Rules (Phase H)
+        if user_lower in ("start voice session", "start voice session on phone", "start voice mode"):
+            return json.dumps({"action": "voice_session_start"})
+
+        if user_lower in ("stop voice session", "stop voice session on phone", "stop voice mode", "exit voice session"):
+            return json.dumps({"action": "voice_session_stop"})
+
+        if user_lower in ("start audio capture", "start mic capture", "record audio on phone", "mic on", "open mic", "start mic", "listen", "mic"):
+            return json.dumps({"action": "audio_capture_start"})
+
+        if user_lower in ("stop audio capture", "stop mic capture", "mic off", "close mic", "stop mic"):
+            return json.dumps({"action": "audio_capture_stop"})
+
+        if user_lower in ("mute mic", "mute microphone", "mute phone mic"):
+            return json.dumps({"action": "microphone_mute"})
+
+        if user_lower in ("unmute mic", "unmute microphone", "unmute phone mic"):
+            return json.dumps({"action": "microphone_unmute"})
+
+        match_scroll = re.search(r"^scroll\s+(down|up|left|right)(?:\s+on\s+phone)?$", user_lower)
+        if match_scroll:
+            return json.dumps({"action": "accessibility_scroll", "direction": match_scroll.group(1)})
+
         url = f"{self.api_url}/api/chat"
         
         # Load recent history to provide context/memory

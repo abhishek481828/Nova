@@ -325,9 +325,9 @@ class AmbientCalibrator:
         else:
             rms = float(np.sqrt(np.mean(flat * flat)))
 
-        self.noise_floor       = rms
-        self.speech_threshold  = rms + NOISE_FLOOR_MARGIN
-        self.silence_threshold = rms + (NOISE_FLOOR_MARGIN * 0.5)
+        self.noise_floor       = max(0.001, rms)
+        self.speech_threshold  = self.noise_floor + NOISE_FLOOR_MARGIN
+        self.silence_threshold = self.noise_floor + (NOISE_FLOOR_MARGIN * 0.5)
         logger.info(
             f"Microphone Calibrated — Noise Floor: {self.noise_floor:.5f} | Speech Threshold: {self.speech_threshold:.5f}"
         )

@@ -46,6 +46,7 @@ try:
 except ImportError:
     pass
 PROJECTS_DIR = Path("/home/nixos/Projects")
+DOWNLOADS_DIR = Path.home() / "Downloads"
 
 # Nova files
 APPS_JSON_PATH = BASE_DIR / "apps.json"
