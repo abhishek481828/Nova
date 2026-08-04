@@ -49,8 +49,16 @@ class MobileDashboardActivity : Activity() {
                 • Recognized Text     : "${core.voiceManager.metrics.lastRecognizedText}"
                 • Confidence Score    : ${core.voiceManager.metrics.lastConfidence}
                 • Session Duration    : ${core.voiceManager.metrics.lastSessionDurationMs}ms
-                • Total Sessions      : ${core.voiceManager.metrics.totalSessions} sessions
-                • Version             : 3.0.0 (Phase 3 Voice Pipeline Active)
+                
+                === LOCAL COMMAND ENGINE (OFFLINE) ===
+                • Detected Intent     : ${health["last_intent"]}
+                • Executing Plugin    : ${core.commandEngine.history.getLastResult()?.pluginUsed ?: "None"}
+                • Extracted Entities  : ${core.commandEngine.history.getLastResult()?.entities ?: "{}"}
+                • Spoken Response     : "${health["last_spoken_response"]}"
+                • Execution Result    : ${if (core.commandEngine.history.getLastResult()?.isSuccess == true) "SUCCESS 🟢" else "READY ⚪"}
+                • Execution Time      : ${core.commandEngine.history.getLastResult()?.executionTimeMs ?: 0}ms
+                • Total Commands      : ${health["total_commands_executed"]} executed
+                • Version             : 3.0.0 (Phase 4 Local Command Engine Active)
             """.trimIndent()
         }
 

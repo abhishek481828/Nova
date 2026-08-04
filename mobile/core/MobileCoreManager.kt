@@ -43,6 +43,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     val communicationBridge: CommunicationBridge by lazy { CommunicationBridge(context) }
     val wakeWordManager: com.nova.mobile.wakeword.WakeWordManager by lazy { com.nova.mobile.wakeword.WakeWordManager(context, lifecycleManager) }
     val voiceManager: com.nova.mobile.voice.VoiceManager by lazy { com.nova.mobile.voice.VoiceManager(context, lifecycleManager) }
+    val commandEngine: com.nova.mobile.command.CommandEngine by lazy { com.nova.mobile.command.CommandEngine(context, lifecycleManager) }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -78,6 +79,12 @@ class MobileCoreManager private constructor(private val context: Context) {
                 voiceManager.startVoiceSession()
             }
 
+            // 8. Auto-connect Voice Recognition -> Local Command Engine Execution
+            voiceManager.addResultListener { recognizedText, _ ->
+                Log.i(TAG, "Speech Recognized: \"$recognizedText\" -> Forwarding to Local Command Engine!")
+                commandEngine.executeText(recognizedText)
+            }
+
             isInitialized = true
             lifecycleManager.publishEvent("AppStarted", mapOf("version" to "3.0.0"))
             Log.i(TAG, "Nova Mobile Core v3.0 initialized successfully.")
@@ -107,6 +114,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     }
 
     fun getHealthStatus(): Map<String, Any> {
+        val lastResult = commandEngine.history.getLastResult()
         return mapOf(
             "version" to "3.0.0",
             "is_initialized" to isInitialized,
@@ -119,7 +127,10 @@ class MobileCoreManager private constructor(private val context: Context) {
             "wakeword_detections" to wakeWordManager.metrics.totalDetections,
             "voice_state" to (voiceManager.currentSession?.currentState?.name ?: "IDLE"),
             "last_recognized_text" to voiceManager.metrics.lastRecognizedText,
-            "recognition_confidence" to voiceManager.metrics.lastConfidence
+            "recognition_confidence" to voiceManager.metrics.lastConfidence,
+            "last_intent" to (lastResult?.intent?.name ?: "NONE"),
+            "last_spoken_response" to (lastResult?.spokenResponse ?: "None"),
+            "total_commands_executed" to commandEngine.history.getTotalCount()
         )
     }
 }

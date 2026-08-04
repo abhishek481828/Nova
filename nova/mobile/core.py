@@ -5,6 +5,7 @@ import logging
 from typing import Dict, Any, List, Optional
 from nova.mobile.wakeword.manager import WakeWordManager
 from nova.mobile.voice.manager import VoiceManager
+from nova.mobile.command.engine import CommandEngine
 
 logger = logging.getLogger("nova.mobile.core")
 
@@ -19,10 +20,16 @@ class MobileCoreManager:
         self.lifecycle_events: List[Dict[str, Any]] = []
         self.wake_word_manager = WakeWordManager()
         self.voice_manager = VoiceManager()
+        self.command_engine = CommandEngine()
 
         # Connect wake word detection trigger to voice manager session
         self.wake_word_manager.listeners.append(
             lambda phrase, score: self.voice_manager.start_voice_session()
+        )
+
+        # Connect voice recognition output to local command engine
+        self.voice_manager.result_listeners.append(
+            lambda recognized_text, score: self.command_engine.execute_text(recognized_text)
         )
 
     @classmethod
@@ -54,6 +61,7 @@ class MobileCoreManager:
 
     def get_health_status(self) -> Dict[str, Any]:
         session_state = self.voice_manager.current_session.current_state.value if self.voice_manager.current_session else "IDLE"
+        last_result = self.command_engine.history.get_last_result()
         return {
             "version": self.version,
             "is_initialized": self.is_initialized,
@@ -66,5 +74,11 @@ class MobileCoreManager:
             "wakeword_detections": self.wake_word_manager.metrics.total_detections,
             "voice_state": session_state,
             "last_recognized_text": self.voice_manager.metrics.last_recognized_text,
-            "recognition_confidence": self.voice_manager.metrics.last_confidence
+            "recognition_confidence": self.voice_manager.metrics.last_confidence,
+            "last_intent": last_result.intent.value if last_result else "NONE",
+            "last_spoken_response": last_result.spoken_response if last_result else "None",
+            "total_commands_executed": self.history_count()
         }
+
+    def history_count(self) -> int:
+        return self.command_engine.history.get_total_count()

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive Manual Test Utility for Nova v3.0 Phase 1, Phase 2 & Phase 3."""
+"""Interactive Manual Test Utility for Nova v3.0 Phase 1, Phase 2, Phase 3 & Phase 4."""
 
 import sys
 import time
@@ -13,6 +13,7 @@ from nova.mobile.security import MobileSecurityManager
 from nova.mobile.communication import CommunicationBridge, MobileCommand, ExecutionTarget
 from nova.mobile.wakeword.manager import WakeWordManager
 from nova.mobile.voice.manager import VoiceManager
+from nova.mobile.command.engine import CommandEngine
 
 
 def print_header(title):
@@ -34,6 +35,7 @@ def main():
     cfg = ConfigurationManager()
     ww_manager = core.wake_word_manager
     voice_mgr = core.voice_manager
+    cmd_engine = core.command_engine
 
     while True:
         print("\nSelect an operation to test:")
@@ -47,7 +49,8 @@ def main():
         print(" [8] Test Communication Bridge (Target Execution Routing)")
         print(" [9] Test Wake Word Engine (Start / Trigger 'Hey Nova' / Restart)")
         print(" [10] Test Voice Pipeline & Speech Recognition ('Call Pankaj' -> Event)")
-        print(" [11] Graceful System Shutdown")
+        print(" [11] Test Local Command Engine (Intent Classification & Plugin Dispatch)")
+        print(" [12] Graceful System Shutdown")
         print(" [0] Exit")
 
         try:
@@ -79,6 +82,8 @@ def main():
             print(f" • Security Ready         : {sec.is_ready}")
             print(f" • Wake Word Status       : {if_str(ww_manager.is_listening, 'LISTENING 🟢', 'IDLE ⚪')}")
             print(f" • Voice Session State    : {health['voice_state']}")
+            print(f" • Last Executed Intent   : {health['last_intent']}")
+            print(f" • Spoken Response        : \"{health['last_spoken_response']}\"")
 
         elif choice == "3":
             print_header("PLUGIN MANAGER TEST")
@@ -169,6 +174,18 @@ def main():
             print(f"✔ Session End State     : {session.current_state.value}")
 
         elif choice == "11":
+            print_header("LOCAL COMMAND ENGINE & INTENT DISPATCH TEST")
+            cmd_input = input("Enter test command (e.g., 'Turn on flashlight', 'Set volume to 80 percent', 'Open YouTube', 'Call Pankaj'): ").strip() or "Turn on flashlight"
+            
+            res = cmd_engine.execute_text(cmd_input)
+            print(f"✔ Classified Intent    : {res.intent.value}")
+            print(f"✔ Extracted Entities   : {res.entities}")
+            print(f"✔ Plugin Dispatched    : {res.plugin_used}")
+            print(f"✔ Spoken Response      : \"{res.spoken_response}\"")
+            print(f"✔ Execution Success    : {res.is_success}")
+            print(f"✔ Total Commands Count : {cmd_engine.history.get_total_count()}")
+
+        elif choice == "12":
             print("\n[INFO] Shutting down Nova Mobile Core...")
             core.shutdown()
             db.close()
@@ -180,7 +197,7 @@ def main():
             print("Exiting Nova Mobile manual test.")
             break
         else:
-            print("Invalid option. Please enter 0 to 11.")
+            print("Invalid option. Please enter 0 to 12.")
 
 
 def if_str(cond, val_true, val_false):
