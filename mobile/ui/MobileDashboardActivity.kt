@@ -64,7 +64,14 @@ class MobileDashboardActivity : Activity() {
                 • Nova Core Status    : ${if (health["nova_core_online"] == true) "ONLINE 🟢" else "OFFLINE 🔴"}
                 • Core Latency        : ${health["nova_core_latency_ms"]}ms
                 • Last Exec Target    : ${core.hybridRouter.routingEngine.policy.name}
-                • Version             : 3.0.0 (Phase 5 Hybrid AI Router Active)
+                
+                === PERSONAL MEMORY (PHASE 6) ===
+                • Total Memories      : ${health["memory_total_entries"]}
+                • Favorite Contacts   : ${health["memory_favorite_contacts"]}
+                • Favorite Apps       : ${health["memory_favorite_apps"]}
+                • Recent Commands     : ${health["memory_recent_commands"]}
+                • Sync with Core      : ${if (core.memoryManager.config.syncWithNovaCore) "ENABLED 🔄" else "DISABLED ⚪"}
+                • Version             : 3.0.0 (Phase 6 Personal Memory Active)
             """.trimIndent()
         }
 

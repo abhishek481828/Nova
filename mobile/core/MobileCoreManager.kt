@@ -45,6 +45,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     val voiceManager: com.nova.mobile.voice.VoiceManager by lazy { com.nova.mobile.voice.VoiceManager(context, lifecycleManager) }
     val commandEngine: com.nova.mobile.command.CommandEngine by lazy { com.nova.mobile.command.CommandEngine(context, lifecycleManager) }
     val hybridRouter: com.nova.mobile.hybrid.HybridRouter by lazy { com.nova.mobile.hybrid.HybridRouter(context, lifecycleManager, commandEngine) }
+    val memoryManager: com.nova.mobile.memory.MemoryManager by lazy { com.nova.mobile.memory.MemoryManager(context, lifecycleManager) }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -83,10 +84,31 @@ class MobileCoreManager private constructor(private val context: Context) {
             // 8. Auto-connect Voice Recognition -> Hybrid AI Router (Phase 5)
             voiceManager.addResultListener { recognizedText, _ ->
                 Log.i(TAG, "Speech Recognized: \"$recognizedText\" -> Forwarding to Hybrid AI Router!")
-                hybridRouter.route(recognizedText)
+                val hybridResult = hybridRouter.route(recognizedText)
+
+                // 8a. Memory query interception (Phase 6) — check before normal routing
+                val memoryResponse = memoryManager.handleMemoryQuery(recognizedText)
+                if (memoryResponse != null) {
+                    Log.i(TAG, "Memory Query handled: $memoryResponse")
+                    lifecycleManager.publishEvent("MemoryQueryAnswered", mapOf("response" to memoryResponse))
+                }
             }
 
-            // 9. Start Nova Core discovery probing
+            // 9. Connect Hybrid Router results -> Memory Learning (Phase 6)
+            hybridRouter.addResultListener { result ->
+                if (result.isSuccess && result.target == com.nova.mobile.hybrid.ExecutionTarget.LOCAL_ANDROID) {
+                    val last = commandEngine.history.getLastResult()
+                    if (last != null) {
+                        memoryManager.onCommandExecuted(
+                            last.intent.name,
+                            last.entities.mapValues { it.value.toString() },
+                            result.intent
+                        )
+                    }
+                }
+            }
+
+            // 10. Start Nova Core discovery probing
             hybridRouter.deviceDiscovery.startProbing()
             hybridRouter.deviceDiscovery.addStateListener { online ->
                 lifecycleManager.publishEvent("NovaCoreStateChanged", mapOf("online" to online))
@@ -143,7 +165,11 @@ class MobileCoreManager private constructor(private val context: Context) {
             "total_commands_executed" to commandEngine.history.getTotalCount(),
             "nova_core_online" to discovery.isNovaCoreOnline,
             "nova_core_latency_ms" to discovery.lastLatencyMs,
-            "routing_policy" to hybridRouter.routingEngine.policy.name
+            "routing_policy" to hybridRouter.routingEngine.policy.name,
+            "memory_total_entries" to memoryManager.store.totalCount(),
+            "memory_favorite_contacts" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.FAVORITE_CONTACT).size,
+            "memory_favorite_apps" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.FAVORITE_APP).size,
+            "memory_recent_commands" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.RECENT_COMMAND).size
         )
     }
 }
