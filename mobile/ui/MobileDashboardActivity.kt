@@ -50,7 +50,7 @@ class MobileDashboardActivity : Activity() {
                 • Confidence Score    : ${core.voiceManager.metrics.lastConfidence}
                 • Session Duration    : ${core.voiceManager.metrics.lastSessionDurationMs}ms
                 
-                === LOCAL COMMAND ENGINE (OFFLINE) ===
+                === LOCAL COMMAND ENGINE ===
                 • Detected Intent     : ${health["last_intent"]}
                 • Executing Plugin    : ${core.commandEngine.history.getLastResult()?.pluginUsed ?: "None"}
                 • Extracted Entities  : ${core.commandEngine.history.getLastResult()?.entities ?: "{}"}
@@ -58,7 +58,13 @@ class MobileDashboardActivity : Activity() {
                 • Execution Result    : ${if (core.commandEngine.history.getLastResult()?.isSuccess == true) "SUCCESS 🟢" else "READY ⚪"}
                 • Execution Time      : ${core.commandEngine.history.getLastResult()?.executionTimeMs ?: 0}ms
                 • Total Commands      : ${health["total_commands_executed"]} executed
-                • Version             : 3.0.0 (Phase 4 Local Command Engine Active)
+                
+                === HYBRID AI ROUTER (PHASE 5) ===
+                • Routing Policy      : ${health["routing_policy"]}
+                • Nova Core Status    : ${if (health["nova_core_online"] == true) "ONLINE 🟢" else "OFFLINE 🔴"}
+                • Core Latency        : ${health["nova_core_latency_ms"]}ms
+                • Last Exec Target    : ${core.hybridRouter.routingEngine.policy.name}
+                • Version             : 3.0.0 (Phase 5 Hybrid AI Router Active)
             """.trimIndent()
         }
 

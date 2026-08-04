@@ -44,6 +44,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     val wakeWordManager: com.nova.mobile.wakeword.WakeWordManager by lazy { com.nova.mobile.wakeword.WakeWordManager(context, lifecycleManager) }
     val voiceManager: com.nova.mobile.voice.VoiceManager by lazy { com.nova.mobile.voice.VoiceManager(context, lifecycleManager) }
     val commandEngine: com.nova.mobile.command.CommandEngine by lazy { com.nova.mobile.command.CommandEngine(context, lifecycleManager) }
+    val hybridRouter: com.nova.mobile.hybrid.HybridRouter by lazy { com.nova.mobile.hybrid.HybridRouter(context, lifecycleManager, commandEngine) }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -79,10 +80,17 @@ class MobileCoreManager private constructor(private val context: Context) {
                 voiceManager.startVoiceSession()
             }
 
-            // 8. Auto-connect Voice Recognition -> Local Command Engine Execution
+            // 8. Auto-connect Voice Recognition -> Hybrid AI Router (Phase 5)
             voiceManager.addResultListener { recognizedText, _ ->
-                Log.i(TAG, "Speech Recognized: \"$recognizedText\" -> Forwarding to Local Command Engine!")
-                commandEngine.executeText(recognizedText)
+                Log.i(TAG, "Speech Recognized: \"$recognizedText\" -> Forwarding to Hybrid AI Router!")
+                hybridRouter.route(recognizedText)
+            }
+
+            // 9. Start Nova Core discovery probing
+            hybridRouter.deviceDiscovery.startProbing()
+            hybridRouter.deviceDiscovery.addStateListener { online ->
+                lifecycleManager.publishEvent("NovaCoreStateChanged", mapOf("online" to online))
+                Log.i(TAG, "Nova Core is now ${if (online) "ONLINE" else "OFFLINE"}")
             }
 
             isInitialized = true
@@ -100,6 +108,7 @@ class MobileCoreManager private constructor(private val context: Context) {
         Log.i(TAG, "Shutting down Nova Mobile Core v3.0...")
         try {
             lifecycleManager.publishEvent("AppStopped", emptyMap())
+            hybridRouter.deviceDiscovery.stopProbing()
             voiceManager.cancelVoiceSession()
             wakeWordManager.stopListening()
             pluginManager.shutdownAll()
@@ -115,6 +124,7 @@ class MobileCoreManager private constructor(private val context: Context) {
 
     fun getHealthStatus(): Map<String, Any> {
         val lastResult = commandEngine.history.getLastResult()
+        val discovery = hybridRouter.deviceDiscovery
         return mapOf(
             "version" to "3.0.0",
             "is_initialized" to isInitialized,
@@ -130,7 +140,10 @@ class MobileCoreManager private constructor(private val context: Context) {
             "recognition_confidence" to voiceManager.metrics.lastConfidence,
             "last_intent" to (lastResult?.intent?.name ?: "NONE"),
             "last_spoken_response" to (lastResult?.spokenResponse ?: "None"),
-            "total_commands_executed" to commandEngine.history.getTotalCount()
+            "total_commands_executed" to commandEngine.history.getTotalCount(),
+            "nova_core_online" to discovery.isNovaCoreOnline,
+            "nova_core_latency_ms" to discovery.lastLatencyMs,
+            "routing_policy" to hybridRouter.routingEngine.policy.name
         )
     }
 }

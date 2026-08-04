@@ -6,6 +6,7 @@ from typing import Dict, Any, List, Optional
 from nova.mobile.wakeword.manager import WakeWordManager
 from nova.mobile.voice.manager import VoiceManager
 from nova.mobile.command.engine import CommandEngine
+from nova.mobile.hybrid.router import HybridRouter
 
 logger = logging.getLogger("nova.mobile.core")
 
@@ -21,15 +22,16 @@ class MobileCoreManager:
         self.wake_word_manager = WakeWordManager()
         self.voice_manager = VoiceManager()
         self.command_engine = CommandEngine()
+        self.hybrid_router = HybridRouter(command_engine=self.command_engine)
 
         # Connect wake word detection trigger to voice manager session
         self.wake_word_manager.listeners.append(
             lambda phrase, score: self.voice_manager.start_voice_session()
         )
 
-        # Connect voice recognition output to local command engine
+        # Connect voice recognition output → Hybrid AI Router (Phase 5)
         self.voice_manager.result_listeners.append(
-            lambda recognized_text, score: self.command_engine.execute_text(recognized_text)
+            lambda recognized_text, score: self.hybrid_router.route(recognized_text)
         )
 
     @classmethod
@@ -61,7 +63,8 @@ class MobileCoreManager:
 
     def get_health_status(self) -> Dict[str, Any]:
         session_state = self.voice_manager.current_session.current_state.value if self.voice_manager.current_session else "IDLE"
-        last_result = self.command_engine.history.get_last_result()
+        last_cmd = self.command_engine.history.get_last_result()
+        discovery = self.hybrid_router.device_discovery
         return {
             "version": self.version,
             "is_initialized": self.is_initialized,
@@ -75,9 +78,12 @@ class MobileCoreManager:
             "voice_state": session_state,
             "last_recognized_text": self.voice_manager.metrics.last_recognized_text,
             "recognition_confidence": self.voice_manager.metrics.last_confidence,
-            "last_intent": last_result.intent.value if last_result else "NONE",
-            "last_spoken_response": last_result.spoken_response if last_result else "None",
-            "total_commands_executed": self.history_count()
+            "last_intent": last_cmd.intent.value if last_cmd else "NONE",
+            "last_spoken_response": last_cmd.spoken_response if last_cmd else "None",
+            "total_commands_executed": self.command_engine.history.get_total_count(),
+            "nova_core_online": discovery.is_nova_core_online,
+            "nova_core_latency_ms": discovery.last_latency_ms,
+            "routing_policy": self.hybrid_router.routing_engine.policy.value
         }
 
     def history_count(self) -> int:
