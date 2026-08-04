@@ -1,0 +1,9 @@
+environment: production
+debug: false
+server:
+  host: 0.0.0.0
+  port: 8000
+  workers: 4
+security:
+  jwt_secret_key: prod_nova_v2_secret_key_production
+  jwt_access_expire_seconds: 86400

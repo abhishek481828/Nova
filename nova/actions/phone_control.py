@@ -28,20 +28,23 @@ def get_active_device_id() -> str:
 
 def send_companion_command(action: str, payload: dict = None) -> dict:
     """Helper to send a WebSocket command to the active companion device."""
-    device_id = get_active_device_id()
-    data = {
-        "device_id": device_id,
-        "action": action,
-        "payload": payload or {}
-    }
-    req_data = json.dumps(data).encode("utf-8")
-    req = urllib.request.Request(
-        f"{SERVER_URL}/command",
-        data=req_data,
-        headers={"Content-Type": "application/json"}
-    )
-    resp = urllib.request.urlopen(req, timeout=10).read()
-    return json.loads(resp.decode())
+    try:
+        device_id = get_active_device_id()
+        data = {
+            "device_id": device_id,
+            "action": action,
+            "payload": payload or {}
+        }
+        req_data = json.dumps(data).encode("utf-8")
+        req = urllib.request.Request(
+            f"{SERVER_URL}/command",
+            data=req_data,
+            headers={"Content-Type": "application/json"}
+        )
+        resp = urllib.request.urlopen(req, timeout=5).read()
+        return json.loads(resp.decode())
+    except Exception as e:
+        return {"status": "error", "error": f"Companion server unreachable ({e})"}
 
 
 class PhoneConnectAction(BaseAction):

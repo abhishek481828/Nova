@@ -92,16 +92,22 @@ class ConfigLoader:
     @classmethod
     def load_config(cls, env: str = "development", config_dir: str = "config") -> NovaConfig:
         filename = f"{env}.yaml"
-        file_path = os.path.join(config_dir, filename)
+        
+        possible_paths = [
+            os.path.join(config_dir, filename),
+            os.path.join(os.getcwd(), config_dir, filename),
+            os.path.join(os.path.dirname(__file__), filename),
+            os.path.join(os.path.dirname(__file__), "../../../config", filename)
+        ]
 
-        if not os.path.exists(file_path):
-            # Try workspace root search
-            alt_path = os.path.join(os.getcwd(), config_dir, filename)
-            if os.path.exists(alt_path):
-                file_path = alt_path
+        file_path = None
+        for p in possible_paths:
+            if os.path.exists(p):
+                file_path = p
+                break
 
         data: Dict[str, Any] = {}
-        if os.path.exists(file_path):
+        if file_path and os.path.exists(file_path):
             with open(file_path, 'r', encoding='utf-8') as f:
                 content = f.read()
                 if HAS_YAML:

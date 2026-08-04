@@ -1,0 +1,9 @@
+environment: development
+debug: true
+server:
+  host: 127.0.0.1
+  port: 8000
+  workers: 1
+security:
+  jwt_secret_key: dev_nova_v2_secret_key_change_in_production
+  jwt_access_expire_seconds: 86400
