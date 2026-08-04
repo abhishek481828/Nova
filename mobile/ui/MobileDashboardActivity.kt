@@ -79,7 +79,16 @@ class MobileDashboardActivity : Activity() {
                 • Failed Executions   : ${health["automation_failed_executions"]}
                 • Scheduler Running   : ${if (health["automation_scheduler_running"] == true) "YES 🟢" else "NO 🔴"}
                 • All Paused          : ${if (core.automationManager.routineManager.allPaused) "YES ⏸" else "NO ▶"}
-                • Version             : 3.0.0 (Phase 7 Smart Automation Active)
+                
+                === MULTI-DEVICE SYNC (PHASE 8) ===
+                • Connected Devices   : ${health["sync_connected_devices"]}
+                • Pending Queue       : ${health["sync_pending_queue"]}
+                • Total Sent          : ${health["sync_total_sent"]}
+                • Total Received      : ${health["sync_total_received"]}
+                • Pending Conflicts   : ${health["sync_conflicts_pending"]}
+                • Last Sync           : ${if ((health["sync_last_timestamp"] as? Long ?: 0L) > 0L) "Recent ✅" else "Never"}
+                • Trusted Devices     : ${core.syncManager.deviceRegistry.getAuthenticated().size}
+                • Version             : 3.0.0 (Phase 8 Multi-Device Sync Active)
             """.trimIndent()
         }
 

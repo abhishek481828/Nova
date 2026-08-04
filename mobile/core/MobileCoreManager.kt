@@ -47,6 +47,17 @@ class MobileCoreManager private constructor(private val context: Context) {
     val hybridRouter: com.nova.mobile.hybrid.HybridRouter by lazy { com.nova.mobile.hybrid.HybridRouter(context, lifecycleManager, commandEngine) }
     val memoryManager: com.nova.mobile.memory.MemoryManager by lazy { com.nova.mobile.memory.MemoryManager(context, lifecycleManager) }
     val automationManager: com.nova.mobile.automation.AutomationManager by lazy { com.nova.mobile.automation.AutomationManager(context, lifecycleManager, commandEngine) }
+    val syncManager: com.nova.mobile.sync.SyncManager by lazy {
+        val deviceId = android.provider.Settings.Secure.getString(context.contentResolver, android.provider.Settings.Secure.ANDROID_ID) ?: "nova-android"
+        val syncEngine = com.nova.mobile.sync.SyncEngine(memoryManager, automationManager, deviceId)
+        com.nova.mobile.sync.SyncManager(
+            localDeviceId = deviceId,
+            localDeviceName = android.os.Build.MODEL,
+            localPlatform = com.nova.mobile.sync.Platform.ANDROID,
+            syncEngine = syncEngine,
+            lifecycleManager = lifecycleManager
+        )
+    }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -114,11 +125,19 @@ class MobileCoreManager private constructor(private val context: Context) {
             hybridRouter.deviceDiscovery.addStateListener { online ->
                 lifecycleManager.publishEvent("NovaCoreStateChanged", mapOf("online" to online))
                 Log.i(TAG, "Nova Core is now ${if (online) "ONLINE" else "OFFLINE"}")
-                automationManager.triggerManager.onNovaCoreConnected().also { if (!online) automationManager.triggerManager.onNovaCoreDisconnected() }
+                if (online) {
+                    automationManager.triggerManager.onNovaCoreConnected()
+                    syncManager.syncNow()  // Immediate sync on reconnect (Phase 8)
+                } else {
+                    automationManager.triggerManager.onNovaCoreDisconnected()
+                }
             }
 
             // 11. Start Automation Manager & Scheduler (Phase 7)
             automationManager.start()
+
+            // 12. Start Sync Manager (Phase 8)
+            syncManager.start()
 
             isInitialized = true
             lifecycleManager.publishEvent("AppStarted", mapOf("version" to "3.0.0"))
@@ -135,6 +154,7 @@ class MobileCoreManager private constructor(private val context: Context) {
         Log.i(TAG, "Shutting down Nova Mobile Core v3.0...")
         try {
             lifecycleManager.publishEvent("AppStopped", emptyMap())
+            syncManager.stop()
             automationManager.stop()
             hybridRouter.deviceDiscovery.stopProbing()
             voiceManager.cancelVoiceSession()
@@ -180,7 +200,13 @@ class MobileCoreManager private constructor(private val context: Context) {
             "automation_enabled_routines" to automationManager.repository.countEnabled(),
             "automation_total_executions" to automationManager.history.totalCount(),
             "automation_failed_executions" to automationManager.history.failureCount(),
-            "automation_scheduler_running" to automationManager.scheduler.isRunning
+            "automation_scheduler_running" to automationManager.scheduler.isRunning,
+            "sync_connected_devices" to syncManager.getStats().connectedDevices,
+            "sync_pending_queue" to syncManager.getStats().pendingQueueSize,
+            "sync_total_sent" to syncManager.getStats().totalPayloadsSent,
+            "sync_total_received" to syncManager.getStats().totalPayloadsReceived,
+            "sync_conflicts_pending" to syncManager.repository.getUnresolved().size,
+            "sync_last_timestamp" to syncManager.getStats().lastSyncTimestamp
         )
     }
 }
