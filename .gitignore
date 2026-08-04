@@ -43,7 +43,7 @@ dist/
 logs/
 downloads/
 backups/
-config/
+/config/
 
 # Android build artifacts
 android/.gradle/
