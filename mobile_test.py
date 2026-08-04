@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive Manual Test Utility for Nova v3.0 Phase 1: Nova Mobile Foundation."""
+"""Interactive Manual Test Utility for Nova v3.0 Phase 1 & Phase 2."""
 
 import sys
 import time
@@ -11,16 +11,17 @@ from nova.mobile.storage import MobileDatabase
 from nova.mobile.settings import ConfigurationManager, MobileConfig
 from nova.mobile.security import MobileSecurityManager
 from nova.mobile.communication import CommunicationBridge, MobileCommand, ExecutionTarget
+from nova.mobile.wakeword.manager import WakeWordManager
 
 
 def print_header(title):
-    print("\n" + "=" * 60)
+    print("\n" + "=" * 65)
     print(f"   {title}")
-    print("=" * 60)
+    print("=" * 65)
 
 
 def main():
-    print_header("NOVA v3.0 MOBILE FOUNDATION — MANUAL TEST INTERFACE")
+    print_header("NOVA v3.0 MOBILE — MANUAL TEST INTERFACE")
 
     core = MobileCoreManager.get_instance()
     db = MobileDatabase()
@@ -30,6 +31,7 @@ def main():
     sec = MobileSecurityManager()
     bridge = CommunicationBridge()
     cfg = ConfigurationManager()
+    ww_manager = WakeWordManager(lifecycle_manager=lm)
 
     while True:
         print("\nSelect an operation to test:")
@@ -41,7 +43,8 @@ def main():
         print(" [6] Test Lifecycle Event Bus (Publish AppStarted, BatteryLow, Network)")
         print(" [7] Test Security Manager (KeyStore Session Tokens)")
         print(" [8] Test Communication Bridge (Target Execution Routing)")
-        print(" [9] Graceful System Shutdown")
+        print(" [9] Test Wake Word Engine (Start / Trigger 'Hey Nova' / Restart)")
+        print(" [10] Graceful System Shutdown")
         print(" [0] Exit")
 
         try:
@@ -66,11 +69,13 @@ def main():
             health = core.get_health_status()
             print_header("SYSTEM HEALTH & DASHBOARD STATUS")
             for k, v in health.items():
-                print(f" • {k.ljust(20)}: {v}")
-            print(f" • DB Status          : {if_str(db.is_open, 'OPEN & ENCRYPTED', 'CLOSED')}")
-            print(f" • Active Plugins     : {pm.get_active_count()}")
-            print(f" • Scheduler Running  : {scheduler.is_running}")
-            print(f" • Security Ready     : {sec.is_ready}")
+                print(f" • {k.ljust(22)}: {v}")
+            print(f" • DB Status            : {if_str(db.is_open, 'OPEN & ENCRYPTED', 'CLOSED')}")
+            print(f" • Active Plugins       : {pm.get_active_count()}")
+            print(f" • Scheduler Running    : {scheduler.is_running}")
+            print(f" • Security Ready       : {sec.is_ready}")
+            print(f" • Wake Word Status     : {if_str(ww_manager.is_listening, 'LISTENING 🟢', 'IDLE ⚪')}")
+            print(f" • Wake Detections      : {ww_manager.metrics.total_detections} detections")
 
         elif choice == "3":
             print_header("PLUGIN MANAGER TEST")
@@ -136,8 +141,24 @@ def main():
             print(f"✔ Local Routing Output : Executed by {res_local.executed_by} (status={res_local.status})")
 
         elif choice == "9":
+            print_header("OFFLINE WAKE WORD ENGINE TEST")
+            print(f"Configured Phrase: '{ww_manager.config.wake_phrase}' (Sensitivity: {ww_manager.config.sensitivity})")
+            
+            started = ww_manager.start_listening()
+            print(f"✔ Start Listening State: {started} (is_listening={ww_manager.is_listening})")
+            
+            print("Simulating detection trigger for 'Hey Nova'...")
+            ww_manager.trigger_wake_detection(score=0.97)
+            print(f"✔ Detection Counter: {ww_manager.metrics.total_detections} total detections")
+            
+            print("Testing Engine Auto-Restart Recovery...")
+            restarted = ww_manager.restart_engine()
+            print(f"✔ Engine Restarted: {restarted} (Recovery Attempts={ww_manager.metrics.total_recovery_attempts})")
+
+        elif choice == "10":
             print("\n[INFO] Shutting down Nova Mobile Core...")
             core.shutdown()
+            ww_manager.stop_listening()
             db.close()
             scheduler.cancel_all()
             bridge.shutdown()
@@ -147,7 +168,7 @@ def main():
             print("Exiting Nova Mobile manual test.")
             break
         else:
-            print("Invalid option. Please enter 0 to 9.")
+            print("Invalid option. Please enter 0 to 10.")
 
 
 def if_str(cond, val_true, val_false):

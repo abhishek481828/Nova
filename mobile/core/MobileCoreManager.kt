@@ -41,6 +41,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     val lifecycleManager: LifecycleManager by lazy { LifecycleManager(context) }
     val scheduler: TaskScheduler by lazy { TaskScheduler(context) }
     val communicationBridge: CommunicationBridge by lazy { CommunicationBridge(context) }
+    val wakeWordManager: com.nova.mobile.wakeword.WakeWordManager by lazy { com.nova.mobile.wakeword.WakeWordManager(context, lifecycleManager) }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -85,6 +86,7 @@ class MobileCoreManager private constructor(private val context: Context) {
         Log.i(TAG, "Shutting down Nova Mobile Core v3.0...")
         try {
             lifecycleManager.publishEvent("AppStopped", emptyMap())
+            wakeWordManager.stopListening()
             pluginManager.shutdownAll()
             scheduler.cancelAll()
             communicationBridge.shutdown()
@@ -104,7 +106,9 @@ class MobileCoreManager private constructor(private val context: Context) {
             "scheduler_running" to scheduler.isRunning,
             "security_ready" to securityManager.isReady,
             "database_ready" to database.isOpen,
-            "core_connection" to communicationBridge.connectionState.name
+            "core_connection" to communicationBridge.connectionState.name,
+            "wakeword_listening" to wakeWordManager.isListening,
+            "wakeword_detections" to wakeWordManager.metrics.totalDetections
         )
     }
 }

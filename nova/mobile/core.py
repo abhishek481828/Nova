@@ -3,6 +3,7 @@
 import time
 import logging
 from typing import Dict, Any, List, Optional
+from nova.mobile.wakeword.manager import WakeWordManager
 
 logger = logging.getLogger("nova.mobile.core")
 
@@ -15,6 +16,7 @@ class MobileCoreManager:
         self.version: str = "3.0.0"
         self.plugins: Dict[str, Any] = {}
         self.lifecycle_events: List[Dict[str, Any]] = []
+        self.wake_word_manager = WakeWordManager()
 
     @classmethod
     def get_instance(cls) -> 'MobileCoreManager':
@@ -35,6 +37,7 @@ class MobileCoreManager:
             return
         logger.info("Shutting down Nova Mobile Core v3.0...")
         self.publish_lifecycle_event("AppStopped", {})
+        self.wake_word_manager.stop_listening()
         self.is_initialized = False
 
     def publish_lifecycle_event(self, event_name: str, payload: Dict[str, Any]):
@@ -49,5 +52,7 @@ class MobileCoreManager:
             "scheduler_running": True,
             "security_ready": True,
             "database_ready": True,
-            "core_connection": "CONNECTED"
+            "core_connection": "CONNECTED",
+            "wakeword_listening": self.wake_word_manager.is_listening,
+            "wakeword_detections": self.wake_word_manager.metrics.total_detections
         }

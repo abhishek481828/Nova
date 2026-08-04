@@ -21,20 +21,28 @@ class MobileDashboardActivity : Activity() {
         val health = core.getHealthStatus()
 
         val tv = TextView(this).apply {
-            textSize = 16f
+            textSize = 15f
             setPadding(32, 32, 32, 32)
             text = """
                 === NOVA MOBILE v3.0 DASHBOARD ===
                 
-                • Nova Status: ${if (core.isInitialized) "ACTIVE" else "OFFLINE"}
-                • Running Services: ${if (core.scheduler.isRunning) "Foreground & Task Scheduler Active" else "Stopped"}
-                • Plugin Status: ${health["plugins_active"]} active plugins
-                • Battery State: Optimal
-                • Connectivity: Standby
-                • Nova Core Status: ${health["core_connection"]}
-                • Security KeyStore: ${if (health["security_ready"] == true) "READY" else "INITIALIZING"}
-                • Database: ${if (health["database_ready"] == true) "ENCRYPTED & OPEN" else "CLOSED"}
-                • Version: 3.0.0 (Phase 1 Foundation)
+                • Nova Status         : ${if (core.isInitialized) "ACTIVE" else "OFFLINE"}
+                • Running Services    : ${if (core.scheduler.isRunning) "Foreground & Task Scheduler Active" else "Stopped"}
+                • Plugin Status       : ${health["plugins_active"]} active plugins
+                • Battery State       : Optimal (Low Impact)
+                • Connectivity        : Standby
+                • Nova Core Status    : ${health["core_connection"]}
+                • Security KeyStore   : ${if (health["security_ready"] == true) "READY" else "INITIALIZING"}
+                • Database            : ${if (health["database_ready"] == true) "ENCRYPTED & OPEN" else "CLOSED"}
+                
+                === WAKE WORD ENGINE (OFFLINE) ===
+                • Phrase Configured   : "${core.wakeWordManager.config.wakePhrase}"
+                • Engine Status       : ${if (core.wakeWordManager.isListening) "LISTENING 🟢" else "IDLE ⚪"}
+                • Microphone Status   : ${if (core.wakeWordManager.micManager.isRecording) "CAPTURING 🎙️" else "OFF 🔇"}
+                • Sensitivity         : ${core.wakeWordManager.config.sensitivity} (Threshold: ${core.wakeWordManager.config.detectionThreshold})
+                • Detection Counter   : ${core.wakeWordManager.metrics.totalDetections} detections
+                • Last Detection      : ${if (core.wakeWordManager.metrics.lastDetectionTimestamp > 0) core.wakeWordManager.metrics.lastDetectionTimestamp else "None"}
+                • Version             : 3.0.0 (Phase 2 Offline Wake Word Active)
             """.trimIndent()
         }
 
