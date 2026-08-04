@@ -46,6 +46,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     val commandEngine: com.nova.mobile.command.CommandEngine by lazy { com.nova.mobile.command.CommandEngine(context, lifecycleManager) }
     val hybridRouter: com.nova.mobile.hybrid.HybridRouter by lazy { com.nova.mobile.hybrid.HybridRouter(context, lifecycleManager, commandEngine) }
     val memoryManager: com.nova.mobile.memory.MemoryManager by lazy { com.nova.mobile.memory.MemoryManager(context, lifecycleManager) }
+    val automationManager: com.nova.mobile.automation.AutomationManager by lazy { com.nova.mobile.automation.AutomationManager(context, lifecycleManager, commandEngine) }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -113,7 +114,11 @@ class MobileCoreManager private constructor(private val context: Context) {
             hybridRouter.deviceDiscovery.addStateListener { online ->
                 lifecycleManager.publishEvent("NovaCoreStateChanged", mapOf("online" to online))
                 Log.i(TAG, "Nova Core is now ${if (online) "ONLINE" else "OFFLINE"}")
+                automationManager.triggerManager.onNovaCoreConnected().also { if (!online) automationManager.triggerManager.onNovaCoreDisconnected() }
             }
+
+            // 11. Start Automation Manager & Scheduler (Phase 7)
+            automationManager.start()
 
             isInitialized = true
             lifecycleManager.publishEvent("AppStarted", mapOf("version" to "3.0.0"))
@@ -130,6 +135,7 @@ class MobileCoreManager private constructor(private val context: Context) {
         Log.i(TAG, "Shutting down Nova Mobile Core v3.0...")
         try {
             lifecycleManager.publishEvent("AppStopped", emptyMap())
+            automationManager.stop()
             hybridRouter.deviceDiscovery.stopProbing()
             voiceManager.cancelVoiceSession()
             wakeWordManager.stopListening()
@@ -169,7 +175,12 @@ class MobileCoreManager private constructor(private val context: Context) {
             "memory_total_entries" to memoryManager.store.totalCount(),
             "memory_favorite_contacts" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.FAVORITE_CONTACT).size,
             "memory_favorite_apps" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.FAVORITE_APP).size,
-            "memory_recent_commands" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.RECENT_COMMAND).size
+            "memory_recent_commands" to memoryManager.repository.list(com.nova.mobile.memory.MemoryCategory.RECENT_COMMAND).size,
+            "automation_total_routines" to automationManager.repository.count(),
+            "automation_enabled_routines" to automationManager.repository.countEnabled(),
+            "automation_total_executions" to automationManager.history.totalCount(),
+            "automation_failed_executions" to automationManager.history.failureCount(),
+            "automation_scheduler_running" to automationManager.scheduler.isRunning
         )
     }
 }

@@ -1,0 +1,64 @@
+package com.nova.mobile.automation
+
+enum class TriggerType {
+    MANUAL,
+    VOICE_COMMAND,
+    TIME,
+    DATE,
+    DAY_OF_WEEK,
+    BATTERY_LOW,
+    BATTERY_CHARGING,
+    HEADPHONES_CONNECTED,
+    BLUETOOTH_CONNECTED,
+    WIFI_CONNECTED,
+    SCREEN_ON,
+    SCREEN_OFF,
+    NOVA_CORE_CONNECTED,
+    NOVA_CORE_DISCONNECTED,
+    APP_OPENED,
+    LOCATION              // optional, permission-based
+}
+
+enum class ConditionType {
+    BATTERY_ABOVE,
+    BATTERY_BELOW,
+    WIFI_CONNECTED,
+    CHARGING,
+    HEADPHONES_CONNECTED,
+    TIME_RANGE,
+    SCREEN_LOCKED,
+    SCREEN_UNLOCKED,
+    NOVA_CORE_ONLINE
+}
+
+enum class ActionType {
+    CALL_CONTACT,
+    SEND_SMS,
+    OPEN_APP,
+    PLAY_YOUTUBE,
+    PLAY_MUSIC,
+    FLASHLIGHT_ON,
+    FLASHLIGHT_OFF,
+    SET_BRIGHTNESS,
+    SET_VOLUME,
+    ENABLE_BLUETOOTH,
+    DISABLE_BLUETOOTH,
+    ENABLE_DND,
+    DISABLE_DND,
+    SET_ALARM,
+    SET_TIMER,
+    OPEN_CAMERA,
+    OPEN_GALLERY,
+    COPY_TEXT,
+    SHOW_NOTIFICATION,
+    NOVA_CORE_REQUEST,
+    WAIT_SECONDS
+}
+
+enum class AutomationStatus {
+    ENABLED,
+    DISABLED,
+    RUNNING,
+    ERROR,
+    PAUSED
+}

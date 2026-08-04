@@ -71,7 +71,15 @@ class MobileDashboardActivity : Activity() {
                 • Favorite Apps       : ${health["memory_favorite_apps"]}
                 • Recent Commands     : ${health["memory_recent_commands"]}
                 • Sync with Core      : ${if (core.memoryManager.config.syncWithNovaCore) "ENABLED 🔄" else "DISABLED ⚪"}
-                • Version             : 3.0.0 (Phase 6 Personal Memory Active)
+                
+                === SMART AUTOMATION (PHASE 7) ===
+                • Total Routines      : ${health["automation_total_routines"]}
+                • Active Routines     : ${health["automation_enabled_routines"]}
+                • Total Executions    : ${health["automation_total_executions"]}
+                • Failed Executions   : ${health["automation_failed_executions"]}
+                • Scheduler Running   : ${if (health["automation_scheduler_running"] == true) "YES 🟢" else "NO 🔴"}
+                • All Paused          : ${if (core.automationManager.routineManager.allPaused) "YES ⏸" else "NO ▶"}
+                • Version             : 3.0.0 (Phase 7 Smart Automation Active)
             """.trimIndent()
         }
 

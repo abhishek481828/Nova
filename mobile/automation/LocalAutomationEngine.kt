@@ -1,9 +1,11 @@
 package com.nova.mobile.automation
 
 /**
- * Nova v3.0 Local Automation Engine Placeholder
- * (To be implemented in future phases)
+ * LocalAutomationEngine — Public facade for Phase 7 automation system.
+ * Delegates to AutomationManager. Retained for backward compatibility.
  */
-class LocalAutomationEngine {
-    fun getRulesCount(): Int = 0
+class LocalAutomationEngine(val manager: AutomationManager) {
+    fun getRulesCount(): Int = manager.repository.count()
+    fun getEnabledCount(): Int = manager.repository.countEnabled()
+    fun getHistory(): AutomationHistory = manager.history
 }
