@@ -42,6 +42,7 @@ class MobileCoreManager private constructor(private val context: Context) {
     val scheduler: TaskScheduler by lazy { TaskScheduler(context) }
     val communicationBridge: CommunicationBridge by lazy { CommunicationBridge(context) }
     val wakeWordManager: com.nova.mobile.wakeword.WakeWordManager by lazy { com.nova.mobile.wakeword.WakeWordManager(context, lifecycleManager) }
+    val voiceManager: com.nova.mobile.voice.VoiceManager by lazy { com.nova.mobile.voice.VoiceManager(context, lifecycleManager) }
 
     fun initialize(): Boolean {
         if (isInitialized) {
@@ -71,6 +72,12 @@ class MobileCoreManager private constructor(private val context: Context) {
             // 6. Register & Load Plugins
             pluginManager.initialize()
 
+            // 7. Auto-connect Wake Word Detection -> Voice Session Pipeline
+            wakeWordManager.addDetectionListener { phrase, _ ->
+                Log.i(TAG, "Wake Word '$phrase' detected -> Automatically starting Voice Recording Session!")
+                voiceManager.startVoiceSession()
+            }
+
             isInitialized = true
             lifecycleManager.publishEvent("AppStarted", mapOf("version" to "3.0.0"))
             Log.i(TAG, "Nova Mobile Core v3.0 initialized successfully.")
@@ -86,6 +93,7 @@ class MobileCoreManager private constructor(private val context: Context) {
         Log.i(TAG, "Shutting down Nova Mobile Core v3.0...")
         try {
             lifecycleManager.publishEvent("AppStopped", emptyMap())
+            voiceManager.cancelVoiceSession()
             wakeWordManager.stopListening()
             pluginManager.shutdownAll()
             scheduler.cancelAll()
@@ -108,7 +116,10 @@ class MobileCoreManager private constructor(private val context: Context) {
             "database_ready" to database.isOpen,
             "core_connection" to communicationBridge.connectionState.name,
             "wakeword_listening" to wakeWordManager.isListening,
-            "wakeword_detections" to wakeWordManager.metrics.totalDetections
+            "wakeword_detections" to wakeWordManager.metrics.totalDetections,
+            "voice_state" to (voiceManager.currentSession?.currentState?.name ?: "IDLE"),
+            "last_recognized_text" to voiceManager.metrics.lastRecognizedText,
+            "recognition_confidence" to voiceManager.metrics.lastConfidence
         )
     }
 }

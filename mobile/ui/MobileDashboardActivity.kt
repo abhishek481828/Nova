@@ -42,7 +42,15 @@ class MobileDashboardActivity : Activity() {
                 • Sensitivity         : ${core.wakeWordManager.config.sensitivity} (Threshold: ${core.wakeWordManager.config.detectionThreshold})
                 • Detection Counter   : ${core.wakeWordManager.metrics.totalDetections} detections
                 • Last Detection      : ${if (core.wakeWordManager.metrics.lastDetectionTimestamp > 0) core.wakeWordManager.metrics.lastDetectionTimestamp else "None"}
-                • Version             : 3.0.0 (Phase 2 Offline Wake Word Active)
+                
+                === VOICE PIPELINE & SPEECH RECOGNITION ===
+                • Session State       : ${health["voice_state"]}
+                • Language            : ${core.voiceManager.config.language}
+                • Recognized Text     : "${core.voiceManager.metrics.lastRecognizedText}"
+                • Confidence Score    : ${core.voiceManager.metrics.lastConfidence}
+                • Session Duration    : ${core.voiceManager.metrics.lastSessionDurationMs}ms
+                • Total Sessions      : ${core.voiceManager.metrics.totalSessions} sessions
+                • Version             : 3.0.0 (Phase 3 Voice Pipeline Active)
             """.trimIndent()
         }
 

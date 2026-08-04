@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Interactive Manual Test Utility for Nova v3.0 Phase 1 & Phase 2."""
+"""Interactive Manual Test Utility for Nova v3.0 Phase 1, Phase 2 & Phase 3."""
 
 import sys
 import time
@@ -12,6 +12,7 @@ from nova.mobile.settings import ConfigurationManager, MobileConfig
 from nova.mobile.security import MobileSecurityManager
 from nova.mobile.communication import CommunicationBridge, MobileCommand, ExecutionTarget
 from nova.mobile.wakeword.manager import WakeWordManager
+from nova.mobile.voice.manager import VoiceManager
 
 
 def print_header(title):
@@ -31,7 +32,8 @@ def main():
     sec = MobileSecurityManager()
     bridge = CommunicationBridge()
     cfg = ConfigurationManager()
-    ww_manager = WakeWordManager(lifecycle_manager=lm)
+    ww_manager = core.wake_word_manager
+    voice_mgr = core.voice_manager
 
     while True:
         print("\nSelect an operation to test:")
@@ -44,7 +46,8 @@ def main():
         print(" [7] Test Security Manager (KeyStore Session Tokens)")
         print(" [8] Test Communication Bridge (Target Execution Routing)")
         print(" [9] Test Wake Word Engine (Start / Trigger 'Hey Nova' / Restart)")
-        print(" [10] Graceful System Shutdown")
+        print(" [10] Test Voice Pipeline & Speech Recognition ('Call Pankaj' -> Event)")
+        print(" [11] Graceful System Shutdown")
         print(" [0] Exit")
 
         try:
@@ -69,13 +72,13 @@ def main():
             health = core.get_health_status()
             print_header("SYSTEM HEALTH & DASHBOARD STATUS")
             for k, v in health.items():
-                print(f" • {k.ljust(22)}: {v}")
-            print(f" • DB Status            : {if_str(db.is_open, 'OPEN & ENCRYPTED', 'CLOSED')}")
-            print(f" • Active Plugins       : {pm.get_active_count()}")
-            print(f" • Scheduler Running    : {scheduler.is_running}")
-            print(f" • Security Ready       : {sec.is_ready}")
-            print(f" • Wake Word Status     : {if_str(ww_manager.is_listening, 'LISTENING 🟢', 'IDLE ⚪')}")
-            print(f" • Wake Detections      : {ww_manager.metrics.total_detections} detections")
+                print(f" • {k.ljust(24)}: {v}")
+            print(f" • DB Status              : {if_str(db.is_open, 'OPEN & ENCRYPTED', 'CLOSED')}")
+            print(f" • Active Plugins         : {pm.get_active_count()}")
+            print(f" • Scheduler Running      : {scheduler.is_running}")
+            print(f" • Security Ready         : {sec.is_ready}")
+            print(f" • Wake Word Status       : {if_str(ww_manager.is_listening, 'LISTENING 🟢', 'IDLE ⚪')}")
+            print(f" • Voice Session State    : {health['voice_state']}")
 
         elif choice == "3":
             print_header("PLUGIN MANAGER TEST")
@@ -150,15 +153,24 @@ def main():
             print("Simulating detection trigger for 'Hey Nova'...")
             ww_manager.trigger_wake_detection(score=0.97)
             print(f"✔ Detection Counter: {ww_manager.metrics.total_detections} total detections")
-            
-            print("Testing Engine Auto-Restart Recovery...")
-            restarted = ww_manager.restart_engine()
-            print(f"✔ Engine Restarted: {restarted} (Recovery Attempts={ww_manager.metrics.total_recovery_attempts})")
+            print(f"✔ Voice Session State after Wake Detection: {voice_mgr.current_session.current_state.value}")
 
         elif choice == "10":
+            print_header("VOICE PIPELINE & SPEECH RECOGNITION TEST")
+            speech_prompt = input("Enter speech prompt (default: 'Call Pankaj'): ").strip() or "Call Pankaj"
+            
+            session = voice_mgr.start_voice_session()
+            print(f"✔ Session Started: ID={session.session_id}, State={session.current_state.value}")
+            
+            print(f"Simulating speech-to-text recognition for: \"{speech_prompt}\"...")
+            voice_mgr.simulate_recognized_text(speech_prompt, confidence=0.98)
+            
+            print(f"✔ Final Recognized Text : \"{voice_mgr.metrics.last_recognized_text}\"")
+            print(f"✔ Session End State     : {session.current_state.value}")
+
+        elif choice == "11":
             print("\n[INFO] Shutting down Nova Mobile Core...")
             core.shutdown()
-            ww_manager.stop_listening()
             db.close()
             scheduler.cancel_all()
             bridge.shutdown()
@@ -168,7 +180,7 @@ def main():
             print("Exiting Nova Mobile manual test.")
             break
         else:
-            print("Invalid option. Please enter 0 to 10.")
+            print("Invalid option. Please enter 0 to 11.")
 
 
 def if_str(cond, val_true, val_false):

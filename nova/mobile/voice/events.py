@@ -1,0 +1,11 @@
+"""Voice Pipeline Event Constants."""
+
+EVENT_LISTENING_STARTED = "VoiceListeningStarted"
+EVENT_LISTENING_STOPPED = "VoiceListeningStopped"
+EVENT_SPEECH_STARTED = "SpeechStarted"
+EVENT_SPEECH_ENDED = "SpeechEnded"
+EVENT_PARTIAL_RECOGNIZED = "PartialSpeechRecognized"
+EVENT_SPEECH_RECOGNIZED = "SpeechRecognized"
+EVENT_RECOGNITION_FAILED = "RecognitionFailed"
+EVENT_RECOGNITION_CANCELLED = "RecognitionCancelled"
+EVENT_RECOGNITION_TIMEOUT = "RecognitionTimeout"
