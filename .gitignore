@@ -55,8 +55,8 @@ android/*.iml
 temp/
 scratch/
 record.txt
-a.py
-db.py
-main.py
-nova-phone
-utils.py
+/a.py
+/db.py
+/main.py
+/nova-phone
+/utils.py
