@@ -474,3 +474,7 @@ def run_cli_repl(args=None) -> None:
             break
         except Exception as e:
             print_error(f"An unexpected error occurred: {e}")
+
+
+if __name__ == "__main__":
+    run_cli_repl(sys.argv[1:])

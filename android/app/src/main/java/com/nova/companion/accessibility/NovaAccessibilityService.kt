@@ -229,24 +229,57 @@ class NovaAccessibilityService : AccessibilityService() {
         val clickableList = ArrayList<AccessibilityNodeInfo>()
         collectClickableNodes(rootNode, clickableList)
 
+        // Pass 1: Skip Ads & Sponsored cards, click genuine video match
         for (node in clickableList) {
-            val text = (node.text ?: node.contentDescription ?: "").toString()
-            val viewId = node.viewIdResourceName ?: ""
-            if (viewId.contains("thumbnail") || viewId.contains("title") || viewId.contains("item") || text.contains("views") || text.length > 5) {
-                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return true
+            val text = (node.text ?: node.contentDescription ?: "").toString().lowercase()
+            val viewId = (node.viewIdResourceName ?: "").lowercase()
+
+            // Skip YouTube Ad Cards & Sponsored Banners
+            if (text.contains("ad ") || text.startsWith("ad") || text.contains("sponsored") || text.contains("promoted") || viewId.contains("ad_")) {
+                Log.i("NovaAccessibility", "Skipping YouTube Ad card: '$text'")
+                continue
+            }
+
+            val rect = android.graphics.Rect()
+            node.getBoundsInScreen(rect)
+
+            if (rect.top > 200 && rect.bottom < 2200 && rect.height() > 80) {
+                if (viewId.contains("thumbnail") || viewId.contains("title") || viewId.contains("item") || text.contains("views") || text.length > 8) {
+                    if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                        return true
+                    }
+                    var parentNode: AccessibilityNodeInfo? = node.parent
+                    while (parentNode != null) {
+                        if (parentNode.isClickable && parentNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
+                            return true
+                        }
+                        parentNode = parentNode.parent
+                    }
+                    if (performTap(rect.centerX().toFloat(), rect.centerY().toFloat())) {
+                        return true
+                    }
                 }
             }
         }
 
-        for (node in clickableList) {
-            val viewId = node.viewIdResourceName ?: ""
-            if (!viewId.contains("search") && !viewId.contains("button") && !viewId.contains("menu")) {
-                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) {
-                    return true
-                }
+        // Pass 2: Smart Auto-Scroll down past top ad shelves if needed
+        scroll("down")
+        try { Thread.sleep(600) } catch (e: Exception) {}
+        val rootAfterScroll = rootInActiveWindow ?: return false
+        val listAfterScroll = ArrayList<AccessibilityNodeInfo>()
+        collectClickableNodes(rootAfterScroll, listAfterScroll)
+
+        for (node in listAfterScroll) {
+            val text = (node.text ?: node.contentDescription ?: "").toString().lowercase()
+            if (text.contains("ad ") || text.contains("sponsored")) continue
+            val rect = android.graphics.Rect()
+            node.getBoundsInScreen(rect)
+            if (rect.top > 250 && rect.height() > 80) {
+                if (node.performAction(AccessibilityNodeInfo.ACTION_CLICK)) return true
+                if (performTap(rect.centerX().toFloat(), rect.centerY().toFloat())) return true
             }
         }
+
         return false
     }
 

@@ -23,6 +23,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.speech.RecognitionListener
+import android.speech.RecognizerIntent
+import android.speech.SpeechRecognizer
+import java.util.Locale
+import android.media.AudioManager
+import android.media.ToneGenerator
 import com.nova.companion.core.DiagnosticItem
 import com.nova.companion.core.StartupValidator
 import com.nova.companion.services.CompanionForegroundService
@@ -33,12 +39,14 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        Log.i("MainActivity", "Nova Companion Launching (v2.0.0)")
+        Log.i("MainActivity", "Nova Assistant Launching (v3.0.0)")
 
         validator = StartupValidator(this)
 
         setContent {
             var validationReport by remember { mutableStateOf(validator.validateSystemReadiness()) }
+            var isListening by remember { mutableStateOf(false) }
+            var voiceStatusText by remember { mutableStateOf("Tap to Speak into Phone Mic") }
 
             val permissionLauncher = rememberLauncherForActivityResult(
                 contract = ActivityResultContracts.RequestMultiplePermissions()
@@ -60,6 +68,11 @@ class MainActivity : ComponentActivity() {
                     list.add(Manifest.permission.POST_NOTIFICATIONS)
                 }
                 list.toTypedArray()
+            }
+
+            LaunchedEffect(Unit) {
+                permissionLauncher.launch(requiredPermissions)
+                startCompanionService()
             }
 
             MaterialTheme(
@@ -137,8 +150,11 @@ fun DeploymentDashboardScreen(
     onStartService: () -> Unit,
     onStopService: () -> Unit
 ) {
+    val context = androidx.compose.ui.platform.LocalContext.current
     var isServiceRunning by remember { mutableStateOf(false) }
     var showPairingDialog by remember { mutableStateOf(false) }
+    var isListening by remember { mutableStateOf(false) }
+    var voiceStatusText by remember { mutableStateOf("Tap to Speak into Phone Mic") }
 
     if (showPairingDialog) {
         com.nova.companion.ui.PairingDialog(
@@ -151,10 +167,83 @@ fun DeploymentDashboardScreen(
         )
     }
 
+    var isHeyNovaActive by remember { mutableStateOf(false) }
+
+    LaunchedEffect(isHeyNovaActive) {
+        if (isHeyNovaActive) {
+            voiceStatusText = "⚡ 'Hey Nova' Active! Say 'Hey Nova' or speak your command..."
+            while (isHeyNovaActive) {
+                if (!SpeechRecognizer.isRecognitionAvailable(context)) break
+                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                }
+
+                val resultCompletable = kotlinx.coroutines.CompletableDeferred<Unit>()
+
+                recognizer.setRecognitionListener(object : RecognitionListener {
+                    override fun onReadyForSpeech(params: Bundle?) {}
+                    override fun onBeginningOfSpeech() {}
+                    override fun onRmsChanged(rmsdB: Float) {}
+                    override fun onBufferReceived(buffer: ByteArray?) {}
+                    override fun onEndOfSpeech() {}
+                    override fun onError(error: Int) {
+                        try { recognizer.destroy() } catch (e: Exception) {}
+                        resultCompletable.complete(Unit)
+                    }
+                    override fun onResults(results: Bundle?) {
+                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                        val spokenText = matches?.firstOrNull() ?: ""
+                        if (spokenText.isNotEmpty()) {
+                            Log.i("MainActivity", "Hey Nova Listener Heard: '$spokenText'")
+                            val lower = spokenText.lowercase().trim()
+                            if (lower.contains("nova") || lower.contains("hey nova")) {
+                                try {
+                                    val tone = ToneGenerator(AudioManager.STREAM_NOTIFICATION, 100)
+                                    tone.startTone(ToneGenerator.TONE_PROP_BEEP, 150)
+                                } catch (e: Exception) {}
+
+                                val cleanCmd = lower
+                                    .replace("hey nova", "")
+                                    .replace("ok nova", "")
+                                    .replace("hey assistant", "")
+                                    .replace("nova", "")
+                                    .trim()
+
+                                if (cleanCmd.isEmpty()) {
+                                    isListening = true
+                                    voiceStatusText = "⚡ 'Hey Nova' Woke Up! Speak your command now..."
+                                    startCommandMic(context) { cmdText ->
+                                        isListening = false
+                                        if (cmdText.isNotEmpty()) {
+                                            voiceStatusText = executeVoiceAction(cmdText, context)
+                                        }
+                                    }
+                                } else {
+                                    voiceStatusText = executeVoiceAction(spokenText, context)
+                                }
+                            }
+                        }
+                        try { recognizer.destroy() } catch (e: Exception) {}
+                        resultCompletable.complete(Unit)
+                    }
+                    override fun onPartialResults(partialResults: Bundle?) {}
+                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                })
+
+                recognizer.startListening(intent)
+                resultCompletable.await()
+                kotlinx.coroutines.delay(400)
+            }
+        }
+    }
+
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("Nova Companion", fontWeight = FontWeight.Bold) },
+                title = { Text("Nova Assistant", fontWeight = FontWeight.Bold) },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface)
             )
         }
@@ -180,13 +269,13 @@ fun DeploymentDashboardScreen(
                         verticalArrangement = Arrangement.spacedBy(8.dp)
                     ) {
                         Text(
-                            text = "Nova Companion",
+                            text = "Nova Assistant",
                             fontSize = 24.sp,
                             fontWeight = FontWeight.Bold,
                             color = Color.White
                         )
                         Text(
-                            text = "Version 2.0",
+                            text = "Version 3.0.0 (AI Platform Active)",
                             fontSize = 16.sp,
                             color = MaterialTheme.colorScheme.secondary,
                             fontWeight = FontWeight.SemiBold
@@ -207,12 +296,138 @@ fun DeploymentDashboardScreen(
                                     .background(if (isServiceRunning) Color(0xFF4CAF50) else Color.Gray, shape = CircleShape)
                             )
                             Text(
-                                text = if (isServiceRunning) "Foreground Service Active (Not Connected)" else "Not Connected",
+                                text = if (isServiceRunning) "Foreground Service Active 🟢" else "Not Connected",
                                 fontSize = 18.sp,
                                 fontWeight = FontWeight.Bold,
                                 color = if (isServiceRunning) Color(0xFF4CAF50) else Color.LightGray
                             )
                         }
+                    }
+                }
+            }
+
+            // Always-On "Hey Nova" Hotword Activation Card
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isHeyNovaActive) Color(0xFF1B5E20) else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text(
+                                text = "⚡ 'HEY NOVA' VOICE WAKE WORD",
+                                fontSize = 16.sp,
+                                fontWeight = FontWeight.Bold,
+                                color = Color.White
+                            )
+                            Text(
+                                text = if (isHeyNovaActive) "Always Listening... Speak 'Hey Nova' anytime!" else "Hands-free voice activation like Google Assistant",
+                                fontSize = 13.sp,
+                                color = Color.LightGray
+                            )
+                        }
+                        Switch(
+                            checked = isHeyNovaActive,
+                            onCheckedChange = { isHeyNovaActive = it },
+                            colors = SwitchDefaults.colors(
+                                checkedThumbColor = Color.White,
+                                checkedTrackColor = Color(0xFF4CAF50)
+                            )
+                        )
+                    }
+                }
+            }
+
+            // Interactive Voice Assistant Mic Button
+            item {
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(
+                        containerColor = if (isListening) Color(0xFF311B92) else MaterialTheme.colorScheme.surface
+                    )
+                ) {
+                    Column(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .padding(20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                        verticalArrangement = Arrangement.spacedBy(12.dp)
+                    ) {
+                        Button(
+                            onClick = {
+                                if (!SpeechRecognizer.isRecognitionAvailable(context)) {
+                                    voiceStatusText = "⚠️ Speech recognizer unavailable"
+                                    return@Button
+                                }
+                                isListening = true
+                                voiceStatusText = "🎙️ Listening... Speak into your phone now!"
+
+                                val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+                                val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+                                    putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+                                    putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+                                }
+
+                                recognizer.setRecognitionListener(object : RecognitionListener {
+                                    override fun onReadyForSpeech(params: Bundle?) {}
+                                    override fun onBeginningOfSpeech() {}
+                                    override fun onRmsChanged(rmsdB: Float) {}
+                                    override fun onBufferReceived(buffer: ByteArray?) {}
+                                    override fun onEndOfSpeech() {
+                                        isListening = false
+                                    }
+                                    override fun onError(error: Int) {
+                                        isListening = false
+                                        voiceStatusText = "⚠️ Listening error ($error). Try again!"
+                                        try { recognizer.destroy() } catch (e: Exception) {}
+                                    }
+                                    override fun onResults(results: Bundle?) {
+                                        isListening = false
+                                        val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                                        val spokenText = matches?.firstOrNull() ?: ""
+                                        Log.i("MainActivity", "Native Voice Heard: '$spokenText'")
+                                        val resultMsg = executeVoiceAction(spokenText, context)
+                                        voiceStatusText = resultMsg
+                                        try { recognizer.destroy() } catch (e: Exception) {}
+                                    }
+                                    override fun onPartialResults(partialResults: Bundle?) {}
+                                    override fun onEvent(eventType: Int, params: Bundle?) {}
+                                })
+
+                                recognizer.startListening(intent)
+                            },
+                            modifier = Modifier
+                                .fillMaxWidth()
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = if (isListening) Color(0xFFFF4081) else Color(0xFF6200EE),
+                                contentColor = Color.White
+                            ),
+                            shape = RoundedCornerShape(28.dp)
+                        ) {
+                            Text(
+                                text = if (isListening) "🎙️ LISTENING NOW (4s)..." else "🎙️ TAP TO SPEAK TO NOVA",
+                                fontWeight = FontWeight.Bold,
+                                fontSize = 16.sp
+                            )
+                        }
+                        Text(
+                            text = voiceStatusText,
+                            fontSize = 13.sp,
+                            color = Color(0xFF03DAC6),
+                            fontWeight = FontWeight.Medium
+                        )
                     }
                 }
             }
@@ -327,4 +542,72 @@ fun DeploymentDashboardScreen(
             }
         }
     }
+}
+
+fun executeVoiceAction(spokenText: String, context: android.content.Context): String {
+    val lower = spokenText.lowercase()
+        .replace("hey nova", "")
+        .replace("ok nova", "")
+        .replace("hey assistant", "")
+        .replace("nova", "")
+        .trim()
+
+    val flashlightHandler = com.nova.companion.plugins.hardware.FlashlightHandler(context)
+    val appControlHandler = com.nova.companion.plugins.app.AppControlHandler(context)
+
+    return if (lower.contains("flashlight") && (lower.contains("on") || lower.contains("turn on"))) {
+        flashlightHandler.execute("flashlight.on", org.json.JSONObject())
+        "🔦 Flashlight Turned ON!"
+    } else if (lower.contains("flashlight") && (lower.contains("off") || lower.contains("turn off"))) {
+        flashlightHandler.execute("flashlight.off", org.json.JSONObject())
+        "🔦 Flashlight Turned OFF!"
+    } else if (lower.contains("youtube") || lower.contains("song") || (lower.contains("play") && !lower.contains("store"))) {
+        val cleanQuery = lower
+            .replace("play", "")
+            .replace("on youtube", "")
+            .replace("in youtube", "")
+            .replace("youtube", "")
+            .replace("search", "")
+            .replace("find", "")
+            .trim()
+        val searchQuery = if (cleanQuery.isNotEmpty()) cleanQuery else "english song"
+        appControlHandler.execute("youtube.play", org.json.JSONObject().put("query", searchQuery))
+        "▶ Playing '$searchQuery' on YouTube!"
+    } else if (lower.contains("open") || lower.contains("launch")) {
+        val appName = lower.replace("open", "").replace("launch", "").trim()
+        appControlHandler.execute("app.launch", org.json.JSONObject().put("app_name", appName))
+        "📱 Opened $appName!"
+    } else {
+        "🗣️ Heard: \"$spokenText\""
+    }
+}
+
+fun startCommandMic(context: android.content.Context, onCommandResult: (String) -> Unit) {
+    if (!SpeechRecognizer.isRecognitionAvailable(context)) return
+    val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
+    val intent = Intent(RecognizerIntent.ACTION_RECOGNIZE_SPEECH).apply {
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE_MODEL, RecognizerIntent.LANGUAGE_MODEL_FREE_FORM)
+        putExtra(RecognizerIntent.EXTRA_LANGUAGE, Locale.getDefault())
+        putExtra(RecognizerIntent.EXTRA_MAX_RESULTS, 1)
+    }
+    recognizer.setRecognitionListener(object : RecognitionListener {
+        override fun onReadyForSpeech(params: Bundle?) {}
+        override fun onBeginningOfSpeech() {}
+        override fun onRmsChanged(rmsdB: Float) {}
+        override fun onBufferReceived(buffer: ByteArray?) {}
+        override fun onEndOfSpeech() {}
+        override fun onError(error: Int) {
+            try { recognizer.destroy() } catch (e: Exception) {}
+            onCommandResult("")
+        }
+        override fun onResults(results: Bundle?) {
+            val matches = results?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+            val spokenText = matches?.firstOrNull() ?: ""
+            try { recognizer.destroy() } catch (e: Exception) {}
+            onCommandResult(spokenText)
+        }
+        override fun onPartialResults(partialResults: Bundle?) {}
+        override fun onEvent(eventType: Int, params: Bundle?) {}
+    })
+    recognizer.startListening(intent)
 }

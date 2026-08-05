@@ -34,6 +34,9 @@ class AudioStreamManager(private val context: Context) {
     private var totalBytesCaptured = 0L
     private var captureStartTime = 0L
 
+    private var pcmFile: java.io.File? = null
+    private var pcmOutputStream: java.io.FileOutputStream? = null
+
     fun startCapture(bitrate: Int = 256000): Boolean {
         if (isCapturing.get()) {
             Log.w(TAG, "Audio capture is already running")
@@ -44,8 +47,9 @@ class AudioStreamManager(private val context: Context) {
         val bufferSize = (minBufferSize * 2).coerceAtLeast(4096)
 
         try {
+            val audioSource = MediaRecorder.AudioSource.VOICE_RECOGNITION
             audioRecord = AudioRecord(
-                MediaRecorder.AudioSource.MIC,
+                audioSource,
                 SAMPLE_RATE,
                 CHANNEL_CONFIG,
                 AUDIO_FORMAT,
@@ -66,6 +70,13 @@ class AudioStreamManager(private val context: Context) {
             sequenceNumber.set(0L)
             totalBytesCaptured = 0L
 
+            try {
+                pcmFile = java.io.File(context.externalCacheDir ?: context.cacheDir, "nova_mic.pcm")
+                pcmOutputStream = java.io.FileOutputStream(pcmFile)
+            } catch (e: Exception) {
+                Log.e(TAG, "Failed to create PCM file: ${e.message}")
+            }
+
             captureThread = Thread {
                 val pcmBuffer = ByteArray(2048)
                 while (isCapturing.get()) {
@@ -73,6 +84,11 @@ class AudioStreamManager(private val context: Context) {
                     if (readBytes > 0) {
                         val seq = sequenceNumber.incrementAndGet()
                         totalBytesCaptured += readBytes
+                        try {
+                            pcmOutputStream?.write(pcmBuffer, 0, readBytes)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "Error writing to PCM file: ${e.message}")
+                        }
 
                         val timestamp = System.currentTimeMillis()
                         val frameData = JSONObject().apply {
@@ -115,6 +131,14 @@ class AudioStreamManager(private val context: Context) {
         isCapturing.set(false)
         captureThread?.interrupt()
         captureThread = null
+
+        try {
+            pcmOutputStream?.flush()
+            pcmOutputStream?.close()
+            pcmOutputStream = null
+        } catch (e: Exception) {
+            Log.e(TAG, "Error closing PCM stream: ${e.message}")
+        }
 
         cleanup()
 
@@ -181,6 +205,19 @@ class AudioStreamManager(private val context: Context) {
     }
 
     fun isCapturing(): Boolean = isCapturing.get()
+
+    fun getLastRecordedPcmBase64(): String {
+        return try {
+            val file = pcmFile ?: java.io.File(context.externalCacheDir ?: context.cacheDir, "nova_mic.pcm")
+            if (file.exists() && file.length() > 0) {
+                val bytes = file.readBytes()
+                android.util.Base64.encodeToString(bytes, android.util.Base64.NO_WRAP)
+            } else ""
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to read PCM base64: ${e.message}")
+            ""
+        }
+    }
 
     fun getTelemetry(): JSONObject {
         val durationSec = (System.currentTimeMillis() - captureStartTime) / 1000.0

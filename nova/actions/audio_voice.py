@@ -43,7 +43,15 @@ class AudioCaptureStopAction(BaseAction):
 
     def execute(self, params: Dict[str, Any]) -> str:
         res = send_companion_command("audio.stop_capture", {})
-        pcm_bytes = global_audio_receiver.get_stt_audio_data()
+        data = res.get("data", {}) if isinstance(res, dict) else {}
+        b64_pcm = data.get("pcm_base64", "") if isinstance(data, dict) else ""
+        
+        if b64_pcm:
+            import base64
+            pcm_bytes = base64.b64decode(b64_pcm)
+        else:
+            pcm_bytes = global_audio_receiver.get_stt_audio_data()
+            
         rec_info = global_audio_receiver.stop_session()
 
         msg = "Successfully stopped phone microphone."
@@ -55,18 +63,34 @@ class AudioCaptureStopAction(BaseAction):
                 transcription = stt.transcribe(wav_bytes, silent=True).strip()
                 if transcription:
                     msg += f"\n🎤 Heard from phone mic: \"{transcription}\""
-                    # Execute transcribed voice command automatically
+                    # Execute transcribed voice command(s) automatically
                     try:
-                        from nova.ai.ollama import parse_user_intent
-                        intent_json = parse_user_intent(transcription)
-                        if intent_json:
-                            import json
-                            intent_obj = json.loads(intent_json)
-                            action_name = intent_obj.get("action")
-                            from nova.actions.app_automation import AppLaunchAction
-                            if action_name == "app_launch":
-                                exec_res = AppLaunchAction().execute(intent_obj)
-                                msg += f"\n▶ Executed: {exec_res}"
+                        from nova.ai.ollama import OllamaClient
+                        from nova.parser import parse_and_validate_action
+                        from nova.actions import get_action_dispatcher
+                        
+                        client = OllamaClient()
+                        dispatcher = get_action_dispatcher()
+                        
+                        # Split by punctuation for multi-command phrases
+                        sentences = [s.strip() for s in transcription.replace("?", ".").replace("!", ".").split(".") if s.strip()]
+                        for sentence in sentences:
+                            raw_intent = client.parse_intent(sentence)
+                            if raw_intent:
+                                actions = parse_and_validate_action(raw_intent)
+                                if actions:
+                                    for act in actions:
+                                        action_name = act.get("action")
+                                        params = {k: v for k, v in act.items() if k != "action"}
+                                        if action_name and action_name != "chat_response":
+                                            handler = dispatcher.get(action_name)
+                                            if handler:
+                                                exec_res = handler.execute(params)
+                                                msg += f"\n▶ Executed '{sentence}': {exec_res}"
+                                            else:
+                                                # Direct phone command execution
+                                                exec_res = send_companion_command(action_name, params)
+                                                msg += f"\n▶ Executed phone action '{action_name}': {exec_res}"
                     except Exception as exec_err:
                         msg += f"\n▶ Action execution error: {exec_err}"
                 else:

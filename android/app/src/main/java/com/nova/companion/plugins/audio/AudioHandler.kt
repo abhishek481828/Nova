@@ -76,7 +76,9 @@ class AudioHandler(private val context: Context) : BaseActionHandler {
     }
 
     private fun stopCapture(): ActionResult {
+        val base64Pcm = streamManager.getLastRecordedPcmBase64()
         val telemetry = streamManager.getTelemetry()
+        telemetry.put("pcm_base64", base64Pcm)
         streamManager.stopCapture()
         return ActionResult("success", data = telemetry)
     }

@@ -19,6 +19,20 @@ class OllamaClient:
         log_request(user_input)
         user_lower = user_input.strip().lower()
 
+        # Instant Deterministic Intent Rules (Flashlight, Apps, Volume, Brightness)
+        if "turn on flashlight" in user_lower or "flashlight on" in user_lower or user_lower == "flashlight":
+            return json.dumps({"action": "flashlight.on"})
+        if "turn off flashlight" in user_lower or "flashlight off" in user_lower:
+            return json.dumps({"action": "flashlight.off"})
+
+        match_direct_app = re.search(r"(?:open|launch)\s+(youtube|maps|camera|gallery|instagram|whatsapp|chrome|spotify|settings|vlc)", user_lower)
+        if match_direct_app:
+            return json.dumps({"action": "app_launch", "app_name": match_direct_app.group(1)})
+
+        match_generic_open = re.search(r"^(?:open|launch)\s+(.+)$", user_lower)
+        if match_generic_open:
+            return json.dumps({"action": "app_launch", "app_name": match_generic_open.group(1).replace(".", "").strip()})
+
         # Deterministic Phone Automation Intent Rules
         if user_lower in ("list phone apps", "show phone apps", "list apps on phone", "show installed phone apps", "phone apps"):
             return json.dumps({"action": "app_list"})

@@ -1,5 +1,5 @@
 <resources>
-    <string name="app_name">Nova Companion</string>
+    <string name="app_name">Nova Assistant</string>
     <string name="accessibility_service_label">Nova AI Accessibility Engine</string>
     <string name="accessibility_service_description">Enables Nova AI Assistant to securely inspect UI hierarchy and automate user interface interactions on your command.</string>
 </resources>

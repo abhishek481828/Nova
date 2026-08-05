@@ -64,14 +64,16 @@ class FlashlightHandler(private val context: Context) : BaseActionHandler {
             for (id in cameraManager.cameraIdList) {
                 val characteristics = cameraManager.getCameraCharacteristics(id)
                 val hasFlash = characteristics.get(CameraCharacteristics.FLASH_INFO_AVAILABLE) ?: false
-                val facing = characteristics.get(CameraCharacteristics.LENS_FACING)
-                if (hasFlash && facing == CameraCharacteristics.LENS_FACING_BACK) {
+                if (hasFlash) {
                     return id
                 }
+            }
+            if (cameraManager.cameraIdList.isNotEmpty()) {
+                return cameraManager.cameraIdList[0]
             }
         } catch (e: Exception) {
             Log.e("FlashlightHandler", "Error detecting camera flash: ${e.message}")
         }
-        return null
+        return "0"
     }
 }

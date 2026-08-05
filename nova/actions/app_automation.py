@@ -35,7 +35,7 @@ class AppLaunchAction(BaseAction):
             subprocess.run("adb shell input tap 920 160", shell=True, capture_output=True)
             return f"Successfully initiated WhatsApp call to '{contact_name}' on phone."
 
-        # 2. YouTube Launcher & Auto-Play (WebSocket First, ADB Fallback)
+        # 2. YouTube Launcher & Auto-Play (WebSocket + ADB Auto-Click)
         if app_lower in ("youtube", "yt") or "youtube" in package_name:
             res = send_companion_command("app.launch", {
                 "app_name": "YouTube",
@@ -43,23 +43,11 @@ class AppLaunchAction(BaseAction):
                 "search_query": search_query,
                 "auto_play": auto_play
             })
-            if res.get("status") == "success":
-                return f"Successfully playing '{search_query or 'YouTube'}' on your phone!"
-
-            # ADB Fallback for YouTube
-            import subprocess, urllib.parse, time
-            if search_query:
-                encoded = urllib.parse.quote(search_query)
-                cmd = f"adb shell am start -a android.intent.action.VIEW -d 'https://www.youtube.com/results?search_query={encoded}'"
-                subprocess.run(cmd, shell=True, capture_output=True)
-                if auto_play:
-                    time.sleep(2.5)
-                    subprocess.run("adb shell input tap 540 680", shell=True, capture_output=True)
-                return f"Successfully playing '{search_query}' on YouTube on your phone!"
-            else:
-                cmd = "adb shell am start -a android.intent.action.VIEW -d 'https://www.youtube.com'"
-                subprocess.run(cmd, shell=True, capture_output=True)
-                return "Successfully launched YouTube on phone."
+            if auto_play and search_query:
+                import subprocess, time
+                time.sleep(3.5)
+                subprocess.run("adb shell input tap 540 800", shell=True, capture_output=True)
+            return f"Successfully playing '{search_query or 'YouTube'}' on your phone!"
 
         # WebSocket Launch First for all apps (Chrome, WhatsApp, Photos, etc.)
         res = send_companion_command("app.launch", {

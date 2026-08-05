@@ -40,11 +40,22 @@ class AppControlHandler(private val context: Context) : BaseActionHandler {
     override fun execute(action: String, payload: JSONObject): ActionResult {
         return when (action) {
             "app.launch" -> launchApp(payload)
+            "youtube.play" -> launchYouTubePlay(payload)
             "app.list" -> listInstalledApps(payload.optBoolean("include_system", false))
             "app.is_running" -> isAppRunning(payload.optString("package_name", payload.optString("app_name", "")))
             "whatsapp.call" -> performWhatsAppCall(payload.optString("contact_name", payload.optString("contact", "")))
             else -> ActionResult("error", error = "Unsupported app action: $action")
         }
+    }
+
+    private fun launchYouTubePlay(payload: JSONObject): ActionResult {
+        val query = payload.optString("query", payload.optString("song_name", payload.optString("search_query", "")))
+        val appPayload = JSONObject().apply {
+            put("app_name", "youtube")
+            put("search_query", if (query.isNotEmpty()) query else "english song")
+            put("auto_play", true)
+        }
+        return launchApp(appPayload)
     }
 
     private fun launchApp(payload: JSONObject): ActionResult {
@@ -118,14 +129,10 @@ class AppControlHandler(private val context: Context) : BaseActionHandler {
                 if (payload.optBoolean("auto_play", true)) {
                     Thread {
                         try {
-                            Thread.sleep(2500)
+                            Thread.sleep(3500)
                             val service = NovaAccessibilityService.getInstance()
-                            var clicked = false
                             if (service != null) {
-                                clicked = service.clickFirstVideoResult()
-                            }
-                            if (!clicked) {
-                                Runtime.getRuntime().exec("input tap 540 680")
+                                service.clickFirstVideoResult()
                             }
                         } catch (e: Exception) {
                             Log.e("AppControlHandler", "Auto-play click failed", e)
