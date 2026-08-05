@@ -76,7 +76,7 @@ graph TD
     MobileApp <--> Mobile
     
     %% Multi-Device Sync & Dashboard
-    MobileApp <-->|Multi-Device Sync (SHA-256 Checksums)| CLI
+    MobileApp <-->|"Multi-Device Sync (SHA-256 Checksums)"| CLI
     CLI <--> DB["Live Telemetry Dashboard (WebSockets / React)"]
     CLI <--> WM["Working Memory & Long-Term Memory"]
     
