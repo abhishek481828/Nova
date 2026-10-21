@@ -96,17 +96,19 @@ def _wait_for_wake(
         oww_frame = oww_accum[:_WAKE_FRAME]
         oww_accum = oww_accum[_WAKE_FRAME // 2:]  # 50% overlap — matches diag_wake.py behavior
 
-        try:
-            predictions = wake_detector.model.predict(oww_frame)
-        except Exception as e:
-            logger.debug(f"OWW inference error: {e}")
-            continue
+        predictions = {}
+        if getattr(wake_detector, "oww_active", False) and getattr(wake_detector, "model", None) is not None:
+            try:
+                predictions = wake_detector.model.predict(oww_frame)
+            except Exception as e:
+                logger.debug(f"OWW inference error: {e}")
+                predictions = {}
 
         if warmup_remaining > 0:
             warmup_remaining -= 1
             continue
 
-        score = predictions.get(wake_detector.model_name, 0.0)
+        score = predictions.get(getattr(wake_detector, "model_name", "nova"), 0.0)
         is_nova = False
         try:
             if hasattr(wake_detector, 'nova_detector'):
@@ -118,6 +120,11 @@ def _wait_for_wake(
 
         if is_nova:
             score = max(score, 0.95)
+
+        # Fallback when OpenWakeWord ONNX is not loaded: trigger on voice speech activity
+        if not getattr(wake_detector, "oww_active", False):
+            if rms >= 0.005:
+                score = max(score, 0.95)
 
         score_history.append(score)
 

@@ -54,12 +54,22 @@ def _write(message: str, is_error: bool = False) -> None:
         except Exception:
             pass
     else:
-        if is_error:
-            sys.stderr.write(message)
-            sys.stderr.flush()
-        else:
-            _original_stdout.write(message)
-            _original_stdout.flush()
+        try:
+            if is_error:
+                sys.stderr.write(message)
+                sys.stderr.flush()
+            else:
+                _original_stdout.write(message)
+                _original_stdout.flush()
+        except UnicodeEncodeError:
+            encoding = getattr(sys.stdout, "encoding", "utf-8") or "ascii"
+            clean_msg = message.encode(encoding, errors="replace").decode(encoding)
+            if is_error:
+                sys.stderr.write(clean_msg)
+                sys.stderr.flush()
+            else:
+                _original_stdout.write(clean_msg)
+                _original_stdout.flush()
 
 def print_success(message: str) -> None:
     _write(f"{COLOR_GREEN}{COLOR_BOLD}✔{COLOR_RESET} {message}\n")
@@ -108,8 +118,16 @@ def ask_confirmation(prompt_msg: str = "Proceed?") -> bool:
                     # Auto-approve if system is in autonomous mode
                     if StateManager.is_autonomous():
                         return True
-                    return False
-                choice = input(prompt_str).lower().strip()
+                    try:
+                        line = sys.stdin.readline()
+                        if line:
+                            choice = line.lower().strip()
+                        else:
+                            return False
+                    except Exception:
+                        return False
+                else:
+                    choice = input(prompt_str).lower().strip()
                 
             if choice in ("y", "yes"):
                 return True
@@ -131,23 +149,44 @@ def resolve_chromium_bin() -> Optional[str]:
     import shutil
 
     # 1. Check env variables
-    for env_var in ["CHROMIUM_BIN"]:
+    for env_var in ["CHROMIUM_BIN", "CHROME_BIN"]:
         val = os.environ.get(env_var)
         if val and os.path.exists(val):
             return os.path.realpath(val)
 
     # 2. Check shutil.which
-    p = shutil.which("chromium")
-    if p:
-        return os.path.realpath(p)
-
-    # 3. Check known NixOS path
-    known_paths = [
-        "/run/current-system/sw/bin/chromium"
-    ]
-    for p in known_paths:
-        if os.path.exists(p):
+    for bin_name in ["chrome", "chromium", "google-chrome-stable", "google-chrome", "msedge", "brave"]:
+        p = shutil.which(bin_name)
+        if p:
             return os.path.realpath(p)
+
+    # 3. Known Windows standard installation paths
+    if os.name == "nt":
+        program_files = os.environ.get("ProgramFiles", "C:\\Program Files")
+        program_files_x86 = os.environ.get("ProgramFiles(x86)", "C:\\Program Files (x86)")
+        local_app_data = os.environ.get("LOCALAPPDATA", "")
+        windows_paths = [
+            os.path.join(program_files, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(program_files_x86, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(local_app_data, "Google", "Chrome", "Application", "chrome.exe"),
+            os.path.join(program_files, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(program_files_x86, "Microsoft", "Edge", "Application", "msedge.exe"),
+            os.path.join(program_files, "BraveSoftware", "Brave-Browser", "Application", "brave.exe"),
+        ]
+        for wp in windows_paths:
+            if os.path.exists(wp):
+                return os.path.realpath(wp)
+    else:
+        # Known Linux paths
+        known_paths = [
+            "/usr/bin/google-chrome-stable",
+            "/usr/bin/chromium",
+            "/usr/bin/chromium-browser",
+            "/run/current-system/sw/bin/chromium"
+        ]
+        for p in known_paths:
+            if os.path.exists(p):
+                return os.path.realpath(p)
 
     return None
 

@@ -16,64 +16,76 @@ class RichSystemInfoAction(BaseAction):
         return re.sub(r'\x1b\[[0-9;]*m', '', text)
 
     def execute(self, params: Dict[str, Any]) -> str:
+        import platform
+        import time
+        import psutil
+
         # 1. Collect OS info
-        pretty_name = "NixOS"
-        if os.path.exists("/etc/os-release"):
-            with open("/etc/os-release", "r") as f:
-                for line in f:
-                    if line.startswith("PRETTY_NAME="):
-                        pretty_name = line.split("=", 1)[1].strip().strip('"')
-                        break
+        if os.name == "nt":
+            pretty_name = f"Windows {platform.release()} (Build {platform.version()})"
+        else:
+            pretty_name = "Linux"
+            if os.path.exists("/etc/os-release"):
+                with open("/etc/os-release", "r", encoding="utf-8", errors="replace") as f:
+                    for line in f:
+                        if line.startswith("PRETTY_NAME="):
+                            pretty_name = line.split("=", 1)[1].strip().strip('"')
+                            break
 
         # 2. Collect Kernel info
-        k_code, k_stdout, k_stderr = CommandExecutor.run_shell(["uname", "-srm"])
-        kernel = k_stdout.strip() if k_code == 0 else "Linux"
+        if os.name == "nt":
+            kernel = platform.platform()
+        else:
+            k_code, k_stdout, k_stderr = CommandExecutor.run_shell(["uname", "-srm"])
+            kernel = k_stdout.strip() if k_code == 0 else "Linux"
 
         # 3. Collect Uptime info
         uptime_str = "Unknown"
-        if os.path.exists("/proc/uptime"):
-            try:
-                with open("/proc/uptime", "r") as f:
-                    uptime_seconds = float(f.readline().split()[0])
-                    days = int(uptime_seconds // (24 * 3600))
-                    hours = int((uptime_seconds % (24 * 3600)) // 3600)
-                    minutes = int((uptime_seconds % 3600) // 60)
-                    parts = []
-                    if days > 0:
-                        parts.append(f"{days}d")
-                    if hours > 0:
-                        parts.append(f"{hours}h")
-                    if minutes > 0 or not parts:
-                        parts.append(f"{minutes}m")
-                    uptime_str = ", ".join(parts)
-            except Exception:
-                pass
+        try:
+            uptime_seconds = time.time() - psutil.boot_time()
+            days = int(uptime_seconds // 86400)
+            hours = int((uptime_seconds % 86400) // 3600)
+            minutes = int((uptime_seconds % 3600) // 60)
+            parts = []
+            if days > 0:
+                parts.append(f"{days}d")
+            if hours > 0:
+                parts.append(f"{hours}h")
+            if minutes > 0 or not parts:
+                parts.append(f"{minutes}m")
+            uptime_str = ", ".join(parts)
+        except Exception:
+            pass
 
         # 4. Collect Shell info
-        shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
+        if os.name == "nt":
+            shell = os.environ.get("PSExecutionPolicyPreference", None)
+            shell = "PowerShell" if shell or "PSModulePath" in os.environ else os.path.basename(os.environ.get("COMSPEC", "cmd.exe"))
+        else:
+            shell = os.environ.get("SHELL", "/bin/bash").split("/")[-1]
 
-        # 5. Collect DE info
-        de = os.environ.get("XDG_CURRENT_DESKTOP", "GNOME")
+        # 5. Collect DE / WM info
+        if os.name == "nt":
+            de = "Windows Explorer"
+            wm = "Desktop Window Manager (DWM)"
+        else:
+            de = os.environ.get("XDG_CURRENT_DESKTOP", "GNOME")
+            wm = "Mutter"
 
         # 6. Collect Packages count
-        pkgs_count = len(NixPackageManager.get_installed_packages())
-        sys_pkgs_count = 0
-        
-        # Read nova-packages.nix to count system packages
-        from nova.nixos_editor import NOVA_PACKAGES_PATH, get_system_packages
-        if os.path.exists(NOVA_PACKAGES_PATH):
-            try:
-                with open(NOVA_PACKAGES_PATH, "r", encoding="utf-8") as f:
-                    content = f.read()
-                    sys_pkgs_count = len(get_system_packages(content))
-            except Exception:
-                pass
+        if os.name == "nt":
+            pkgs_label = "System Packages"
+            pkgs_count = "Windows Native"
+            sys_pkgs_count = "winget active"
+        else:
+            pkgs_count = len(NixPackageManager.get_installed_packages())
+            sys_pkgs_count = pkgs_count
 
         # 7. Collect CPU info
-        cpu_model = "Unknown CPU"
-        if os.path.exists("/proc/cpuinfo"):
+        cpu_model = platform.processor() or "Unknown CPU"
+        if os.name != "nt" and os.path.exists("/proc/cpuinfo"):
             try:
-                with open("/proc/cpuinfo", "r") as f:
+                with open("/proc/cpuinfo", "r", encoding="utf-8", errors="replace") as f:
                     for line in f:
                         if line.strip().startswith("model name"):
                             cpu_model = line.split(":", 1)[1].strip()
@@ -83,60 +95,47 @@ class RichSystemInfoAction(BaseAction):
                 pass
 
         # 8. Collect GPU info
-        gpu_model = "Unknown GPU"
-        gpu_code, gpu_stdout, gpu_stderr = CommandExecutor.run_shell("lspci | grep -i -E 'vga|3d|display'", shell=True)
-        if gpu_code == 0 and gpu_stdout.strip():
-            first_gpu_line = gpu_stdout.splitlines()[0]
-            parts = first_gpu_line.split("controller:")
-            if len(parts) > 1:
-                gpu_model = parts[1].strip()
-            else:
-                parts = first_gpu_line.split(":")
-                if len(parts) > 2:
-                    gpu_model = parts[2].strip()
-                else:
-                    gpu_model = first_gpu_line.strip()
-            # Truncate overly long GPU strings
-            if len(gpu_model) > 40:
-                gpu_model = gpu_model[:37] + "..."
+        gpu_model = "Standard Display Adapter"
+        if os.name != "nt":
+            gpu_code, gpu_stdout, gpu_stderr = CommandExecutor.run_shell("lspci | grep -i -E 'vga|3d|display'", shell=True)
+            if gpu_code == 0 and gpu_stdout.strip():
+                first_gpu_line = gpu_stdout.splitlines()[0]
+                parts = first_gpu_line.split("controller:")
+                gpu_model = parts[1].strip() if len(parts) > 1 else first_gpu_line.strip()
+        else:
+            try:
+                c_code, c_stdout, _ = CommandExecutor.run_shell(["powershell", "-NoProfile", "-Command", "Get-CimInstance Win32_VideoController | Select-Object -ExpandProperty Name | Select-Object -First 1"])
+                if c_code == 0 and c_stdout.strip():
+                    gpu_model = c_stdout.strip()
+            except Exception:
+                pass
+        if len(gpu_model) > 40:
+            gpu_model = gpu_model[:37] + "..."
 
         # 9. Collect Memory info
         mem_str = "Unknown"
-        if os.path.exists("/proc/meminfo"):
-            try:
-                meminfo = {}
-                with open("/proc/meminfo", "r") as f:
-                    for line in f:
-                        parts = line.split()
-                        if len(parts) >= 2:
-                            meminfo[parts[0].rstrip(":")] = int(parts[1])
-                total_kb = meminfo.get("MemTotal", 0)
-                avail_kb = meminfo.get("MemAvailable", total_kb)
-                used_kb = total_kb - avail_kb
-                
-                total_gb = total_kb / (1024 * 1024)
-                used_gb = used_kb / (1024 * 1024)
-                pct = (used_kb / total_kb) * 100 if total_kb > 0 else 0
-                mem_str = f"{used_gb:.1f}GiB / {total_gb:.1f}GiB ({int(pct)}%)"
-            except Exception:
-                pass
+        try:
+            vmem = psutil.virtual_memory()
+            total_gb = vmem.total / (1024 ** 3)
+            used_gb = (vmem.total - vmem.available) / (1024 ** 3)
+            mem_str = f"{used_gb:.1f}GiB / {total_gb:.1f}GiB ({int(vmem.percent)}%)"
+        except Exception:
+            pass
 
         # 10. Collect Disk info
         disk_str = "Unknown"
-        disk_code, disk_stdout, disk_stderr = CommandExecutor.run_shell(["df", "-h", "/"])
-        if disk_code == 0:
-            lines = disk_stdout.splitlines()
-            if len(lines) >= 2:
-                parts = lines[1].split()
-                if len(parts) >= 5:
-                    disk_str = f"{parts[2]} / {parts[1]} ({parts[4]})"
+        try:
+            disk_root = "C:\\" if os.name == "nt" else "/"
+            du = psutil.disk_usage(disk_root)
+            disk_str = f"{du.used / (1024**3):.1f}GiB / {du.total / (1024**3):.1f}GiB ({int(du.percent)}%)"
+        except Exception:
+            pass
 
         # 11. Collect Network IP info
         local_ip = "Unknown"
         try:
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(0.1)
-            # Doesn't need to connect, just resolves local routing interface
             s.connect(("8.8.8.8", 80))
             local_ip = s.getsockname()[0]
             s.close()
@@ -156,20 +155,31 @@ class RichSystemInfoAction(BaseAction):
             pass
 
         # Get username and hostname
-        username = os.environ.get("USER", "nixos")
+        username = os.environ.get("USER", os.environ.get("USERNAME", "user"))
         hostname = socket.gethostname()
 
         # 12. Build the output
         logo_color = COLOR_CYAN
-        logo = [
-            f"          {logo_color}  ▗▄▄▄▖ ▄▄▄▄      ▄▄▄▄  {COLOR_RESET}",
-            f"          {logo_color} ▗██▀    ████▄  ▄████▀  {COLOR_RESET}",
-            f"          {logo_color} ▐██    ██ ▀████▀ ██    {COLOR_RESET}",
-            f"          {logo_color}  ██   ██    ▀▀    ██   {COLOR_RESET}",
-            f"          {logo_color}  ▐██ ▄██          ██▄  {COLOR_RESET}",
-            f"          {logo_color} ▗▄█████▄▄        ▄▄███  {COLOR_RESET}",
-            f"          {logo_color} ▝▀▀▀▀▀▀▀▀        ▀▀▀▀▀  {COLOR_RESET}"
-        ]
+        if os.name == "nt":
+            logo = [
+                f"          {logo_color}  _   _  _____  _    _        {COLOR_RESET}",
+                f"          {logo_color} | \\ | |/ ____|| |  | |  /\\   {COLOR_RESET}",
+                f"          {logo_color} |  \\| | |  __ | |  | | /  \\  {COLOR_RESET}",
+                f"          {logo_color} | . ` | | |_ || |  | |/ /\\ \\ {COLOR_RESET}",
+                f"          {logo_color} | |\\  | |__| || |__| / ____ \\{COLOR_RESET}",
+                f"          {logo_color} |_| \\_|\\_____| \\____/_/    \\_\\{COLOR_RESET}",
+                f"          {logo_color}        [ NOVA AI CORE ]       {COLOR_RESET}"
+            ]
+        else:
+            logo = [
+                f"          {logo_color}  [#####] ####      ####  {COLOR_RESET}",
+                f"          {logo_color} [##]    ######  ######   {COLOR_RESET}",
+                f"          {logo_color} [##    ##  ######  ##    {COLOR_RESET}",
+                f"          {logo_color}  ##   ##    ##    ##     {COLOR_RESET}",
+                f"          {logo_color}  [## ###          ###    {COLOR_RESET}",
+                f"          {logo_color} [#######        ######   {COLOR_RESET}",
+                f"          {logo_color}  [#####]          [##]   {COLOR_RESET}"
+            ]
 
         # Calculate visual padding of logo lines
         logo_width = 34
@@ -183,6 +193,7 @@ class RichSystemInfoAction(BaseAction):
         user_host = f"{COLOR_CYAN}{COLOR_BOLD}{username}{COLOR_RESET}@{COLOR_CYAN}{COLOR_BOLD}{hostname}{COLOR_RESET}"
         separator = "-" * (len(username) + len(hostname) + 1)
         
+        disk_label = "Disk (C:)" if os.name == "nt" else "Disk (/)"
         stats = [
             user_host,
             separator,
@@ -191,12 +202,12 @@ class RichSystemInfoAction(BaseAction):
             f"{COLOR_CYAN}{COLOR_BOLD}Uptime{COLOR_RESET}: {uptime_str}",
             f"{COLOR_CYAN}{COLOR_BOLD}Shell{COLOR_RESET}: {shell}",
             f"{COLOR_CYAN}{COLOR_BOLD}DE{COLOR_RESET}: {de}",
-            f"{COLOR_CYAN}{COLOR_BOLD}WM{COLOR_RESET}: Mutter",
-            f"{COLOR_CYAN}{COLOR_BOLD}Packages{COLOR_RESET}: {pkgs_count} (nix-profile) | {sys_pkgs_count} (system)",
+            f"{COLOR_CYAN}{COLOR_BOLD}WM{COLOR_RESET}: {wm}",
+            f"{COLOR_CYAN}{COLOR_BOLD}Packages{COLOR_RESET}: {pkgs_count} | {sys_pkgs_count}",
             f"{COLOR_CYAN}{COLOR_BOLD}CPU{COLOR_RESET}: {cpu_model}",
             f"{COLOR_CYAN}{COLOR_BOLD}GPU{COLOR_RESET}: {gpu_model}",
             f"{COLOR_CYAN}{COLOR_BOLD}Memory{COLOR_RESET}: {mem_str}",
-            f"{COLOR_CYAN}{COLOR_BOLD}Disk (/) {COLOR_RESET}: {disk_str}",
+            f"{COLOR_CYAN}{COLOR_BOLD}{disk_label}{COLOR_RESET}: {disk_str}",
             f"{COLOR_CYAN}{COLOR_BOLD}Local IP{COLOR_RESET}: {local_ip}",
             f"{COLOR_CYAN}{COLOR_BOLD}Public IP{COLOR_RESET}: {public_ip}"
         ]

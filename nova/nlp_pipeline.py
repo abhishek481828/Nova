@@ -11,11 +11,11 @@ nlp_logger = logging.getLogger("nova.nlp")
 
 # Default protected words list
 DEFAULT_PROTECTED_WORDS = {
-    "nova", "chromium", "nixos", "ollama", "playwright", "chatgpt", "github", 
+    "nova", "chromium", "windows", "ollama", "groq", "playwright", "chatgpt", "github", 
     "python", "javascript", "vscode", "sqlite", "vs code", "chrome", "firefox",
-    "scrcpy", "tailscale", "vlc", "systemctl", "journalctl", "systemd",
-    "warp-cli", "warp", "nix-env", "nixpkgs", "nix-shell", "pandas", "numpy",
-    "webrtcvad", "neofetch", "sudo", "sys", "import", "print", "path", "git",
+    "scrcpy", "tailscale", "vlc", "powershell", "winget",
+    "warp-cli", "warp", "pandas", "numpy",
+    "webrtcvad", "neofetch", "sys", "import", "print", "path", "git",
     "apps", "applications"
 }
 
@@ -54,7 +54,7 @@ class NlpPipeline:
         self,
         spell_checker: Optional[SpellChecker] = None,
         confidence_threshold: float = 0.75,
-        debug_mode: bool = True
+        debug_mode: bool = False
     ) -> None:
         self.spell = spell_checker or SpellChecker()
         self.confidence_threshold = confidence_threshold
@@ -334,12 +334,14 @@ class NlpPipeline:
 
 def print_debug_info(res: Dict[str, Any]) -> None:
     """Helper to display nlp pipeline internals in debug console."""
-    print_info("--- NLP Pipeline Debug ---")
-    print_info(f"Original Text: '{res['original']}'")
-    print_info(f"Normalized Text: '{res['normalized']}'")
-    print_info(f"Corrected Text: '{res['corrected']}'")
-    print_info(f"Tokens: {res['tokens']}")
-    print_info(f"Corrections: {res['corrections']}")
-    print_info(f"Skipped Corrections: {res['skipped']}")
-    print_info(f"Protected words count: {len(res['protected_words'])}")
-    print_info("--------------------------")
+    import os
+    if os.environ.get("NOVA_DEBUG", "false").lower() == "true":
+        print_info("--- NLP Pipeline Debug ---")
+        print_info(f"Original Text: '{res['original']}'")
+        print_info(f"Normalized Text: '{res['normalized']}'")
+        print_info(f"Corrected Text: '{res['corrected']}'")
+        print_info(f"Tokens: {res['tokens']}")
+        print_info(f"Corrections: {res['corrections']}")
+        print_info(f"Skipped Corrections: {res['skipped']}")
+        print_info(f"Protected words count: {len(res['protected_words'])}")
+        print_info("--------------------------")

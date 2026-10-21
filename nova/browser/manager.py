@@ -661,13 +661,12 @@ class BrowserManager:
             if cls._browser is not None:
                 cls.close_connection()
 
-        # Enforce NixOS-safe PLAYWRIGHT_NODEJS_PATH locally to guard against environment corruption
+        # Ensure PLAYWRIGHT_NODEJS_PATH is set if node is discovered in environment
         import shutil
-        node_path = "/run/current-system/sw/bin/node"
-        if not os.path.exists(node_path):
+        if "PLAYWRIGHT_NODEJS_PATH" not in os.environ or not os.path.exists(os.environ["PLAYWRIGHT_NODEJS_PATH"]):
             node_path = shutil.which("node")
-        if node_path:
-            os.environ["PLAYWRIGHT_NODEJS_PATH"] = node_path
+            if node_path:
+                os.environ["PLAYWRIGHT_NODEJS_PATH"] = node_path
 
         # Initialize Playwright if not already done
         if cls._playwright is None:

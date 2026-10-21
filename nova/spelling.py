@@ -89,22 +89,18 @@ def correct_query_spelling(query: str) -> str:
         query_clean = "open " + query_clean[5:]
     # Map general status commands to the consolidated system status report
     if query_clean in ("status", "system status", "check status", "device status", "how is everything", "how is my system looking", "full system update", "give me update about my full system software"):
-        print_info("Mapping query to consolidated system status report...")
         return "give me update about my full system software"
     
     # Map connectivity-specific commands to connection diagnostics
     if query_clean in ("connection status", "check my connection", "check connections"):
-        print_info("Mapping query to system status connection diagnostics...")
         return "diagnose my connections"
 
     # Map neofetch / system specs dashboard commands
     if query_clean in ("neofetch", "specs", "system specs", "system dashboard", "system info dashboard", "show specs", "show dashboard"):
-        print_info("Mapping query to rich system info dashboard...")
         return "show system specs dashboard"
 
     # Map system sleep / suspend commands
     if query_clean in ("sleep", "sleeping", "go to sleep", "put system to sleep", "suspend", "suspend system"):
-        print_info("Mapping query to system suspend action...")
         return "suspend system"
     # Map phone control commands to standardized forms
     phone_connect_phrases = ("connect phone", "connect to phone", "phone connect", "nova connect phone", "pair phone", "connect my phone")

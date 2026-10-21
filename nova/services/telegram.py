@@ -17,7 +17,9 @@ class TelegramService:
     def _load_password_from_env_file(self) -> str:
         try:
             from pathlib import Path
-            env_path = Path("/home/nixos/Projects/Nova/.env")
+            env_path = Path(".env").resolve()
+            if not env_path.exists():
+                env_path = Path(__file__).resolve().parent.parent.parent / ".env"
             if env_path.exists():
                 for line in env_path.read_text().splitlines():
                     if line.strip().startswith("TELEGRAM_UNLOCK_PASSWORD="):
@@ -429,7 +431,7 @@ class TelegramService:
                 voice_bytes = download_resp.content
 
             # 3. Save to scratch space inside the workspace
-            scratch_dir = Path("/home/nixos/Projects/Nova/scratch")
+            scratch_dir = Path("scratch").resolve()
             scratch_dir.mkdir(parents=True, exist_ok=True)
             oga_path = scratch_dir / "telegram_voice.oga"
             wav_path = scratch_dir / "telegram_voice.wav"
@@ -489,7 +491,7 @@ class TelegramService:
 
             logger.info(f"TTS Synthesized successfully. Converting to OGG: {mp3_path}")
             # 2. Setup output OGG path
-            scratch_dir = Path("/home/nixos/Projects/Nova/scratch")
+            scratch_dir = Path("scratch").resolve()
             scratch_dir.mkdir(parents=True, exist_ok=True)
             ogg_path = str(scratch_dir / "telegram_response.ogg")
 

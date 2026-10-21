@@ -142,7 +142,7 @@ def check_long_running_action(dispatcher, actions: list, user_query: str) -> tup
             if hasattr(handler, "is_long_running") and handler.is_long_running:
                 is_long = True
             elif name in ("chromium_action", "browser_action", "search_package", "open_app", "install_package", 
-                          "remove_package", "update_package", "git_command", "nix_shell", 
+                          "remove_package", "update_package", "git_command", 
                           "adb_mirroring", "adb_device_op", "search_files", "locate_files"):
                 is_long = True
             

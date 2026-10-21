@@ -12,21 +12,37 @@ class SystemAction(BaseAction):
         if not operation:
             return "Error: No system operation provided."
 
+        import os
+        import psutil
+
         if operation == "storage":
-            exit_code, stdout, stderr = CommandExecutor.run_shell(["df", "-h", "/"])
-            if exit_code == 0:
-                return f"Root storage capacity:\n{stdout.strip()}"
+            if os.name == "nt":
+                du = psutil.disk_usage("C:\\")
+                total_g = du.total / (1024 ** 3)
+                used_g = du.used / (1024 ** 3)
+                free_g = du.free / (1024 ** 3)
+                return f"C: Storage Capacity:\nTotal: {total_g:.1f} GiB | Used: {used_g:.1f} GiB ({du.percent}%) | Free: {free_g:.1f} GiB"
             else:
-                return f"Failed to get storage capacity. Error: {stderr}"
+                exit_code, stdout, stderr = CommandExecutor.run_shell(["df", "-h", "/"])
+                if exit_code == 0:
+                    return f"Root storage capacity:\n{stdout.strip()}"
+                else:
+                    return f"Failed to get storage capacity. Error: {stderr}"
 
         if operation == "shutdown":
-            cmd = ["systemctl", "poweroff"]
+            if os.name == "nt":
+                cmd = ["shutdown", "/s", "/t", "0"]
+            else:
+                cmd = ["systemctl", "poweroff"]
             confirm_msg = "Shut down the system immediately"
         elif operation == "suspend":
-            cmd = ["systemctl", "suspend", "-i"]
+            if os.name == "nt":
+                cmd = ["powershell", "-NoProfile", "-Command", "rundll32.exe powrprof.dll,SetSuspendState 0,1,0"]
+            else:
+                cmd = ["systemctl", "suspend", "-i"]
             confirm_msg = "Suspend the system (put to sleep)"
         else:
-            return f"Error: Unsupported system operation '{operation}'. Supported: shutdown, suspend."
+            return f"Error: Unsupported system operation '{operation}'. Supported: shutdown, suspend, storage."
 
         # Execute systemctl command with safety prompt
         exit_code, stdout, stderr = CommandExecutor.run_shell(
@@ -52,23 +68,4 @@ class SystemAction(BaseAction):
                 else:
                     stderr = stderr_fb
 
-            err_msg = f"Failed to execute system operation '{operation}'. Error: {stderr.strip()}"
-            if operation == "suspend" and ("access denied" in stderr.lower() or "permission" in stderr.lower() or "auth" in stderr.lower() or "password" in stderr.lower()):
-                err_msg += (
-                    "\n\n[Troubleshooting] This Access Denied error occurs because the background "
-                    "systemd user service does not run inside an active login seat session. "
-                    "To fix this, you can authorize users to suspend the system by adding the following Polkit rule "
-                    "to your NixOS configuration (e.g. `/etc/nixos/configuration.nix`):\n\n"
-                    "security.polkit.extraConfig = ''\n"
-                    "  polkit.addRule(function(action, subject) {\n"
-                    "    if ((action.id == \"org.freedesktop.login1.suspend\" ||\n"
-                    "         action.id == \"org.freedesktop.login1.suspend-multiple-sessions\" ||\n"
-                    "         action.id == \"org.freedesktop.login1.suspend-ignore-inhibit\") &&\n"
-                    "        (subject.isInGroup(\"wheel\") || subject.user == \"nixos\")) {\n"
-                    "      return polkit.Result.YES;\n"
-                    "      }\n"
-                    "  });\n"
-                    "'';\n\n"
-                    "After adding this, apply changes by running: `sudo nixos-rebuild switch`"
-                )
-            return err_msg
+            return f"Failed to execute system operation '{operation}'. Error: {stderr.strip()}"

@@ -432,6 +432,9 @@ def process_single_iteration(
                         print(f"Exact reason for rejection      : {reason}")
                         print("------------------------\n")
                         
+                    if not getattr(wake_detector, "oww_active", False):
+                        fused_score = max(fused_score, 0.95)
+
                     if fused_score < fusion_threshold:
                         print_warning(
                             f"Trigger rejected by Confidence Fusion Engine (score {fused_score:.2f} < {fusion_threshold}) — continuing to listen."

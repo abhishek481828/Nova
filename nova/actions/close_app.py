@@ -53,7 +53,28 @@ class CloseAppAction(BaseAction):
 
         print_info(f"Closing application: {app_name} (process: {process_name})...")
         
-        # Execute pkill -f to find and terminate matching processes
+        import os
+        if os.name == "nt":
+            import psutil
+            killed = 0
+            current_pid = os.getpid()
+            target = process_name.lower().removesuffix(".exe")
+            for proc in psutil.process_iter(['name', 'cmdline']):
+                try:
+                    if proc.pid == current_pid:
+                        continue
+                    pname = (proc.info['name'] or '').lower().removesuffix(".exe")
+                    if pname == target or (pname.startswith(target) and len(target) >= 3):
+                        proc.kill()
+                        killed += 1
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            if killed > 0:
+                return f"Successfully closed '{app_name}' (terminated {killed} process(es) matching '{process_name}')."
+            else:
+                return f"No active processes found running '{app_name}' ('{process_name}')."
+        
+        # Execute pkill -f to find and terminate matching processes on Unix
         exit_code, stdout, stderr = CommandExecutor.run_shell(["pkill", "-f", process_name])
         
         # pkill exit code meanings: 0 = match found, 1 = no match found, 2 = error

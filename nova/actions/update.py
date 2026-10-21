@@ -9,22 +9,39 @@ class UpdateSystemAction(BaseAction):
         return "update_system"
 
     def execute(self, params: Dict[str, Any]) -> str:
+        import os
+        if os.name == "nt":
+            print_info("Windows Update Options:")
+            print("  [1] Upgrade all installed applications ('winget upgrade --all')")
+            print("  [c] Cancel")
+            choice = input("Enter choice (1 or c): ").strip().lower()
+            if choice != "1":
+                return "System update cancelled."
+            cmd = ["winget", "upgrade", "--all", "--accept-source-agreements", "--accept-package-agreements"]
+            confirm_message = "Upgrade all Windows packages using winget"
+            exit_code, stdout, stderr = CommandExecutor.run_shell(
+                cmd,
+                require_confirmation=True,
+                confirm_message=confirm_message
+            )
+            if exit_code == 0:
+                return "Windows package upgrades completed successfully."
+            elif exit_code == -1:
+                return "System upgrade aborted by user."
+            else:
+                return f"Failed system upgrade. Error: {stderr or stdout}"
+
         print_info("System Update Options:")
-        print("  [1] Upgrade user profile packages ('nix profile upgrade --all')")
-        print("  [2] Upgrade entire NixOS system ('sudo nixos-rebuild switch --upgrade')")
+        print("  [1] Upgrade user packages ('nix profile upgrade --all')")
         print("  [c] Cancel")
         
         while True:
-            choice = input("Enter choice (1, 2 or c): ").strip().lower()
+            choice = input("Enter choice (1 or c): ").strip().lower()
             if choice == "c":
                 return "System update cancelled."
             if choice == "1":
                 cmd = ["nix", "profile", "upgrade", "--all"]
-                confirm_message = "Upgrade all packages in active Nix profile"
-                break
-            elif choice == "2":
-                cmd = ["sudo", "nixos-rebuild", "switch", "--upgrade"]
-                confirm_message = "Rebuild entire NixOS configuration and download upgrades (requires sudo)"
+                confirm_message = "Upgrade all packages in active user profile"
                 break
             print("Invalid choice, try again.")
 

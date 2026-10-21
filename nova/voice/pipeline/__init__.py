@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import sys
 import types
-import sounddevice as sd
+try:
+    import sounddevice as sd
+except Exception:
+    sd = None
 
 from nova.voice.whisper import get_stt_provider
 from nova.voice.wakeword import LocalWakeWordDetector

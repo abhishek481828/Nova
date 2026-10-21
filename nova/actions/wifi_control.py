@@ -11,6 +11,25 @@ class WifiControlAction(BaseAction):
     def execute(self, params: Dict[str, Any]) -> str:
         operation = params.get("operation", "status").strip().lower()
 
+        import os
+        if os.name == "nt":
+            if operation == "status":
+                cmd = ["powershell", "-NoProfile", "-Command", "Get-NetConnectionProfile"]
+                c_code, c_stdout, _ = CommandExecutor.run_shell(cmd)
+                ssid = "Disconnected"
+                status = "Offline"
+                if c_code == 0:
+                    for block in c_stdout.split("\r\n\r\n"):
+                        if "Wi-Fi" in block or "WiFi" in block or "Wireless" in block:
+                            for line in block.splitlines():
+                                if line.strip().startswith("Name"):
+                                    ssid = line.split(":", 1)[1].strip()
+                                    status = "Connected"
+                                    break
+                return f"Wi-Fi Status: {COLOR_GREEN if status == 'Connected' else COLOR_YELLOW}{status}{COLOR_RESET}\nConnected Network: {COLOR_CYAN}{ssid}{COLOR_RESET}"
+            else:
+                return f"Wi-Fi operation '{operation}' on Windows requires system network settings or administrator elevation."
+
         if operation == "status":
             r_code, r_stdout, r_stderr = CommandExecutor.run_shell(["nmcli", "radio", "wifi"])
             if r_code != 0:

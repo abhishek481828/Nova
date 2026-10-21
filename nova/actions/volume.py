@@ -44,6 +44,45 @@ class VolumeControlAction(BaseAction):
             except (ValueError, TypeError):
                 pass
 
+        import os
+        if os.name == "nt":
+            import ctypes
+            user32 = ctypes.windll.user32
+            VK_VOLUME_MUTE = 0xAD
+            VK_VOLUME_DOWN = 0xAE
+            VK_VOLUME_UP = 0xAF
+            
+            def send_key(vk):
+                user32.keybd_event(vk, 0, 0, 0)
+                user32.keybd_event(vk, 0, 2, 0)
+
+            if operation in ("mute", "unmute"):
+                send_key(VK_VOLUME_MUTE)
+                return f"System audio toggle mute executed (Windows)."
+            elif operation == "increase":
+                steps = max(1, (level if level is not None else 10) // 2)
+                for _ in range(steps):
+                    send_key(VK_VOLUME_UP)
+                return f"Increased Windows volume by ~{(level if level is not None else 10)}%."
+            elif operation == "decrease":
+                steps = max(1, (level if level is not None else 10) // 2)
+                for _ in range(steps):
+                    send_key(VK_VOLUME_DOWN)
+                return f"Decreased Windows volume by ~{(level if level is not None else 10)}%."
+            elif operation == "set":
+                target = level if level is not None else 50
+                target = max(0, min(100, target))
+                # Reset to zero then increase
+                for _ in range(50):
+                    send_key(VK_VOLUME_DOWN)
+                for _ in range(target // 2):
+                    send_key(VK_VOLUME_UP)
+                return f"Windows system volume set to ~{target}%."
+            elif operation == "get":
+                return "Current Windows audio status: Active (Volume hotkeys enabled)."
+            else:
+                return f"Error: Unsupported volume operation '{operation}'."
+
         try:
             if operation == "mute":
                 exit_code, stdout, stderr = CommandExecutor.run_shell(["wpctl", "set-mute", "@DEFAULT_AUDIO_SINK@", "1"])

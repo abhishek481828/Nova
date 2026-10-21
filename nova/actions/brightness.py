@@ -10,6 +10,22 @@ class BrightnessControlAction(BaseAction):
     def action_name(self) -> str:
         return "brightness_control"
 
+    def _get_brightness_windows(self) -> int:
+        """Reads current brightness percentage on Windows via CIM/WMI."""
+        cmd = ["powershell", "-NoProfile", "-Command", "(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightness).CurrentBrightness"]
+        exit_code, stdout, stderr = CommandExecutor.run_shell(cmd)
+        if exit_code == 0 and stdout.strip().isdigit():
+            return int(stdout.strip())
+        raise RuntimeError(f"Failed to query brightness on Windows: {stderr or stdout}")
+
+    def _set_brightness_windows(self, pct: int) -> bool:
+        """Sets brightness percentage on Windows via CIM/WMI."""
+        cmd = ["powershell", "-NoProfile", "-Command", f"(Get-CimInstance -Namespace root/wmi -ClassName WmiMonitorBrightnessMethods).WmiSetBrightness(1, {pct})"]
+        exit_code, stdout, stderr = CommandExecutor.run_shell(cmd)
+        if exit_code == 0:
+            return True
+        raise RuntimeError(f"Failed to set brightness on Windows: {stderr or stdout}")
+
     def _get_brightness_dbus(self) -> int:
         """Reads current brightness level (percentage) via D-Bus."""
         cmd = [
@@ -94,7 +110,34 @@ class BrightnessControlAction(BaseAction):
             except (ValueError, TypeError):
                 pass
 
-        # Try D-Bus method first
+        import os
+        if os.name == "nt":
+            try:
+                curr_pct = self._get_brightness_windows()
+                if operation == "get":
+                    return f"Current Screen Brightness: {COLOR_CYAN}{curr_pct}%{COLOR_RESET} (Windows)"
+                elif operation in ("set", "increase", "decrease"):
+                    new_pct = curr_pct
+                    if operation == "set":
+                        new_pct = level if level is not None else 50
+                    elif operation == "increase":
+                        step = level if level is not None else 10
+                        new_pct = curr_pct + step
+                    elif operation == "decrease":
+                        step = level if level is not None else 10
+                        new_pct = curr_pct - step
+                    if new_pct < 5:
+                        new_pct = 5
+                    elif new_pct > 100:
+                        new_pct = 100
+                    self._set_brightness_windows(new_pct)
+                    return f"Screen brightness set to {COLOR_CYAN}{new_pct}%{COLOR_RESET} (Previous: {curr_pct}%)"
+                else:
+                    return f"Error: Unsupported brightness operation '{operation}'."
+            except Exception as win_err:
+                return f"Error controlling brightness on Windows: {win_err}"
+
+        # Try D-Bus method first (Linux)
         try:
             curr_pct = self._get_brightness_dbus()
 

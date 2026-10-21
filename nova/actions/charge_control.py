@@ -11,7 +11,7 @@ class ChargeControlAction(BaseAction):
         return "charge_control"
 
     def _find_charge_limit_files(self) -> list:
-        """Finds all available charge threshold files under /sys/class/power_supply."""
+        """Finds all available charge threshold files under /sys/class/power_supply (Linux)."""
         files = []
         battery_dir = "/sys/class/power_supply"
         if os.path.exists(battery_dir):
@@ -28,7 +28,6 @@ class ChargeControlAction(BaseAction):
         operation = params.get("operation", "get").strip().lower()
         level_param = params.get("level")
 
-        # Parse level if present
         level = None
         if level_param is not None:
             try:
@@ -40,12 +39,31 @@ class ChargeControlAction(BaseAction):
             except (ValueError, TypeError):
                 pass
 
+        # Windows Battery & Power Handler
+        if os.name == "nt":
+            import psutil
+            bat = psutil.sensors_battery()
+            if operation == "get":
+                if bat is not None:
+                    plugged = "Plugged In" if bat.power_plugged else "On Battery"
+                    time_info = f", ~{bat.secsleft // 60} min remaining" if bat.secsleft > 0 and not bat.power_plugged else ""
+                    return f"Battery Status: {COLOR_CYAN}{bat.percent}%{COLOR_RESET} ({plugged}{time_info})"
+                return "Battery Status: No battery hardware detected (Desktop/AC powered)."
+
+            elif operation == "set":
+                return (
+                    "Setting hardware charging thresholds on Windows is managed by your device OEM power suite "
+                    "(such as Lenovo Vantage, MyASUS, Dell Command | Power Manager, or HP Support Assistant)."
+                )
+            else:
+                return f"Error: Unsupported charging operation '{operation}' on Windows."
+
+        # Linux Charging Limit Handler
         limit_files = self._find_charge_limit_files()
         if not limit_files:
             return "Error: No charge control threshold configuration files found on this hardware."
 
         if operation == "get":
-            # Read current values
             limit_values = []
             for file_path in limit_files:
                 try:
@@ -60,78 +78,26 @@ class ChargeControlAction(BaseAction):
             if level is None:
                 return "Error: No charging limit level percentage specified to set."
 
-            # Enforce constraints (usually 10% to 100%)
-            if level < 10:
-                level = 10
-            elif level > 100:
-                level = 100
-
+            level = max(10, min(100, level))
             successes = []
             failures = []
 
             for file_path in limit_files:
-                # Read previous limit value
-                prev_val = "unknown"
-                try:
-                    with open(file_path, "r") as f:
-                        prev_val = f.read().strip()
-                except Exception:
-                    pass
-
                 bat_name = os.path.basename(os.path.dirname(file_path))
-                # Write new limit using sudo fallback
                 cmd = f"echo {level} | sudo tee {file_path}"
                 exit_code, stdout, stderr = CommandExecutor.run_shell(
-                    cmd,
-                    shell=True,
-                    require_confirmation=False
+                    cmd, shell=True, require_confirmation=False
                 )
-
                 if exit_code == 0:
-                    successes.append(f"{bat_name} set to {level}% (Previous: {prev_val}%)")
+                    successes.append(f"{bat_name} set to {level}%")
                 else:
-                    # Try passwordless sudo -n fallback
-                    fallback_cmd = f"echo {level} | sudo -n tee {file_path}"
-                    exit_code_fb, stdout_fb, stderr_fb = CommandExecutor.run_shell(
-                        fallback_cmd,
-                        shell=True,
-                        require_confirmation=False
-                    )
-                    if exit_code_fb == 0:
-                        successes.append(f"{bat_name} set to {level}% (via passwordless sudo, Previous: {prev_val}%)")
-                    else:
-                        failures.append(f"{bat_name} failed: {stderr_fb.strip() or stderr.strip()}")
-
-            if successes:
-                try:
-                    from nova.core.state import StateManager
-                    StateManager.set_charge_limit(level)
-                except Exception:
-                    pass
+                    failures.append(f"{bat_name} failed: {stderr.strip()}")
 
             if successes and not failures:
                 return f"Charging limit successfully updated: {', '.join(successes)}"
             elif successes and failures:
                 return f"Charging limit partially updated. Success: {', '.join(successes)}. Errors: {', '.join(failures)}"
             else:
-                err_msg = f"Failed to set charging limit. Errors: {', '.join(failures)}"
-                if any("password" in f.lower() or "permission" in f.lower() for f in failures):
-                    commands_str = "\n".join([f"      {{ command = \"/run/current-system/sw/bin/tee {fp}\"; options = [ \"NOPASSWD\" ]; }}" for fp in limit_files])
-                    err_msg += (
-                        "\n\n[Troubleshooting] Setting the battery charging limit requires elevated privileges. "
-                        "To allow Nova to configure this without prompting for a password, add the following sudoers rule "
-                        "to your NixOS configuration (e.g. `/etc/nixos/configuration.nix`):\n\n"
-                        "security.sudo.extraRules = [\n"
-                        "  {\n"
-                        "    users = [ \"nixos\" ];\n"
-                        "    commands = [\n"
-                        f"{commands_str}\n"
-                        "    ];\n"
-                        "  }\n"
-                        "];\n\n"
-                        "After updating the configuration, apply it with: `sudo nixos-rebuild switch`"
-                    )
-                return err_msg
+                return f"Failed to set charging limit: {', '.join(failures)}"
 
-        else:
-            return f"Error: Unsupported charging limit operation '{operation}'."
+        return f"Error: Unsupported charging limit operation '{operation}'."

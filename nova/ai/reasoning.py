@@ -628,7 +628,9 @@ def route_query_to_planner_pipeline(
     else:
         exec_engine.approve_plan(plan.id)
         
-    print_info(f"Executing plan {plan.id}...")
+    import os
+    if os.environ.get("NOVA_DEBUG", "false").lower() == "true":
+        print_info(f"Executing plan {plan.id}...")
     while True:
         progress = exec_engine.get_progress(plan.id)
         status = progress.get("status")
@@ -643,7 +645,8 @@ def route_query_to_planner_pipeline(
                         break
 
                 msg = f"Plan execution completed successfully for goal '{plan.goal_description}'."
-                print_success(msg)
+                if os.environ.get("NOVA_DEBUG", "false").lower() == "true":
+                    print_success(msg)
 
                 # Return the step's specific output result so CLI history and TTS get the correct string
                 return result_msg if result_msg else msg

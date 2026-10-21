@@ -14,149 +14,125 @@ class SystemStatusAction(BaseAction):
         report = []
         report.append(f"\n{COLOR_CYAN}{COLOR_BOLD}=== NOVA FULL SYSTEM & SOFTWARE STATUS ==={COLOR_RESET}\n")
 
-        # 1. CPU Load Average
+        import psutil
+
+        # 1. CPU Load
         try:
-            with open("/proc/loadavg", "r") as f:
-                load = f.read().strip().split()
-                if len(load) >= 3:
-                    report.append(f"{COLOR_BOLD}CPU Load Average:{COLOR_RESET}  1m: {COLOR_GREEN}{load[0]}{COLOR_RESET} | 5m: {COLOR_GREEN}{load[1]}{COLOR_RESET} | 15m: {COLOR_GREEN}{load[2]}{COLOR_RESET}")
-                else:
-                    report.append(f"{COLOR_BOLD}CPU Load Average:{COLOR_RESET} Unknown")
+            if hasattr(os, "getloadavg"):
+                load = os.getloadavg()
+                report.append(f"{COLOR_BOLD}CPU Load Average:{COLOR_RESET}  1m: {COLOR_GREEN}{load[0]:.2f}{COLOR_RESET} | 5m: {COLOR_GREEN}{load[1]:.2f}{COLOR_RESET} | 15m: {COLOR_GREEN}{load[2]:.2f}{COLOR_RESET}")
+            else:
+                cpu_pct = psutil.cpu_percent(interval=0.1)
+                report.append(f"{COLOR_BOLD}CPU Utilization:{COLOR_RESET}  Total: {COLOR_GREEN}{cpu_pct}%{COLOR_RESET} ({psutil.cpu_count(logical=True)} logical cores)")
         except Exception as e:
-            report.append(f"{COLOR_BOLD}CPU Load Average:{COLOR_RESET} {COLOR_RED}Failed to read: {e}{COLOR_RESET}")
+            report.append(f"{COLOR_BOLD}CPU Load:{COLOR_RESET} {COLOR_RED}Unavailable ({e}){COLOR_RESET}")
 
         # 2. System Temperatures
         temp_found = False
         temps = []
         try:
-            thermal_dir = "/sys/class/thermal"
-            if os.path.exists(thermal_dir):
+            if hasattr(psutil, "sensors_temperatures"):
+                st = psutil.sensors_temperatures()
+                if st:
+                    for name, entries in st.items():
+                        for entry in entries:
+                            label = entry.label or name
+                            z_temp = entry.current
+                            temp_color = COLOR_GREEN if z_temp < 65 else (COLOR_YELLOW if z_temp < 80 else COLOR_RED)
+                            temps.append(f"{label}: {temp_color}{z_temp:.1f}°C{COLOR_RESET}")
+                            temp_found = True
+            
+            if not temp_found and os.path.exists("/sys/class/thermal"):
+                thermal_dir = "/sys/class/thermal"
                 for zone in sorted(os.listdir(thermal_dir)):
                     if zone.startswith("thermal_zone"):
                         zone_path = os.path.join(thermal_dir, zone)
                         type_path = os.path.join(zone_path, "type")
                         temp_path = os.path.join(zone_path, "temp")
-                        
                         if os.path.exists(type_path) and os.path.exists(temp_path):
-                            with open(type_path, "r") as f_type, open(temp_path, "r") as f_temp:
+                            with open(type_path, "r", encoding="utf-8", errors="replace") as f_type, open(temp_path, "r", encoding="utf-8", errors="replace") as f_temp:
                                 z_type = f_type.read().strip()
-                                z_temp_raw = f_temp.read().strip()
-                                try:
-                                    z_temp = float(z_temp_raw) / 1000.0
-                                    temp_color = COLOR_GREEN
-                                    if z_temp >= 80.0:
-                                        temp_color = COLOR_RED
-                                    elif z_temp >= 65.0:
-                                        temp_color = COLOR_YELLOW
-                                    temps.append(f"{z_type}: {temp_color}{z_temp:.1f}°C{COLOR_RESET}")
-                                    temp_found = True
-                                except ValueError:
-                                    pass
+                                z_temp = float(f_temp.read().strip()) / 1000.0
+                                temp_color = COLOR_GREEN if z_temp < 65 else (COLOR_YELLOW if z_temp < 80 else COLOR_RED)
+                                temps.append(f"{z_type}: {temp_color}{z_temp:.1f}°C{COLOR_RESET}")
+                                temp_found = True
             if temps:
                 report.append(f"{COLOR_BOLD}Temperatures:{COLOR_RESET}  " + " | ".join(temps))
         except Exception:
             pass
 
         # 3. RAM usage
-        exit_code, stdout, stderr = CommandExecutor.run_shell(["free", "-h"])
-        if exit_code == 0:
-            lines = stdout.splitlines()
-            if len(lines) >= 2:
-                parts = lines[1].split()
-                if len(parts) >= 4:
-                    report.append(f"{COLOR_BOLD}RAM Allocation:{COLOR_RESET}  Total: {COLOR_CYAN}{parts[1]}{COLOR_RESET} | Used: {COLOR_CYAN}{parts[2]}{COLOR_RESET} | Free: {COLOR_CYAN}{parts[3]}{COLOR_RESET} | Avail: {COLOR_CYAN}{parts[6] if len(parts) > 6 else parts[3]}{COLOR_RESET}")
-        else:
-            report.append(f"{COLOR_BOLD}RAM Allocation:{COLOR_RESET} {COLOR_RED}Error: {stderr.strip()}{COLOR_RESET}")
+        try:
+            vmem = psutil.virtual_memory()
+            total_g = vmem.total / (1024 ** 3)
+            used_g = (vmem.total - vmem.available) / (1024 ** 3)
+            free_g = vmem.free / (1024 ** 3)
+            avail_g = vmem.available / (1024 ** 3)
+            report.append(f"{COLOR_BOLD}RAM Allocation:{COLOR_RESET}  Total: {COLOR_CYAN}{total_g:.1f}GiB{COLOR_RESET} | Used: {COLOR_CYAN}{used_g:.1f}GiB ({vmem.percent}%){COLOR_RESET} | Free: {COLOR_CYAN}{free_g:.1f}GiB{COLOR_RESET} | Avail: {COLOR_CYAN}{avail_g:.1f}GiB{COLOR_RESET}")
+        except Exception as e:
+            report.append(f"{COLOR_BOLD}RAM Allocation:{COLOR_RESET} {COLOR_RED}Error: {e}{COLOR_RESET}")
 
         # 4. Storage Usage
-        exit_code, stdout, stderr = CommandExecutor.run_shell(["df", "-h", "/"])
-        if exit_code == 0:
-            lines = stdout.splitlines()
-            if len(lines) >= 2:
-                parts = lines[1].split()
-                if len(parts) >= 5:
-                    report.append(f"{COLOR_BOLD}Root Storage:{COLOR_RESET}  Size: {COLOR_CYAN}{parts[1]}{COLOR_RESET} | Used: {COLOR_CYAN}{parts[2]} ({parts[4]}){COLOR_RESET} | Avail: {COLOR_CYAN}{parts[3]}{COLOR_RESET}")
-        else:
-            report.append(f"{COLOR_BOLD}Root Storage:{COLOR_RESET} {COLOR_RED}Error: {stderr.strip()}{COLOR_RESET}")
+        try:
+            disk_root = "C:\\" if os.name == "nt" else "/"
+            du = psutil.disk_usage(disk_root)
+            total_g = du.total / (1024 ** 3)
+            used_g = du.used / (1024 ** 3)
+            free_g = du.free / (1024 ** 3)
+            disk_label = "C: Storage" if os.name == "nt" else "Root Storage"
+            report.append(f"{COLOR_BOLD}{disk_label}:{COLOR_RESET}  Size: {COLOR_CYAN}{total_g:.1f}GiB{COLOR_RESET} | Used: {COLOR_CYAN}{used_g:.1f}GiB ({du.percent}%){COLOR_RESET} | Avail: {COLOR_CYAN}{free_g:.1f}GiB{COLOR_RESET}")
+        except Exception as e:
+            report.append(f"{COLOR_BOLD}Storage:{COLOR_RESET} {COLOR_RED}Error: {e}{COLOR_RESET}")
 
         # 5. Battery Status
-        battery_dir = "/sys/class/power_supply"
-        if os.path.exists(battery_dir):
-            batteries = [d for d in os.listdir(battery_dir) if d.startswith("BAT")]
-            for bat in sorted(batteries):
-                bat_path = os.path.join(battery_dir, bat)
-                cap_path = os.path.join(bat_path, "capacity")
-                stat_path = os.path.join(bat_path, "status")
-                model_path = os.path.join(bat_path, "model_name")
-                mfg_path = os.path.join(bat_path, "manufacturer")
-                health_full = os.path.join(bat_path, "energy_full")
-                health_design = os.path.join(bat_path, "energy_full_design")
-                
-                if not os.path.exists(health_full):
-                    health_full = os.path.join(bat_path, "charge_full")
-                if not os.path.exists(health_design):
-                    health_design = os.path.join(bat_path, "charge_full_design")
-                
-                if os.path.exists(cap_path) and os.path.exists(stat_path):
-                    try:
-                        with open(cap_path, "r") as f_cap, open(stat_path, "r") as f_stat:
-                            cap = f_cap.read().strip()
-                            stat = f_stat.read().strip()
-                        
-                        model = ""
-                        if os.path.exists(model_path):
-                            with open(model_path, "r") as f_model:
-                                model = f_model.read().strip()
-                                
-                        mfg = ""
-                        if os.path.exists(mfg_path):
-                            with open(mfg_path, "r") as f_mfg:
-                                mfg = f_mfg.read().strip()
-                                
-                        health_str = ""
-                        if os.path.exists(health_full) and os.path.exists(health_design):
-                            with open(health_full, "r") as f_full, open(health_design, "r") as f_design:
-                                full_val = float(f_full.read().strip())
-                                design_val = float(f_design.read().strip())
-                                if design_val > 0:
-                                    health_pct = (full_val / design_val) * 100.0
-                                    health_str = f" (Health: {health_pct:.1f}%)"
-                        
-                        cap_val = int(cap)
-                        cap_color = COLOR_GREEN
-                        if cap_val <= 15:
-                            cap_color = COLOR_RED
-                        elif cap_val <= 35:
-                            cap_color = COLOR_YELLOW
-                            
-                        stat_color = COLOR_GREEN if stat == "Charging" else (COLOR_CYAN if stat == "Full" else COLOR_RESET)
-                        
-                        device_info = f" {mfg} {model}".strip()
-                        bat_label = f" ({device_info})" if device_info else ""
-                        report.append(f"{COLOR_BOLD}Battery {bat}{bat_label}:{COLOR_RESET}  Level: {cap_color}{cap}%{COLOR_RESET}{health_str} | State: {stat_color}{stat}{COLOR_RESET}")
-                    except Exception:
-                        pass
+        try:
+            bat = psutil.sensors_battery()
+            if bat:
+                cap = int(bat.percent)
+                cap_color = COLOR_RED if cap <= 15 else (COLOR_YELLOW if cap <= 35 else COLOR_GREEN)
+                state = "Charging" if bat.power_plugged else "Discharging"
+                stat_color = COLOR_GREEN if bat.power_plugged else COLOR_RESET
+                report.append(f"{COLOR_BOLD}Battery:{COLOR_RESET}  Level: {cap_color}{cap}%{COLOR_RESET} | State: {stat_color}{state}{COLOR_RESET}")
+            elif os.path.exists("/sys/class/power_supply"):
+                battery_dir = "/sys/class/power_supply"
+                batteries = [d for d in os.listdir(battery_dir) if d.startswith("BAT")]
+                for b in sorted(batteries):
+                    b_path = os.path.join(battery_dir, b)
+                    cap_file = os.path.join(b_path, "capacity")
+                    stat_file = os.path.join(b_path, "status")
+                    if os.path.exists(cap_file) and os.path.exists(stat_file):
+                        with open(cap_file) as fc, open(stat_file) as fs:
+                            cap = fc.read().strip()
+                            stat = fs.read().strip()
+                            report.append(f"{COLOR_BOLD}Battery {b}:{COLOR_RESET} Level: {cap}% | State: {stat}")
+        except Exception:
+            pass
+
+        import shutil
 
         # 6. Tailscale Connection
-        ts_exit, ts_out, ts_err = CommandExecutor.run_shell(["tailscale", "status"])
-        if ts_exit == 0:
-            laptop_ip = ""
-            phone_ip = ""
-            phone_hostname = ""
-            for line in ts_out.splitlines():
-                parts = line.split()
-                if not parts:
-                    continue
-                if "linux" in line or "nixos" in line:
-                    laptop_ip = parts[0]
-                if "android" in line:
-                    phone_ip = parts[0]
-                    phone_hostname = parts[1]
-            
-            peer_info = f" | Phone Peer: {phone_hostname} ({phone_ip})" if phone_ip else " | No Phone Peer"
-            report.append(f"{COLOR_BOLD}Tailscale Link:{COLOR_RESET}  {COLOR_GREEN}ACTIVE{COLOR_RESET} | Laptop IP: {laptop_ip}{peer_info}")
+        if shutil.which("tailscale"):
+            ts_exit, ts_out, ts_err = CommandExecutor.run_shell(["tailscale", "status"])
+            if ts_exit == 0:
+                laptop_ip = ""
+                phone_ip = ""
+                phone_hostname = ""
+                for line in ts_out.splitlines():
+                    parts = line.split()
+                    if not parts:
+                        continue
+                    if any(k in line.lower() for k in ("linux", "nixos", "windows", "desktop", "laptop")):
+                        laptop_ip = parts[0]
+                    if "android" in line.lower():
+                        phone_ip = parts[0]
+                        phone_hostname = parts[1]
+                
+                peer_info = f" | Phone Peer: {phone_hostname} ({phone_ip})" if phone_ip else " | No Phone Peer"
+                report.append(f"{COLOR_BOLD}Tailscale Link:{COLOR_RESET}  {COLOR_GREEN}ACTIVE{COLOR_RESET} | Device IP: {laptop_ip}{peer_info}")
+            else:
+                report.append(f"{COLOR_BOLD}Tailscale Link:{COLOR_RESET}  {COLOR_RED}INACTIVE{COLOR_RESET}")
         else:
-            report.append(f"{COLOR_BOLD}Tailscale Link:{COLOR_RESET}  {COLOR_RED}INACTIVE{COLOR_RESET}")
+            report.append(f"{COLOR_BOLD}Tailscale Link:{COLOR_RESET}  {COLOR_YELLOW}NOT INSTALLED{COLOR_RESET}")
 
         # 7. PhoneNotify Server & Connected Devices
         server_running = False
@@ -164,7 +140,7 @@ class SystemStatusAction(BaseAction):
         extensions_connected = 0
         try:
             import httpx
-            resp = httpx.get("http://localhost:8080/status", timeout=1.5)
+            resp = httpx.get("http://localhost:8080/status", timeout=1.0)
             if resp.status_code == 200:
                 server_running = True
                 data = resp.json()
@@ -180,20 +156,23 @@ class SystemStatusAction(BaseAction):
             report.append(f"{COLOR_BOLD}PhoneNotify Server:{COLOR_RESET} {COLOR_RED}INACTIVE{COLOR_RESET}")
 
         # 8. ADB Connection
-        adb_exit, adb_out, adb_err = CommandExecutor.run_shell(["adb", "devices"])
-        if adb_exit == 0:
-            devices = []
-            for line in adb_out.splitlines():
-                if "devices attached" in line or not line.strip():
-                    continue
-                parts = line.split()
-                if len(parts) >= 2 and parts[1] == "device":
-                    devices.append(parts[0])
-            
-            dev_str = ", ".join(devices) if devices else "None"
-            report.append(f"{COLOR_BOLD}ADB USB/TCP Link:{COLOR_RESET}  Devices connected: {COLOR_GREEN if devices else COLOR_RESET}{dev_str}{COLOR_RESET}")
+        if shutil.which("adb"):
+            adb_exit, adb_out, adb_err = CommandExecutor.run_shell(["adb", "devices"])
+            if adb_exit == 0:
+                devices = []
+                for line in adb_out.splitlines():
+                    if "devices attached" in line or not line.strip():
+                        continue
+                    parts = line.split()
+                    if len(parts) >= 2 and parts[1] == "device":
+                        devices.append(parts[0])
+                
+                dev_str = ", ".join(devices) if devices else "None"
+                report.append(f"{COLOR_BOLD}ADB USB/TCP Link:{COLOR_RESET}  Devices connected: {COLOR_GREEN if devices else COLOR_RESET}{dev_str}{COLOR_RESET}")
+            else:
+                report.append(f"{COLOR_BOLD}ADB USB/TCP Link:{COLOR_RESET}  {COLOR_RED}ERROR (exit {adb_exit}){COLOR_RESET}")
         else:
-            report.append(f"{COLOR_BOLD}ADB USB/TCP Link:{COLOR_RESET}  {COLOR_RED}ERROR (exit {adb_exit}){COLOR_RESET}")
+            report.append(f"{COLOR_BOLD}ADB USB/TCP Link:{COLOR_RESET}  {COLOR_YELLOW}NOT INSTALLED IN PATH{COLOR_RESET}")
 
         report.append("\n============================================")
         return "\n".join(report)

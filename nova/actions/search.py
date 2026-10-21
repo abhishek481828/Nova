@@ -13,18 +13,20 @@ class SearchPackageAction(BaseAction):
         if not query:
             return "Error: No query provided to search."
 
-        print_info(f"Searching nixpkgs for '{query}'...")
+        import os
+        source_name = "winget" if os.name == "nt" else "nixpkgs"
+        print_info(f"Searching {source_name} for '{query}'...")
         results = NixPackageManager.search_packages(query)
 
         if not results:
-            return f"No Nix packages found matching '{query}'."
+            return f"No packages found matching '{query}' in {source_name}."
 
         # Limit to top 15 results for clean CLI display
         display_limit = 15
         truncated_results = results[:display_limit]
 
         # Draw a beautiful, modern terminal table
-        header = f"\n{COLOR_CYAN}{COLOR_BOLD}{'Flake Attribute (Package ID)':<40} | {'Version':<12} | {'Description':<50}{COLOR_RESET}"
+        header = f"\n{COLOR_CYAN}{COLOR_BOLD}{'Package Name / ID':<40} | {'Version':<12} | {'Description':<50}{COLOR_RESET}"
         separator = "-" * 110
         lines = [header, separator]
 

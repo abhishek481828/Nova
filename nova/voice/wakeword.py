@@ -127,8 +127,12 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
         warnings.filterwarnings("ignore", category=UserWarning, module="onnxruntime")
         warnings.filterwarnings("ignore", category=UserWarning, message=".*CUDAExecutionProvider.*")
 
-        import openwakeword
-        from openwakeword.model import Model
+        try:
+            import openwakeword
+            from openwakeword.model import Model
+        except ImportError:
+            openwakeword = None
+            Model = None
 
         # Instantiated helper detector for compatibility tests
         self.detector = NovaRuleDetector("nova", confidence_threshold)
@@ -148,7 +152,7 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
                 model_paths = [model_path]
 
         # Automatically locate hey_nova model dynamically if no valid models found
-        if not model_paths:
+        if not model_paths and openwakeword is not None:
             try:
                 package_dir = os.path.dirname(openwakeword.__file__)
                 resources_model_path = os.path.join(package_dir, "resources", "models", "hey_nova_v0.1.onnx")
@@ -159,7 +163,7 @@ class LocalWakeWordDetector(WakeWordDetectorInterface):
 
         self.oww_active = False
         self.model = None
-        if model_paths:
+        if model_paths and Model is not None:
             try:
                 self.model = Model(wakeword_model_paths=model_paths)
                 self.oww_active = True

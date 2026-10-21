@@ -25,6 +25,36 @@ class DesktopControlAction(BaseAction):
         if not operation:
             return "Error: No desktop operation provided."
 
+        import os
+        if os.name == "nt":
+            import ctypes
+            user32 = ctypes.windll.user32
+            if operation == "lock":
+                user32.LockWorkStation()
+                return "Windows workstation locked successfully."
+            elif operation == "media":
+                media_cmd = params.get("media_command", "").strip().lower()
+                vk_map = {
+                    "play": 0xB3,
+                    "pause": 0xB3,
+                    "playpause": 0xB3,
+                    "play/pause": 0xB3,
+                    "next": 0xB0,
+                    "prev": 0xB1,
+                    "previous": 0xB1,
+                    "stop": 0xB2
+                }
+                vk = vk_map.get(media_cmd)
+                if not vk:
+                    return f"Error: Unsupported media command '{media_cmd}'. Supported: play, pause, next, prev, stop."
+                user32.keybd_event(vk, 0, 0, 0)
+                user32.keybd_event(vk, 0, 2, 0)
+                return f"Sent '{media_cmd}' media command on Windows."
+            elif operation == "night_light":
+                return "Windows Night Light can be adjusted via Windows Settings (ms-settings:nightlight)."
+            else:
+                return f"Error: Unsupported desktop operation '{operation}' on Windows."
+
         if operation == "lock":
             cmd = ["dbus-send", "--type=method_call", "--dest=org.gnome.ScreenSaver", 
                    "/org/gnome/ScreenSaver", "org.gnome.ScreenSaver.Lock"]

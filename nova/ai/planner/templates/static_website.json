@@ -214,7 +214,7 @@
                     "action": "chromium_action",
                     "params": {
                         "operation": "open",
-                        "url": "file:///home/nixos/Projects/Nova/{project_dir}/index.html"
+                        "url": "{project_dir}/index.html"
                     }
                 }
             }
@@ -232,7 +232,7 @@
                     "action": "chromium_action",
                     "params": {
                         "operation": "open",
-                        "url": "file:///home/nixos/Projects/Nova/{project_dir}/index.html"
+                        "url": "{project_dir}/index.html"
                     }
                 }
             }

@@ -229,7 +229,7 @@ def record_audio_from_stream(
         except Exception:
             pass
 
-    if rnnoise and not rnnoise.is_available() and ENABLE_NOISE_SUPPRESSION:
+    if rnnoise and not rnnoise.is_available() and ENABLE_NOISE_SUPPRESSION and enable_debug:
         print_warning("🧹 RNNoise native library not available. Continuing with filters and VAD only.")
 
     block_samples = BLOCK_SIZE

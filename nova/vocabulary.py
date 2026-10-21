@@ -17,18 +17,16 @@ VALID_WORDS: Set[str] = {
     "stop", "start", "enable", "disable", "restart", "reload", "active", "inactive",
     # Network & VPN terms
     "warp", "cloudflare", "warp-cli", "vpn",
-    # Nix & OS environment terms
-    "nix", "nixos", "profile", "channel", "nix-env", "nixpkgs",
+    # Package & OS environment terms
+    "winget", "powershell", "cmd", "windows", "notepad", "calc", "taskmgr", "packages", "profile",
     # Common shell commands and keywords
-    "sudo", "config", "shell", "bash", "zsh",
+    "config", "shell", "bash", "terminal",
     # Common conversational greetings & help terms
     "hello", "hi", "hey", "greetings", "help", "please", "yes", "no", "fine", "everything", "things", "working", "extension",
     # System resources, CPU, and memory keywords
-    "load", "resources", "cpu", "temp", "temperatures", "ram", "memory", "storage", "capacity", "loadavg", "df", "free", "system_resources", "processor",
-    # NixOS configuration & option keywords
-    "networking", "firewall", "allowedtcpports", "nixos-option", "inspect", "option", "boot", "loader", "grub",
-    # Nix-shell and package-related keywords
-    "nix-shell", "pandas", "numpy", "allowed", "ports", "tcp", "udp", "packages", "python3", "python3packages",
+    "load", "resources", "cpu", "temp", "temperatures", "ram", "memory", "storage", "capacity", "processor",
+    # Common data keywords
+    "pandas", "numpy", "ports", "tcp", "udp", "packages", "python3",
     # Volume control keywords
     "volume", "mute", "unmute", "audio", "sound",
     # Brightness control keywords

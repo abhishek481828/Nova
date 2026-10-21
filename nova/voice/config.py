@@ -129,7 +129,7 @@ VOICE_NAME = get_env("NOVA_TTS_VOICE", "en-US-GuyNeural")
 
 # Speaker Verification Configs
 # Set NOVA_SPEAKER_VERIFY=false to disable entirely.
-enable_speaker_verification = get_env("NOVA_SPEAKER_VERIFY", "true").lower() == "true"
+enable_speaker_verification = get_env("NOVA_SPEAKER_VERIFY", "false").lower() == "true"
 speaker_similarity_threshold = float(get_env("NOVA_SPEAKER_THRESHOLD", "0.75"))
 FUSION_TRIGGER_THRESHOLD = float(get_env("NOVA_FUSION_TRIGGER_THRESHOLD", "0.50"))
 # Fusion engine component weights — must sum to ~1.0

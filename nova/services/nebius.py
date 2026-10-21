@@ -6,7 +6,7 @@ from nova.logger import logger
 
 def call_nebius_llm(
     messages: List[Dict[str, str]],
-    model: str = "meta-llama/Llama-3.3-70B-Instruct",
+    model: Optional[str] = None,
     temperature: float = 0.3,
     timeout: Optional[float] = None,
     retries: Optional[int] = None,
@@ -20,6 +20,9 @@ def call_nebius_llm(
     nebius_key = NEBIUS_API_KEY
     if not nebius_key:
         return None
+
+    if model is None:
+        model = os.environ.get("NEBIUS_MODEL", "Qwen/Qwen3.8-27B")
 
     if timeout is None:
         timeout = NOVA_NEBIUS_TIMEOUT

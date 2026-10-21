@@ -9,10 +9,12 @@ class ListPackagesAction(BaseAction):
         return "list_packages"
 
     def execute(self, params: Dict[str, Any]) -> str:
-        print_info("Retrieving list of installed packages in your Nix user profile...")
+        import os
+        source = "winget packages" if os.name == "nt" else "Nix user profile"
+        print_info(f"Retrieving list of installed packages from {source}...")
         installed = NixPackageManager.get_installed_packages()
         if not installed:
-            return "No packages found installed in your Nix user profile."
+            return f"No packages found installed via {source}."
         
         # Display list beautifully
         header = f"\n{COLOR_CYAN}{COLOR_BOLD}=== INSTALLED PACKAGES ({len(installed)}) ==={COLOR_RESET}"

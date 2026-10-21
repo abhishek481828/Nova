@@ -23,14 +23,30 @@ class OcrAction(BaseAction):
 
             # 1. Handle Screenshot Capture or Target File
             if operation == "screen":
-                temp_dir = "/home/nixos/Projects/Nova/temp"
-                os.makedirs(temp_dir, exist_ok=True)
-                target_file = os.path.join(temp_dir, "screenshot.png")
+                import tempfile
+                temp_dir = tempfile.gettempdir()
+                target_file = os.path.join(temp_dir, "nova_screenshot.png")
                 is_temp_file = True
 
                 logger.info("Taking screen capture for OCR...")
-                # Run scrot -z (silent screenshot capture, X11)
-                subprocess.run(["scrot", "-z", target_file], check=True)
+                captured = False
+                try:
+                    from PIL import ImageGrab
+                    img = ImageGrab.grab()
+                    img.save(target_file)
+                    captured = True
+                except Exception:
+                    pass
+
+                if not captured and shutil.which("scrot"):
+                    try:
+                        subprocess.run(["scrot", "-z", target_file], check=True)
+                        captured = True
+                    except Exception:
+                        pass
+
+                if not captured:
+                    return "Error: Screen capture is unavailable in current desktop session."
             elif operation == "file":
                 if not file_path:
                     return "Error: No file path provided for image OCR."

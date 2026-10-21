@@ -1,41 +1,12 @@
 import os
+import tempfile
 from pathlib import Path
 
-# Clean up transient Nix/nix-shell environment variables that point to deleted temp directories
-for var in ["TMPDIR", "TMP", "TEMP", "NIX_BUILD_TOP"]:
-    if var in os.environ:
-        val = os.environ[var]
-        if "/tmp/nix-shell-" in val or not os.path.exists(val):
-            if var == "NIX_BUILD_TOP":
-                del os.environ[var]
-            else:
-                os.environ[var] = "/tmp"
-
-# Force PLAYWRIGHT_NODEJS_PATH to use the system node binary on NixOS
+# Resolve node path for Playwright if available
 import shutil
-node_path = "/run/current-system/sw/bin/node"
-if not os.path.exists(node_path):
-    node_path = shutil.which("node")
+node_path = shutil.which("node")
 if node_path:
     os.environ["PLAYWRIGHT_NODEJS_PATH"] = node_path
-
-# Enrich PATH with common user profile paths for subprocess execution
-additional_paths = [
-    "/home/nixos/.nix-profile/bin",
-    "/nix/profile/bin",
-    "/home/nixos/.local/state/nix/profile/bin",
-    "/etc/profiles/per-user/nixos/bin",
-    "/nix/var/nix/profiles/default/bin",
-    "/run/current-system/sw/bin",
-    "/home/nixos/.local/bin",
-    "/run/wrappers/bin"
-]
-current_path = os.environ.get("PATH", "")
-path_list = current_path.split(":") if current_path else []
-for p in additional_paths:
-    if p not in path_list and os.path.exists(p):
-        path_list.insert(0, p)
-os.environ["PATH"] = ":".join(path_list)
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent
@@ -45,7 +16,8 @@ try:
     load_dotenv(dotenv_path=BASE_DIR.parent / ".env", override=True)
 except ImportError:
     pass
-PROJECTS_DIR = Path("/home/nixos/Projects")
+
+PROJECTS_DIR = Path(os.environ.get("NOVA_PROJECTS_DIR", str(Path.home() / "Projects")))
 DOWNLOADS_DIR = Path.home() / "Downloads"
 
 # Nova files
@@ -93,6 +65,8 @@ CHROMIUM_DEVTOOLS_PORT = int(os.environ.get("CHROMIUM_DEVTOOLS_PORT", 9222))
 CHROMIUM_HEADLESS = os.environ.get("CHROMIUM_HEADLESS", "false").lower() in ("true", "1", "yes")
 
 # Centralized API Keys & Tokens from Environment
+GROQ_API_KEY = os.environ.get("GROQ_API_KEY")
+GROQ_MODEL = os.environ.get("GROQ_MODEL", "openai/gpt-oss-120b")
 NEBIUS_API_KEY = os.environ.get("NEBIUS_API_KEY")
 NOVA_NEBIUS_TIMEOUT = float(os.environ.get("NOVA_NEBIUS_TIMEOUT", "8.0"))
 NOVA_NEBIUS_RETRIES = int(os.environ.get("NOVA_NEBIUS_RETRIES", "2"))
@@ -138,11 +112,7 @@ Actions & parameters:
 - browser_action: {"action": "browser_action", "url": "url"}
 - system_action: {"action": "system_action", "operation": "shutdown"|"suspend"|"storage"}
 - chat_response: {"action": "chat_response", "message": "text"}
-- adb_action: {"action": "adb_action", "operation": "devices"|"connect"|"disconnect"|"setup"|"mirror", "target": "ip_or_device"}
-- diagnose: {"action": "diagnose"}
 - system_resources: {"action": "system_resources"}
-- nixos_config: {"action": "nixos_config", "option": "option_name"}
-- nix_shell: {"action": "nix_shell", "packages": ["package_name"]}
 - update_user_profile: {"action": "update_user_profile", "details": {"name": "name", "email": "email", "other": "info"}}
 - system_status: {"action": "system_status"}
 - list_packages: {"action": "list_packages"}
@@ -182,26 +152,19 @@ Context & Session Rules:
 8. If the user asks for GitHub updates, profile details, repository lists, or open issues (e.g. "do I have notifications on github", "list my github repositories", "what is my github profile info", "check open issues on github"), route it to 'github_action' with the appropriate operation.
 9. If the user asks to send a Telegram message to themselves, update them via Telegram, or log something to Telegram (e.g. "send a telegram message to me saying hello", "telegram me the system status info"), route it to 'telegram' with the message parameter.
 10. If the user asks for currency conversion, exchange rates, or currency values (e.g. "convert 100 usd to eur", "how much is 50 gbp in inr", "exchange rate of yen to dollars"), route it to 'currency' action with conversion parameters.
-11. If the user asks to read text from their screen, take a screenshot, extract text from an image, or perform OCR (e.g. "read text from my screen", "ocr my screen", "extract text from /home/nixos/receipt.png"), route it to 'ocr' action with the appropriate operation and optional file_path.
+11. If the user asks to read text from their screen, take a screenshot, extract text from an image, or perform OCR (e.g. "read text from my screen", "ocr my screen", "extract text from receipt.png"), route it to 'ocr' action with the appropriate operation and optional file_path.
 12. If the user asks for their IP address, location lookup, geo details, or queries an external IP (e.g. "where am I located", "get my ip details", "what is my location info", "lookup IP 8.8.8.8"), route it to 'ip_info' action with the optional ip_address parameter.
 13. If the user asks about movies, TV shows, trending entertainment, or details about a film (e.g. "search movie Inception", "trending tv shows", "tell me about tv show Breaking Bad", "popular movies today"), route it to 'tmdb' action with the appropriate operation and query parameters.
 14. If the user asks for stock market quotes, stock prices, or financial company ticker info (e.g. "what is the price of Apple stock today", "how is Tesla stock doing", "check stock quote for AAPL", "get MSFT stock price"), route it to 'finance' action with the symbol parameter.
 
 Examples:
 - "is warp vpn installed" -> {"action": "check_installed", "package": "warp vpn"}
-- "check my adb connect" -> {"action": "adb_action", "operation": "devices"}
-- "setup adb tcp/ip" -> {"action": "adb_action", "operation": "setup"}
-- "diagnose my connections" -> {"action": "diagnose"}
 - "hello" -> {"action": "chat_response", "message": "Hello! How can I help you today?"}
 - "Open Chromium" -> {"action": "open_app", "app": "chromium"}
 - "Open Chromium and close Firefox" -> {"actions": [{"action": "open_app", "app": "chromium"}, {"action": "close_app", "app": "firefox"}]}
-- "connect my phone" -> {"action": "open_app", "app": "phone"}
-- "close mirroring phone" -> {"action": "close_app", "app": "phone"}
 - "Install VLC" -> {"action": "install_package", "package": "vlc"}
 - "check my storage capacity" -> {"action": "system_action", "operation": "storage"}
 - "check my system resources and CPU load" -> {"action": "system_resources"}
-- "inspect option boot.loader.grub" -> {"action": "nixos_config", "option": "boot.loader.grub"}
-- "give me a python shell with numpy" -> {"action": "nix_shell", "packages": ["python3", "python3Packages.numpy"]}
 - "who is the prime minister of the UK" -> {"action": "tavily_search", "query": "current prime minister of the UK"}
 - "find the latest news about SpaceX" -> {"action": "news", "query": "SpaceX"}
 - "what is the news today" -> {"action": "news", "category": "general"}
@@ -217,7 +180,7 @@ Examples:
 - "what is the exchange rate of USD to INR" -> {"action": "currency", "operation": "convert", "from_currency": "USD", "to_currency": "INR", "amount": 1.0}
 - "how much is 50 gbp in usd" -> {"action": "currency", "operation": "convert", "from_currency": "GBP", "to_currency": "USD", "amount": 50.0}
 - "ocr my screen" -> {"action": "ocr", "operation": "screen"}
-- "read the text from /home/nixos/receipt.png" -> {"action": "ocr", "operation": "file", "file_path": "/home/nixos/receipt.png"}
+- "read the text from receipt.png" -> {"action": "ocr", "operation": "file", "file_path": "receipt.png"}
 - "what is my ip location" -> {"action": "ip_info"}
 - "lookup ip 8.8.8.8" -> {"action": "ip_info", "ip_address": "8.8.8.8"}
 - "search movie Inception" -> {"action": "tmdb", "operation": "search_movie", "query": "Inception"}
@@ -237,7 +200,7 @@ Examples:
 - "give me update about my full system software" -> {"action": "system_status"}
 - "what are the apps in my system" -> {"action": "list_packages"}
 - "what are the installed app in my system" -> {"action": "list_packages"}
-- "tell me the app names which is installed in nixos system" -> {"action": "list_packages"}
+- "list installed packages" -> {"action": "list_packages"}
 - "set volume to 125%" -> {"action": "volume_control", "operation": "set", "level": 125}
 - "mute my laptop sound" -> {"action": "volume_control", "operation": "mute"}
 - "unmute audio" -> {"action": "volume_control", "operation": "unmute"}

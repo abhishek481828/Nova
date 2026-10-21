@@ -523,7 +523,7 @@ class ChatGPTManager(metaclass=AIProviderDelegatorMeta):
         if operation == "save":
             if not cls._last_received_response:
                 return "Error: No cached ChatGPT response available to save."
-            output_path = "/home/nixos/Projects/Nova/chatgpt_response.txt"
+            output_path = os.path.abspath("chatgpt_response.txt")
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(cls._last_received_response)
             return f"Saved response to {output_path}."
@@ -531,7 +531,7 @@ class ChatGPTManager(metaclass=AIProviderDelegatorMeta):
         if operation == "export_md":
             if not cls._last_received_response:
                 return "Error: No cached ChatGPT response available to export."
-            output_path = "/home/nixos/Projects/Nova/chatgpt_response.md"
+            output_path = os.path.abspath("chatgpt_response.md")
             with open(output_path, "w", encoding="utf-8") as f:
                 f.write(cls._last_received_response)
             return f"Exported response as Markdown to {output_path}."
@@ -539,7 +539,7 @@ class ChatGPTManager(metaclass=AIProviderDelegatorMeta):
         if operation == "export_pdf":
             if not cls._last_received_response:
                 return "Error: No cached ChatGPT response available to export."
-            output_path = "/home/nixos/Projects/Nova/chatgpt_response.pdf"
+            output_path = os.path.abspath("chatgpt_response.pdf")
             html_text = cls._last_received_response.replace("\n", "<br>")
             try:
                 BrowserRunner.execute(cls._export_pdf_in_runner, html_text, output_path)

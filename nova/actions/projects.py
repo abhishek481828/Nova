@@ -42,17 +42,21 @@ class RunProjectAction(BaseAction):
             exit_code, stdout, stderr = CommandExecutor.run_shell(f"./{output_bin}", shell=True)
             return f"Project finished execution (exit {exit_code}).\nStdout: {stdout}\nStderr: {stderr}"
 
+        import sys
+        from nova.config import PROJECTS_DIR
+
         # Case 2: Running a python script directly
         if project_name.endswith(".py"):
             if not os.path.exists(project_name):
                 return f"Error: Python script '{project_name}' not found."
             
-            print_info(f"Running python3 {project_name}...")
-            exit_code, stdout, stderr = CommandExecutor.run_shell(["python3", project_name])
+            print_info(f"Running python {project_name}...")
+            exit_code, stdout, stderr = CommandExecutor.run_shell([sys.executable, project_name])
             return f"Script finished execution (exit {exit_code}).\nStdout: {stdout}\nStderr: {stderr}"
 
-        # Case 3: Finding a project folder in /home/nixos/Projects or current directory
-        search_dirs = [os.getcwd(), "/home/nixos/Projects"]
+        # Case 3: Finding a project folder in PROJECTS_DIR or current directory
+        projects_dir = str(PROJECTS_DIR)
+        search_dirs = [os.getcwd(), projects_dir]
         project_path = ""
         
         for base in search_dirs:
@@ -63,7 +67,6 @@ class RunProjectAction(BaseAction):
 
         # Substring search in Projects folder if direct match fails
         if not project_path:
-            projects_dir = "/home/nixos/Projects"
             if os.path.exists(projects_dir):
                 folders = os.listdir(projects_dir)
                 for folder in folders:
